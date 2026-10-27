@@ -29,12 +29,14 @@ achievement list.
   progress through the game, filling in as you watch.
 - A trophy cabinet in the bar: the game you're playing with this session's
   unlocks and the likeliest next ones, or the last three games you played,
-  and a shelf of your platinums; every game, sorted by recent, closest to
-  platinum or name.
+  and a shelf of your platinums; every game, filtered as you type and sorted
+  by recent, closest to platinum or name, with games you won't finish set
+  aside.
 - An achievement tracker over the screen: every achievement of a game with
-  its rarity and the day you got it, filtered to locked, unlocked or rare,
-  and searched as you type; mouse or keyboard. Hidden ones stay hidden until
-  you hover or press Enter.
+  its rarity, the day you got it, and how far along a counter is ("52 /
+  80"); filtered to locked, unlocked or rare, sorted, and searched as you
+  type, by mouse or keyboard. Hidden ones stay hidden until you hover or
+  press Enter.
 - Three trophy styles: Omarchy (a pixel grid with an inlay in your theme
   accent), Faceted and Painted.
 - Theme-native: cards draw from your Omarchy theme colours.
@@ -65,7 +67,8 @@ rm -rf ~/.config/omatrophy ~/.local/state/omatrophy ~/.cache/omatrophy
 OmaTrophy runs inside `omarchy-shell` as your user. It reads Steam's local
 achievement cache, keeps its settings and a small cache in its own folders,
 and calls Steam's public endpoints for rarity, game names and art when a
-toast shows or the bar panel opens. No root, no API key, no login. Details in
+toast shows, the bar panel opens or the watcher starts (game names, once
+each). No root, no API key, no login. Details in
 [SECURITY.md](SECURITY.md).
 
 ## Trophy cabinet and tracker
@@ -83,13 +86,18 @@ Closest and dims in the other sorts until you click **Show**.
 Click any game for the **tracker**, a card over the screen with every
 achievement: rarity, the trophy it would earn, and the date you got it.
 Locked counter achievements show how far along you are ("52 / 80") when
-the game tracks the count.
-Up and Down (Page Up/Down, Home, End) move the highlight; Enter, or Space
-when you aren't searching, reveals a hidden achievement. Tab cycles All,
-Locked, Unlocked and Rare; Left and Right (or the Sort button) switch
-between recent, rarest, A–Z and the game's own order, remembered for next
-time; typing searches; Escape clears the search, then closes. From a
-script:
+the game tracks the count. Its keys:
+
+| Key | Does |
+| --- | --- |
+| Up, Down, Page Up/Down, Home, End | Move the highlight |
+| Enter (or Space, when not searching) | Reveal a hidden achievement |
+| Tab, Shift+Tab | All, Locked, Unlocked, Rare |
+| Left, Right | Sort: recent, rarest, A–Z, the game's own order (remembered) |
+| Any letter | Search; Backspace edits |
+| Escape | Clear the search, then close |
+
+From a script:
 
 ```bash
 omarchy-shell shell summon pym.omatrophy '{}'   # the running or last game

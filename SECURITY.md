@@ -17,7 +17,7 @@ Omarchy plugins run unsandboxed inside `omarchy-shell` as your user. This is
 what OmaTrophy does with that access:
 
 - Runs: `python3 omatrophy.py watch` for as long as the shell runs (restarted
-  10 s after it exits); `python3 omatrophy.py now|games|set|test` when you use
+  10 s after it exits); `python3 omatrophy.py now|games|set|hide|unhide|test` when you use
   the bar panel; `python3 omatrophy.py game` when the tracker opens; `pw-play` for the chime (a bundled WAV, or a freedesktop sound with the classic set).
 - Reads: Steam's local achievement cache
   (`<Steam>/appcache/stats/UserGameStats*_*.bin`) and library art
@@ -26,13 +26,15 @@ what OmaTrophy does with that access:
   (`<Steam>/userdata/<account>/config/localconfig.vdf`) and the command lines
   of running processes (`/proc/*/cmdline`, to find `SteamLaunch AppId=N`);
   its own settings file.
-- Writes: `~/.config/omatrophy/config.json` (settings),
+- Writes: `~/.config/omatrophy/config.json` (settings and hidden games,
+  only when you change them),
   `~/.local/state/omatrophy/` (game-name cache, test inbox),
   `~/.cache/omatrophy/` (achievement icons, art, and global rarity per game,
   refreshed daily).
 - Root: never.
 - Network: HTTPS to Steam's public, keyless endpoints only, when an unlock is
-  shown or the bar panel or tracker opens: the store's app details (game name, cached),
+  shown or the bar panel or tracker opens, plus one name lookup per uncached
+  game when the watcher starts: the store's app details (game name, cached),
   global achievement percentages, and Steam's CDN for icons and art. Your account id is not
   sent.
 - Secrets: none. No API key, no login; a private Steam profile works.
