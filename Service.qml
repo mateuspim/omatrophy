@@ -78,6 +78,12 @@ Scope {
         try { root.enqueue(JSON.parse(line)) } catch (e) { console.warn("omatrophy: bad line", line) }
       }
     }
+    // The watcher's own messages (a missing Steam folder, backfill
+    // progress) go to the shell log. Read them even if nobody looks: an
+    // unread pipe fills and would stall the watcher's background thread.
+    stderr: SplitParser {
+      onRead: line => console.info(line)
+    }
     // Steam folder missing, a parse error: try again rather than go quiet.
     onExited: restart.start()
   }
