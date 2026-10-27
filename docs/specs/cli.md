@@ -72,7 +72,8 @@ Achievements come in the store's order; the tracker sorts them. `percent` is
 get ([ADR 3](../adr/0003-rarity-picks-the-metal.md)). `progress` is
 `{"value": 12, "max": 15}` on a locked counter achievement whose store
 tracks the count (Steam: the schema's progress stat), else `null`; `value`
-is already clamped to `0..max`.
+is already clamped to `0..max`, and `max` is at least 2 (a one-step
+"counter" is a plain flag, so it gets `null`).
 
 ## Overlay
 

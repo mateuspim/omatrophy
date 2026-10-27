@@ -198,7 +198,9 @@ def stat_values(stats_schema, cache):
 def progress(spec, values):
     """{value, max} for a counter achievement ("12 of 15 relics"), or None.
     The schema ties the achievement to a stat: progress.value.operand1 names
-    it, min_val and max_val bound it."""
+    it, min_val and max_val bound it. A span of 1 is a done/not-done flag
+    many games wire up as a stat (on a real library: "0 / 1" on dozens of games),
+    not a counter, so it gets no bar."""
     if not isinstance(spec, dict):
         return None
     value = spec.get('value')
@@ -206,7 +208,7 @@ def progress(spec, values):
         return None
     lo, hi = number(spec.get('min_val')) or 0.0, number(spec.get('max_val'))
     have = values.get(value.get('operand1'))
-    if hi is None or have is None or hi <= lo:
+    if hi is None or have is None or hi - lo <= 1:
         return None
     have = min(max(have, lo), hi)
     return {'value': whole(have - lo), 'max': whole(hi - lo)}

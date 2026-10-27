@@ -93,6 +93,11 @@ class Progress(unittest.TestCase):
         self.assertIsNone(steam.progress(dict(self.SPEC, max_val='lots'), {'relics': 1.0}))
         self.assertIsNone(steam.progress(None, {'relics': 1.0}))
 
+    def test_a_span_of_one_is_a_flag_not_a_counter(self):
+        self.assertIsNone(steam.progress(dict(self.SPEC, max_val='1'), {'relics': 0.0}))
+        self.assertIsNone(steam.progress(dict(self.SPEC, min_val='4', max_val='5'), {'relics': 4.0}))
+        self.assertEqual(steam.progress(dict(self.SPEC, max_val='2'), {'relics': 1.0}), {'value': 1, 'max': 2})
+
     def test_other_operations_are_skipped(self):
         spec = dict(self.SPEC, value={'operation': 'sum', 'operand1': 'relics'})
         self.assertIsNone(steam.progress(spec, {'relics': 1.0}))
