@@ -417,6 +417,33 @@ class Settings(unittest.TestCase):
                 omatrophy.set_option('icons', 'neon')
 
 
+class Hidden(unittest.TestCase):
+    def test_with_hidden_adds_removes_and_sorts(self):
+        self.assertEqual(omatrophy.with_hidden(['steam:9'], 'steam:1', True), ['steam:1', 'steam:9'])
+        self.assertEqual(omatrophy.with_hidden(['steam:1', 'steam:9'], 'steam:1', False), ['steam:9'])
+        self.assertEqual(omatrophy.with_hidden(['steam:1'], 'steam:1', True), ['steam:1'])
+        # A hand-broken list starts over rather than failing.
+        self.assertEqual(omatrophy.with_hidden('oops', 'steam:1', True), ['steam:1'])
+
+    def test_hide_writes_config_and_keeps_other_settings(self):
+        with tempfile.TemporaryDirectory() as home, mock.patch.dict(os.environ, {'HOME': home}):
+            with redirect_stdout(io.StringIO()):
+                omatrophy.set_option('icons', 'vector')
+                omatrophy.set_hidden('steam', '20', True)
+                omatrophy.set_hidden('steam', '10', True)
+                omatrophy.set_hidden('steam', '20', False)
+            with open(f'{home}/.config/omatrophy/config.json') as f:
+                self.assertEqual(json.load(f), {'icons': 'vector', 'hidden': ['steam:10']})
+            self.assertEqual(omatrophy.hidden_games(), {'steam:10'})
+            with self.assertRaises(SystemExit):
+                omatrophy.set_hidden('gog', '10', True)
+
+    def test_hidden_games_leave_nearest_platinum(self):
+        rows = [{'store': 'steam', 'app': '1', 'unlocked': 9, 'total': 10},
+                {'store': 'steam', 'app': '2', 'unlocked': 5, 'total': 10}]
+        self.assertEqual([r['app'] for r in omatrophy.nearest_platinum(rows, 4, {'steam:1'})], ['2'])
+
+
 class Sounds(unittest.TestCase):
     def test_every_tier_has_a_sound(self):
         import wave

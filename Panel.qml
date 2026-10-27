@@ -45,8 +45,14 @@ Panel {
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
+      // The Games tab's filter field takes every key while it has focus;
+      // other characters reach the picker, which may start the filter.
+      blocked: picker.item ? !!picker.item.typing : false
       onCloseRequested: root.close()
       onTabRequested: function(direction) { root.switchPanel(direction) }
+      onTextKey: function(t) {
+        if (picker.item && typeof picker.item.textKey === "function") picker.item.textKey(t)
+      }
 
       Flickable {
         id: scroller
@@ -65,6 +71,15 @@ Panel {
           id: picker
           width: scroller.width
           height: item ? item.implicitHeight : 0
+        }
+        // When the filter field lets go, the keys come back here, so Escape
+        // still closes the panel.
+        Connections {
+          target: picker.item
+          ignoreUnknownSignals: true
+          function onTypingChanged() {
+            if (picker.item && !picker.item.typing) keyCatcher.forceActiveFocus()
+          }
         }
         Connections {
           target: root

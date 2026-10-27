@@ -13,6 +13,8 @@ Usage:
   omatrophy.py set position <where>   top-center, top-left or top-right (applies live)
   omatrophy.py set sound on|off|omatrophy|classic
   omatrophy.py set icons omarchy|vector|painted
+  omatrophy.py hide <store> <game>    keep a game you won't finish out of "closest to platinum"
+  omatrophy.py unhide <store> <game>  bring it back
 
 Each store (stores/) reads its launcher's own files; this file diffs them and
 turns new unlocks into events. Steam is the only store so far.
@@ -200,9 +202,10 @@ def status():
     print(json.dumps([row for _, row in progress()]))
 
 
-def nearest_platinum(rows, n):
-    """The n started, unfinished games closest to 100%, ties to the one with fewer left."""
-    open_rows = [r for r in rows if 0 < r['unlocked'] < r['total']]
+def nearest_platinum(rows, n, hidden=()):
+    """The n started, unfinished games closest to 100%, ties to the one with fewer left;
+    games in `hidden` ("store:game") never count."""
+    open_rows = [r for r in rows if 0 < r['unlocked'] < r['total'] and game_key(r.get('store'), r['app']) not in hidden]
     return sorted(open_rows, key=lambda r: (-r['unlocked'] / r['total'], r['total'] - r['unlocked']))[:n]
 
 
@@ -217,7 +220,7 @@ def cabinet(n=4):
     found = progress()
     stores = {(r['store'], r['app']): s for s, r in found}
     nearest = []
-    for r in nearest_platinum([r for _, r in found], n):
+    for r in nearest_platinum([r for _, r in found], n, hidden_games()):
         s = stores[(r['store'], r['app'])]
         nearest.append(dict(r, game=s.game_name(r['app']), header=s.art(r['app'])['header']))
     print(json.dumps(dict(totals([r for _, r in found]), nearest=nearest)))
@@ -304,10 +307,12 @@ def games():
     found = found_stores()
     lib = library(found)
     played = {(s.id, g): t for s in found for t, g in s.recent()}
+    hidden = hidden_games()
     with ThreadPoolExecutor(8) as pool:
         names = list(pool.map(lambda item: item[0].game_name(item[1]), lib))
     return [dict(progress_row(s, g, achs), game=name, header=s.art(g)['header'],
-                 platinum=platinum_time(achs), played=played.get((s.id, g), 0))
+                 platinum=platinum_time(achs), played=played.get((s.id, g), 0),
+                 hidden=game_key(s.id, g) in hidden)
             for (s, g, achs), name in zip(lib, names)]
 
 
@@ -355,6 +360,11 @@ def game(args):
     print(json.dumps(game_detail(store, app)))
 
 
+def config_path():
+    # Resolved per call so tests can point HOME at a temporary folder.
+    return os.path.expanduser('~/.config/omatrophy/config.json')
+
+
 SETTINGS = {'position': ('top-center', 'top-left', 'top-right'),
             'sound': ('on', 'off', 'omatrophy', 'classic'),
             'icons': ('omarchy', 'vector', 'painted')}
@@ -367,7 +377,7 @@ def set_option(key, value):
         raise SystemExit(f'usage: omatrophy.py set position {"|".join(SETTINGS["position"])}\n'
                          f'       omatrophy.py set sound {"|".join(SETTINGS["sound"])}\n'
                          f'       omatrophy.py set icons {"|".join(SETTINGS["icons"])}')
-    path = os.path.expanduser('~/.config/omatrophy/config.json')
+    path = config_path()
     cfg = read_json(path, {})
     if key == 'sound':
         cfg['sound'] = value != 'off'
@@ -377,6 +387,35 @@ def set_option(key, value):
         cfg[key] = value
     write_json(path, cfg, indent=2)
     print(f'{key} = {value}')
+
+
+def game_key(store_id, game):
+    return f'{store_id}:{game}'
+
+
+def hidden_games():
+    """{"store:game"} the owner hid from "closest to platinum"; a broken list reads as empty."""
+    keys = read_json(config_path(), {}).get('hidden', [])
+    return {k for k in keys if isinstance(k, str)} if isinstance(keys, list) else set()
+
+
+def with_hidden(keys, key, hide):
+    """The hidden list with `key` added or removed, sorted so the file diffs cleanly."""
+    out = {k for k in keys if isinstance(k, str)} if isinstance(keys, list) else set()
+    (out.add if hide else out.discard)(key)
+    return sorted(out)
+
+
+def set_hidden(store_id, game, hide):
+    """Hide or unhide one game in config.json; the panel re-reads it live."""
+    if store_id not in [cls.id for cls in stores.STORES] or not game or ':' in game:
+        raise SystemExit(f'usage: omatrophy.py {"hide" if hide else "unhide"} '
+                         f'{"|".join(cls.id for cls in stores.STORES)} <game id>')
+    path = config_path()
+    cfg = read_json(path, {})
+    cfg['hidden'] = with_hidden(cfg.get('hidden', []), game_key(store_id, game), hide)
+    write_json(path, cfg, indent=2)
+    print(f'{"hidden" if hide else "shown"}: {game_key(store_id, game)}')
 
 
 def main(argv):
@@ -399,6 +438,8 @@ def main(argv):
         demo(argv[2:] or ['unlock', 'rare', 'platinum'])
     elif cmd == 'set' and len(argv) == 4:
         set_option(argv[2], argv[3])
+    elif cmd in ('hide', 'unhide') and len(argv) == 4:
+        set_hidden(argv[2], argv[3], cmd == 'hide')
     else:
         raise SystemExit(__doc__)
 

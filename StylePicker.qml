@@ -39,7 +39,16 @@ Column {
   // From `omatrophy.py games`, read the first time the Games tab opens.
   property var games: null
   property string sort: "recent"
-  readonly property var sortedGames: games ? games.slice().sort(gameOrder) : []
+  // Typed into the Games tab's filter field; matches game names.
+  property string gameFilter: ""
+  // "store:app" keys from config.json's `hidden`, kept live so a toggle
+  // shows at once; hidden games leave Closest and dim elsewhere.
+  property var hiddenKeys: ({})
+  readonly property var sortedGames: games ? games.filter(showGame).sort(gameOrder) : []
+  readonly property int hiddenCount: games ? games.filter(function(g) { return isHidden(g) }).length : 0
+  // True while the filter field has the keyboard; Panel.qml then lets keys
+  // through to it instead of its own shortcuts.
+  readonly property bool typing: filterField.activeFocus
 
   onTabChanged: if (tab === "games" && games === null && live) gamesReader.running = true
 
@@ -55,6 +64,32 @@ Column {
       if (value !== "on" && value !== "off") chimes = value
     }
     runner.exec(["python3", helperPath, "set", key, value])
+  }
+
+  function isHidden(g) {
+    return !!hiddenKeys[g.store + ":" + g.app]
+  }
+
+  function showGame(g) {
+    if (sort === "closest" && isHidden(g)) return false
+    return !gameFilter || g.game.toLowerCase().indexOf(gameFilter.toLowerCase()) >= 0
+  }
+
+  function toggleHidden(g) {
+    var hide = !isHidden(g)
+    var next = Object.assign({}, hiddenKeys)
+    if (hide) next[g.store + ":" + g.app] = true
+    else delete next[g.store + ":" + g.app]
+    hiddenKeys = next
+    runner.exec(["python3", helperPath, hide ? "hide" : "unhide", g.store, g.app])
+  }
+
+  // Keys the panel's key catcher passes on (it keeps h/j/k/l/x/Space for
+  // itself): on the Games tab, "/" or any other character starts the filter.
+  function textKey(t) {
+    if (tab !== "games" || !t || t.charCodeAt(0) < 32) return
+    filterField.forceActiveFocus()
+    if (t !== "/") filterField.text += t
   }
 
   function preview(kind) {
@@ -108,6 +143,9 @@ Column {
       if (c.position) root.position = c.position
       if (typeof c.sound === "boolean") root.sound = c.sound
       if (c.chimes) root.chimes = c.chimes
+      var keys = {}
+      if (Array.isArray(c.hidden)) c.hidden.forEach(function(k) { keys[k] = true })
+      root.hiddenKeys = keys
     }
   }
 
@@ -795,7 +833,9 @@ Column {
       height: sortGroup.height
       MiniLabel {
         anchors.verticalCenter: parent.verticalCenter
-        text: root.games ? root.games.length + " GAMES" : "GAMES"
+        text: !root.games ? "GAMES"
+              : root.sortedGames.length === root.games.length ? root.games.length + " GAMES"
+              : root.sortedGames.length + " OF " + root.games.length + " GAMES"
       }
       ButtonGroup {
         id: sortGroup
@@ -812,6 +852,26 @@ Column {
       }
     }
 
+    TextField {
+      id: filterField
+      width: root.width
+      visible: root.games !== null && root.games.length > 0
+      placeholderText: "Filter by name ( / )"
+      foreground: root.foreground
+      font.pixelSize: Commons.Style.font.bodySmall
+      verticalPadding: Commons.Style.space(4)
+      onTextChanged: root.gameFilter = text
+      // Enter opens the first match; Escape clears, then hands the keys
+      // back to the panel; Tab leaves the field with the filter kept.
+      Keys.onReturnPressed: if (root.sortedGames.length) root.track(root.sortedGames[0].store, root.sortedGames[0].app)
+      Keys.onEnterPressed: if (root.sortedGames.length) root.track(root.sortedGames[0].store, root.sortedGames[0].app)
+      Keys.onEscapePressed: {
+        if (text) text = ""
+        else focus = false
+      }
+      Keys.onTabPressed: focus = false
+    }
+
     Repeater {
       model: root.sortedGames
       // One game: art, name, count and a thin bar; a finished game carries
@@ -820,8 +880,11 @@ Column {
         id: gameRow
         required property var modelData
         readonly property bool platinum: modelData.platinum > 0
+        readonly property bool hiddenGame: root.isHidden(modelData)
         width: root.width
         height: Commons.Style.space(36)
+        // A hidden game dims its art, name and bar, but not its Show link.
+        readonly property real dim: hiddenGame ? 0.45 : 1
         Accessible.role: Accessible.Button
         Accessible.name: "All achievements for " + modelData.game
 
@@ -846,6 +909,7 @@ Column {
           height: parent.height - Commons.Style.space(6)
           width: Math.round(height * 460 / 215)
           source: gameRow.modelData.header || ""
+          opacity: gameRow.dim
         }
         Column {
           anchors.left: gameArt.right
@@ -860,12 +924,36 @@ Column {
             Text {
               id: gameName
               width: parent.width - gameCount.width - Commons.Style.space(8)
+                     - (hideToggle.visible ? hideToggle.width + Commons.Style.space(8) : 0)
               text: gameRow.modelData.game
               color: root.foreground
+              opacity: gameRow.dim
               font.family: Commons.Style.font.family
               font.pixelSize: Commons.Style.font.bodySmall
               font.bold: true
               elide: Text.ElideRight
+            }
+            // Hide or show this game; only on hover, or always for a
+            // hidden one so it can come back.
+            Text {
+              id: hideToggle
+              anchors.right: gameCount.left
+              anchors.rightMargin: Commons.Style.space(8)
+              anchors.verticalCenter: parent.verticalCenter
+              visible: !gameRow.platinum && (gameHit.containsMouse || hideHit.containsMouse || gameRow.hiddenGame)
+              text: gameRow.hiddenGame ? "Show" : "Hide"
+              color: Commons.Color.accent
+              opacity: hideHit.containsMouse ? 1 : 0.75
+              font.family: Commons.Style.font.family
+              font.pixelSize: Commons.Style.font.caption
+              MouseArea {
+                id: hideHit
+                anchors.fill: parent
+                anchors.margins: -4
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.toggleHidden(gameRow.modelData)
+              }
             }
             Caption {
               id: gameCount
@@ -875,16 +963,34 @@ Column {
                     : Math.floor(100 * gameRow.modelData.unlocked / gameRow.modelData.total) + "% · "
                       + gameRow.modelData.unlocked + " / " + gameRow.modelData.total
               color: gameRow.platinum ? root.metalColors.platinum : root.foreground
+              opacity: 0.6 * gameRow.dim
             }
           }
           Bar {
             width: parent.width
             height: 3
+            opacity: gameRow.dim
             fraction: gameRow.modelData.unlocked / gameRow.modelData.total
             fill: gameRow.platinum ? root.metalColors.platinum : Commons.Color.accent
           }
         }
       }
+    }
+
+    Caption {
+      width: root.width
+      horizontalAlignment: Text.AlignHCenter
+      visible: root.games !== null && root.games.length > 0 && root.sortedGames.length === 0
+      text: root.gameFilter ? "No game matches “" + root.gameFilter + "”" : "Every game here is hidden"
+    }
+
+    Caption {
+      width: root.width
+      horizontalAlignment: Text.AlignHCenter
+      visible: root.sort === "closest" && root.hiddenCount > 0
+      text: root.hiddenCount + (root.hiddenCount === 1 ? " hidden game" : " hidden games")
+            + " left out; Recent and Name still list them"
+      opacity: 0.45
     }
 
     Repeater {

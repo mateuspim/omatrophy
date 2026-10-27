@@ -76,6 +76,9 @@ the three locked achievements most players have. With nothing running it
 shows the last three games you played instead (a finished one carries its
 platinum date). Below sits your platinum shelf. The **Games** tab lists every
 game with its count, sorted by last played, closest to platinum or name.
+Type (or press `/`) to filter by name; Enter opens the first match. Hover a
+game and click **Hide** to set aside one you won't finish: it leaves
+Closest and dims in the other sorts until you click **Show**.
 
 Click any game for the **tracker**, a card over the screen with every
 achievement: rarity, the trophy it would earn, and the date you got it.
@@ -99,6 +102,7 @@ position and sound. Each choice applies to the next toast. From a terminal:
 omatrophy.py set position top-right     # top-center, top-left, top-right
 omatrophy.py set sound off              # on, off, omatrophy, classic
 omatrophy.py set icons vector           # omarchy, vector, painted
+omatrophy.py hide steam 20920           # out of "closest to platinum"; unhide brings it back
 omatrophy.py test platinum              # bronze, silver, gold, platinum
 omatrophy.py status                     # progress of every game
 omatrophy.py now                        # the panel's Now tab, as JSON

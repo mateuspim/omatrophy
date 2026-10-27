@@ -13,9 +13,11 @@ bar panel).
 | `sound` | `true`, `false` | `true` |
 | `chimes` | `"omatrophy"` (`assets/sounds/<tier>.wav`), `"classic"` (freedesktop sounds) | `"omatrophy"` |
 | `icons` | `"omarchy"`, `"vector"`, `"painted"` | `"omarchy"` |
+| `hidden` | Games left out of "closest to platinum", as `"store:game"` (`"steam:20920"`), sorted. Written by `omatrophy.py hide`/`unhide` and the Games tab. | `[]` |
 
 ```json
-{ "position": "top-right", "sound": true, "chimes": "omatrophy", "icons": "omarchy" }
+{ "position": "top-right", "sound": true, "chimes": "omatrophy", "icons": "omarchy",
+  "hidden": ["steam:20920"] }
 ```
 
 ## Files OmaTrophy owns

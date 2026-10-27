@@ -28,6 +28,9 @@
 - Locked counter achievements show their progress ("52 / 80" and a thin
   bar) in the tracker and under Up next, from the stat Steam's schema ties
   them to.
+- The Games tab filters by name as you type, and a game you won't finish
+  can be hidden from Closest (`omatrophy.py hide`/`unhide`, config
+  `hidden`).
 - The platinum card in the toast's language: a metal rail, the trophy on a
   platinum tile, a spaced label, then the count and a filling bar.
 - Global rarity is cached a day per game and kept when offline.

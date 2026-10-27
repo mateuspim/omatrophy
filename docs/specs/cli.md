@@ -16,6 +16,8 @@ installed.
 | `set position top-center\|top-left\|top-right` | Where cards appear. |
 | `set sound on\|off\|omatrophy\|classic` | The chime: on, off, or which set (which also turns it on). |
 | `set icons omarchy\|vector\|painted` | Trophy art set. |
+| `hide <store> <game>` | Adds `"store:game"` to `hidden` in config.json: the game leaves `cabinet`'s `nearest` and the Games tab's Closest sort. Exits non-zero for an unknown store. |
+| `unhide <store> <game>` | Takes it back out. |
 | `demo [kind...]` | Prints sample events straight to stdout, then idles. For `dev/preview.sh`. |
 
 `set` writes [the settings file](settings.md); the shell applies it to the
@@ -46,9 +48,10 @@ are URLs (`https://` or `file://`) or `""`.
 
 ## games
 
-`[{store, app, game, header, unlocked, total, platinum, played}]`, one per
-game with achievements, in no set order: the panel sorts them (recent,
-closest to platinum, name). `played` is `0` when the store doesn't say.
+`[{store, app, game, header, unlocked, total, platinum, played, hidden}]`,
+one per game with achievements, in no set order: the panel sorts them
+(recent, closest to platinum, name). `played` is `0` when the store doesn't
+say; `hidden` is `true` for games set aside with `hide`.
 
 ## game
 
