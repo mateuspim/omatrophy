@@ -39,6 +39,38 @@ classic set also needs the freedesktop sound theme
 Rarity comes from Steam's public endpoint when the toast shows. Offline or
 for games that don't publish percentages, the tier falls back to bronze.
 
+## My edit doesn't show
+
+Omarchy's Quickshell caches plugin files when it loads them, and ignores a
+`?v=` query on the URL (ADR 10). What reloads without a restart:
+
+- `TrophyToast.qml` and `PlatinumCard.qml`: the next card.
+- `StylePicker.qml`: the next time the bar panel opens.
+- `TrackerView.qml`: the next time the tracker opens.
+
+These four are built from their current text by `FreshObject.qml`, so they
+can't use other QML types from this folder; a new `Foo.qml` they reference
+won't resolve. Everything else, `Service.qml`, `Panel.qml`, `Tracker.qml`,
+`FreshObject.qml` and `manifest.json`, needs `omarchy restart shell` (not
+while a game runs). `omatrophy.py` and `stores/` load when the watcher
+restarts: `pkill -f 'omatrophy.py watch'` and the service starts it again
+within 10 s. The full table is in
+[development.md](development.md#what-reloads-when).
+
+## The tracker doesn't open
+
+- **Wrong command.** `omarchy-shell shell summon pym.omatrophy '{}'` opens the
+  tracker (the plugin's overlay); add `{"store":"steam","app":"<id>"}` for a
+  given game. The bar panel answers a different target:
+  `omarchy-shell pym.omatrophy toggle`.
+- **The shell predates the overlay.** The `overlay` kind and `Tracker.qml`
+  load only on a shell start: run `omarchy plugin validate .`, then
+  `omarchy restart shell` once. `omarchy plugin list` should show `overlay`
+  among the plugin's kinds.
+- **It opens empty.** With `'{}'` the tracker shows the running game or the
+  last one played; with no game data at all it has nothing to list. Check
+  `python3 omatrophy.py game` prints a game.
+
 ## The bar panel text is unreadable
 
 Fixed in the panel by using the popup text colour; restart the shell once so
