@@ -5,9 +5,10 @@ import QtQuick.Shapes
 import qs.Commons as Commons
 
 // One unlock: slides in from its edge (down from the top in the center, in
-// from the side at a corner), pops the achievement icon, flips a trophy in
-// the unlock's metal onto its corner and runs a shine across it, rolls the
-// count to the new number, holds, slides back out, then reports finished.
+// from the side at a corner), flips a trophy in the unlock's metal into the
+// tile that leads the card and runs a shine across it, pops the achievement
+// art, rolls the count to the new number, holds, slides back out, then
+// reports finished. A rail down the left edge carries the metal too.
 //
 // The metal comes from rarity (omatrophy.py `tier`): bronze, silver, or gold
 // for 10% of players or fewer. Gold also gets the accent border, a glitter
@@ -26,7 +27,7 @@ Item {
   signal finished()
 
   readonly property int pad: 40
-  readonly property int cardWidth: 460
+  readonly property int cardWidth: 480
   readonly property string tier: event && event.tier ? event.tier : "bronze"
   readonly property bool gold: tier === "gold"
   readonly property color tierColor: ({ bronze: "#e9a46b", silver: "#dfe6ee", gold: "#f3cf4a" })[tier] || "#e9a46b"
@@ -44,20 +45,14 @@ Item {
 
   onEventChanged: if (event) show.restart()
 
-  // The Omarchy logo's corners: cut in two grid steps, never rounded. With
-  // `broken`, an open outline with the two breaks of the Omarchy mark (left
-  // middle, bottom right), for the border; otherwise a closed shape to fill.
-  function stepped(w, h, s, inset, broken) {
-    var x0 = inset, y0 = inset, x1 = w - inset, y1 = h - inset, m = (y0 + y1) / 2, g = 20
-    var pts = [[x0, m - g / 2], [x0, y0 + 2 * s], [x0 + s, y0 + 2 * s], [x0 + s, y0 + s], [x0 + 2 * s, y0 + s], [x0 + 2 * s, y0],
+  // The Omarchy logo's corners: cut in two grid steps, never rounded.
+  function stepped(w, h, s, inset) {
+    var x0 = inset, y0 = inset, x1 = w - inset, y1 = h - inset
+    var pts = [[x0, y0 + 2 * s], [x0 + s, y0 + 2 * s], [x0 + s, y0 + s], [x0 + 2 * s, y0 + s], [x0 + 2 * s, y0],
                [x1 - 2 * s, y0], [x1 - 2 * s, y0 + s], [x1 - s, y0 + s], [x1 - s, y0 + 2 * s], [x1, y0 + 2 * s],
-               [x1, y1 - 2 * s], [x1 - s, y1 - 2 * s], [x1 - s, y1 - s], [x1 - 2 * s, y1 - s], [x1 - 2 * s, y1]]
-    var path = "M" + pts.map(function(p) { return p[0] + " " + p[1] }).join(" L")
-    // The bottom-right break sits a little in from the corner.
-    if (broken) path += " L" + (x1 - 2 * s - 22) + " " + y1 + " M" + (x1 - 2 * s - 46) + " " + y1
-    path += " L" + (x0 + 2 * s) + " " + y1 + " L" + (x0 + 2 * s) + " " + (y1 - s) + " L" + (x0 + s) + " " + (y1 - s)
-          + " L" + (x0 + s) + " " + (y1 - 2 * s) + " L" + x0 + " " + (y1 - 2 * s) + " L" + x0 + " " + (m + g / 2)
-    return broken ? path : path + " Z"
+               [x1, y1 - 2 * s], [x1 - s, y1 - 2 * s], [x1 - s, y1 - s], [x1 - 2 * s, y1 - s], [x1 - 2 * s, y1],
+               [x0 + 2 * s, y1], [x0 + 2 * s, y1 - s], [x0 + s, y1 - s], [x0 + s, y1 - 2 * s], [x0, y1 - 2 * s]]
+    return "M" + pts.map(function(p) { return p[0] + " " + p[1] }).join(" L") + " Z"
   }
 
   component Trophy: Item {
@@ -203,7 +198,7 @@ Item {
       ShapePath {
         fillColor: Commons.Color.notifications.background
         strokeColor: "transparent"
-        PathSvg { path: root.stepped(card.width, card.height, 6, 0, false) }
+        PathSvg { path: root.stepped(card.width, card.height, 6, 0) }
       }
     }
 
@@ -216,7 +211,7 @@ Item {
       ShapePath {
         fillColor: "white"
         strokeColor: "transparent"
-        PathSvg { path: root.stepped(card.width, card.height, 6, 0, false) }
+        PathSvg { path: root.stepped(card.width, card.height, 6, 0) }
       }
     }
 
@@ -245,144 +240,147 @@ Item {
       }
     }
 
-    // The border, broken like the Omarchy mark.
+    // The metal's rail down the left edge, inside the card's mask so the
+    // stepped corners trim it.
+    Rectangle {
+      parent: surface
+      width: 3
+      height: card.height
+      color: root.tierColor
+    }
+
     Shape {
       anchors.fill: parent
       ShapePath {
         fillColor: "transparent"
-        strokeColor: root.gold ? root.accent : Qt.alpha(root.accent, 0.7)
-        strokeWidth: root.gold ? 2 : 1.5
+        strokeColor: root.gold ? root.accent : Qt.alpha(root.accent, 0.45)
+        strokeWidth: root.gold ? 2 : 1
         joinStyle: ShapePath.MiterJoin
-        capStyle: ShapePath.FlatCap
-        PathSvg { path: root.stepped(card.width, card.height, 6, root.gold ? 2 : 1.5 / 2, true) }
+        PathSvg { path: root.stepped(card.width, card.height, 6, root.gold ? 1 : 0.5) }
+      }
+    }
+
+    // The achievement's own art, small, in the top-right corner.
+    Rectangle {
+      id: iconBox
+      x: card.width - width - 16
+      y: 16
+      width: 44
+      height: 44
+      color: Qt.alpha(root.fg, 0.06)
+      border.width: 1
+      border.color: Qt.alpha(root.fg, 0.18)
+      radius: Commons.Style.cornerRadius
+      clip: true
+      Image {
+        anchors.fill: parent
+        anchors.margins: 1
+        source: root.event ? root.event.icon : ""
+        fillMode: Image.PreserveAspectCrop
+        asynchronous: true
       }
     }
 
     Row {
       id: row
-      x: 16
+      x: 20
       y: 16
-      spacing: 18
+      spacing: 16
 
+      // The trophy leads: a tile washed in its metal.
       Item {
-        width: 68
-        height: 68
+        width: 72
+        height: 72
 
-        Rectangle {
-          id: iconBox
-          anchors.fill: parent
-          color: Qt.alpha(root.fg, 0.06)
-          border.width: 1
-          border.color: Qt.alpha(root.tierColor, 0.55)
-          radius: Commons.Style.cornerRadius
-          clip: true
-
-          Image {
-            id: icon
-            anchors.fill: parent
-            anchors.margins: 1
-            source: root.event ? root.event.icon : ""
-            fillMode: Image.PreserveAspectCrop
-            asynchronous: true
+        ParticleSystem {
+          anchors.centerIn: parent
+          width: 2
+          height: 2
+          ImageParticle {
+            source: "qrc:///particleresources/star.png"
+            color: root.tierColor
+            colorVariation: 0.15
+            rotationVariation: 180
+            rotationVelocityVariation: 220
+            entryEffect: ImageParticle.Scale
+          }
+          Emitter {
+            id: glitter
+            x: -12; y: -12; width: 24; height: 24
+            enabled: false
+            lifeSpan: 1000; lifeSpanVariation: 300
+            size: 14; sizeVariation: 6; endSize: 1
+            velocity: AngleDirection { angleVariation: 180; magnitude: 130; magnitudeVariation: 60 }
+            acceleration: PointDirection { y: 90 }
           }
         }
 
-        // The trophy, on a dark disc at the icon's corner.
-        Item {
-          x: parent.width - 28
-          y: parent.height - 30
-          width: 40
-          height: 40
-
-          ParticleSystem {
-            anchors.centerIn: parent
-            width: 2
-            height: 2
-            ImageParticle {
-              source: "qrc:///particleresources/star.png"
-              color: root.tierColor
-              colorVariation: 0.15
-              rotationVariation: 180
-              rotationVelocityVariation: 220
-              entryEffect: ImageParticle.Scale
-            }
-            Emitter {
-              id: glitter
-              x: -8; y: -8; width: 16; height: 16
-              enabled: false
-              lifeSpan: 1000; lifeSpanVariation: 300
-              size: 13; sizeVariation: 6; endSize: 1
-              velocity: AngleDirection { angleVariation: 180; magnitude: 110; magnitudeVariation: 60 }
-              acceleration: PointDirection { y: 90 }
-            }
+        // Square on the omarchy grid, theme-rounded for the other sets.
+        Rectangle {
+          anchors.fill: parent
+          radius: root.iconSet === "omarchy" ? 0 : Commons.Style.cornerRadius
+          scale: medal.scale
+          border.width: 1
+          border.color: Qt.alpha(root.tierColor, 0.6)
+          gradient: Gradient {
+            GradientStop { position: 0; color: Qt.alpha(root.tierColor, 0.18) }
+            GradientStop { position: 1; color: Qt.alpha(root.tierColor, 0.04) }
           }
-
-          // Square on the omarchy grid, round for the other sets.
-          Rectangle {
-            anchors.fill: parent
-            radius: root.iconSet === "omarchy" ? 0 : width / 2
-            scale: medal.scale
-            color: Commons.Color.notifications.background
-            border.width: 1.5
-            border.color: Qt.alpha(root.tierColor, 0.8)
-          }
-          Trophy {
-            id: medal
-            anchors.centerIn: parent
-            width: 30
-            height: 30
-            metal: root.tier
-            set: root.iconSet
-            accent: root.accent
-          }
+        }
+        Trophy {
+          id: medal
+          anchors.centerIn: parent
+          width: 52
+          height: 52
+          metal: root.tier
+          set: root.iconSet
+          accent: root.accent
         }
       }
 
       Column {
-        width: root.cardWidth - 68 - 16 * 2 - 18
-        spacing: 3
+        width: root.cardWidth - row.x - 72 - row.spacing - 16
+        spacing: 2
 
-        Item {
-          width: parent.width
-          height: caption.height
+        Row {
+          spacing: 8
           Text {
-            id: caption
             text: root.tier.toUpperCase() + " TROPHY"
             color: root.tierColor
             font.family: Commons.Style.font.family
-            font.pixelSize: Commons.Style.font.caption
+            font.pixelSize: Commons.Style.font.bodySmall
             font.bold: true
             font.letterSpacing: 2
           }
           Text {
-            anchors.right: parent.right
             text: root.event && root.event.percent !== null && root.event.percent !== undefined
                   ? root.event.percent.toFixed(1) + "% of players" : ""
-            color: Qt.alpha(root.fg, 0.55)
+            color: Qt.alpha(root.fg, 0.5)
             font.family: Commons.Style.font.family
-            font.pixelSize: Commons.Style.font.caption
+            font.pixelSize: Commons.Style.font.bodySmall
           }
         }
+        // The name and description stop short of the art in the corner.
         Text {
-          width: parent.width
+          width: parent.width - iconBox.width - 12
           text: root.event ? root.event.name : ""
           color: root.fg
           font.family: Commons.Style.font.family
-          font.pixelSize: Commons.Style.font.heading
+          font.pixelSize: Commons.Style.fontPx(1.5)
           font.bold: true
           elide: Text.ElideRight
         }
         Text {
-          width: parent.width
+          width: parent.width - iconBox.width - 12
           text: root.event ? root.event.desc : ""
           color: Qt.alpha(root.fg, 0.7)
           font.family: Commons.Style.font.family
-          font.pixelSize: Commons.Style.font.bodySmall
+          font.pixelSize: Commons.Style.font.body
           wrapMode: Text.WordWrap
           maximumLineCount: 2
           elide: Text.ElideRight
         }
-        Item { width: 1; height: 4 }
+        Item { width: 1; height: 8 }
         Item {
           width: parent.width
           height: gameName.height
@@ -392,7 +390,7 @@ Item {
             text: root.event ? root.event.game : ""
             color: Qt.alpha(root.fg, 0.5)
             font.family: Commons.Style.font.family
-            font.pixelSize: Commons.Style.font.caption
+            font.pixelSize: Commons.Style.font.bodySmall
             elide: Text.ElideRight
           }
           // The count rolls up from the number before this unlock.
@@ -409,7 +407,7 @@ Item {
               text: root.event ? Math.max(0, root.event.unlocked - 1) + " / " + root.event.total : ""
               color: Qt.alpha(root.fg, 0.5)
               font.family: Commons.Style.font.family
-              font.pixelSize: Commons.Style.font.caption
+              font.pixelSize: Commons.Style.font.bodySmall
             }
             Text {
               id: newCount
@@ -418,16 +416,16 @@ Item {
               text: root.event ? root.event.unlocked + " / " + root.event.total : ""
               color: root.fg
               font.family: Commons.Style.font.family
-              font.pixelSize: Commons.Style.font.caption
+              font.pixelSize: Commons.Style.font.bodySmall
               font.bold: true
             }
           }
         }
-        Item { width: 1; height: 4 }
+        Item { width: 1; height: 5 }
         // Progress toward 100%, filling in from the count before this unlock.
         Rectangle {
           width: parent.width
-          height: 6
+          height: 4
           color: Qt.alpha(root.fg, 0.1)
           Rectangle {
             id: bar
