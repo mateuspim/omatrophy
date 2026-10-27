@@ -30,18 +30,20 @@ status` shows what is on disk). Launching a game adds it within a second.
 For the rest, turn on the community backfill (ADR 11): `omatrophy.py set
 community on`, then `omatrophy.py sync` to watch it work.
 
-- **"rate limited ... waiting N min".** Normal: Steam limits how fast a
-  profile is read, and the backfill waits and carries on. If it stops
-  after five limits in a row, or on a timeout, run `sync` again later; it
-  resumes where it stopped.
+- **"paused: N fetched, M left" or "stopped at <app>: HTTP Error 429".**
+  Normal: Steam limits how fast a profile is read, for hours once you hit
+  it, so the backfill reads 15 pages a run and the watcher runs it every
+  hour (every 2 to 8 h after a failed run). A big library fills in over a
+  day or two. Running `sync` over and over only keeps the limit going.
 - **Every game says "none".** Your profile or its game details are private:
   Steam > Profile > Edit Profile > Privacy Settings, set *My profile* and
   *Game details* to Public.
-- **Where is it?** The watcher logs each page and wait:
+- **Where is it?** `cat ~/.cache/omatrophy/community/status.json` has the
+  latest line; the watcher logs each page:
   `quickshell log -p /usr/share/omarchy/shell -t 200 | grep 'omatrophy: steam backfill'`.
 - **A game still shows old progress.** Pages are refetched when you have
   played the game since, else weekly (played in the last 60 days) or every
-  60 days; delete
+  60 days (180 with nothing unlocked; never for a finished game); delete
   `~/.cache/omatrophy/community/games/<app>.json` to fetch it on the next
   run.
 

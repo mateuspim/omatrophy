@@ -132,16 +132,41 @@ def warm_names(pairs, threads=8):
         list(pool.map(lookup, pairs))
 
 
-def background(found, pairs):
-    """The watcher's slow chores, after `ready`: warm the name cache, then
-    let each store backfill games it has no local data for."""
-    warm_names(pairs)
+# The backfill runs hourly, each run a small budget of pages; after a
+# failed run (most often Steam's 429, which lasts hours) the wait doubles up
+# to BACKFILL_MAX_WAIT so a limited profile isn't asked again every hour.
+BACKFILL_WAIT = 3600
+BACKFILL_MAX_WAIT = 8 * 3600
+
+
+def next_backfill_wait(failed, previous):
+    """Seconds until the next backfill run."""
+    return min(previous * 2, BACKFILL_MAX_WAIT) if failed else BACKFILL_WAIT
+
+
+def backfill_once(found):
+    """One backfill run of every store; True when any of them failed."""
+    failed = False
     for s in found:
         try:
             # Progress goes to the shell log; stdout is for events only.
-            s.backfill(say=lambda line, s=s: print(f'omatrophy: {s.id} backfill: {line}', file=sys.stderr, flush=True))
+            result = s.backfill(say=lambda line, s=s: print(f'omatrophy: {s.id} backfill: {line}', file=sys.stderr, flush=True))
         except Exception as e:
             print(f'omatrophy: {s.name} backfill failed: {e}', file=sys.stderr, flush=True)
+            result = (0, True)
+        failed = failed or bool(result and result[1])
+    return failed
+
+
+def background(found, pairs, sleep=time.sleep):
+    """The watcher's slow chores, after `ready`: warm the name cache, then
+    let each store backfill games it has no local data for, again and
+    again for as long as the watcher runs."""
+    warm_names(pairs)
+    wait = BACKFILL_WAIT
+    while True:
+        wait = next_backfill_wait(backfill_once(found), wait)
+        sleep(wait)
 
 
 def sync():

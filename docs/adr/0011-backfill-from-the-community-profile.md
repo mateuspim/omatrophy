@@ -25,13 +25,16 @@ profile page.
   community on`), lets the Steam store fill in games that have no local
   stats file from that page.
 - It is a backfill, never the live path: the watcher fetches in a
-  background thread after `ready`, one page about every 3 s, most
-  recently played first. A 429 is waited out (1, 2, 4... minutes, five at
-  most; Steam limited the first test run after about 20 pages); any other
-  error ends the run and the next one resumes. Pages
+  background thread after `ready` and then every hour, at most 15 pages
+  a run, one about every 3 s, most recently played first. Steam limited
+  the first test run after about 20 pages and kept answering 429 for over
+  two hours, so waiting inside a run doesn't help: any error, a 429
+  included, ends the run, the next one resumes, and after a failed run the
+  wait doubles (2, 4, 8 h at most). Pages
   are cached in `~/.cache/omatrophy/community/games/<app>.json`, refetched
   when the game was played since, else after a week for games played in
-  the last 60 days and after 60 days for the rest; "no achievements" is
+  the last 60 days and after 60 days for the rest (180 days with nothing
+  unlocked); a finished game only when played since; "no achievements" is
   kept for a month in one index, `community/none.json`, so `games()` stays
   a folder listing. `omatrophy.py sync` runs the same backfill in the
   foreground.

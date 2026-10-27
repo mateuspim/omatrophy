@@ -137,7 +137,9 @@ omatrophy.py set community on   # off by default; sends your SteamID64 to steamc
 omatrophy.py sync               # optional: fetch now with progress (the watcher also does it)
 ```
 
-Toasts still come only from this machine's own data. Other launchers plug in as one module each:
+Steam limits how fast a profile can be read, so the watcher fetches 15
+games an hour and a large library fills in over a day or two. Toasts still
+come only from this machine's own data. Other launchers plug in as one module each:
 [adding a store](docs/guide/stores.md).
 
 ## Requirements

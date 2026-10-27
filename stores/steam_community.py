@@ -7,7 +7,7 @@ page has the rest without a key: it embeds its data as JSON in
 react-query cache (schema, the user's unlocks, the store item). Only that
 JSON is read, never the markup (ADR 11). Opt-in with `set community on`.
 """
-import json, os, re, time, urllib.error, urllib.request
+import json, os, re, time, urllib.request
 
 from .base import CACHE, read_json, write_json
 
@@ -17,19 +17,21 @@ SSR = re.compile(r'<script[^>]*id="valve-ssr-data"[^>]*>(.*?)</script>', re.S)
 # A page is refetched when the game was played since; otherwise after a
 # week for games played in the last 60 days and after 60 days for the rest,
 # whose unlocks rarely move: a full refresh of a few hundred pages takes
-# hours under Steam's rate limit. "No achievements" holds for a month.
+# hours under Steam's rate limit. A dormant game with nothing unlocked
+# waits half a year, and a finished one only refreshes when played, since
+# unlocks need play. "No achievements" holds for a month.
 FRESH_SECONDS = 7 * 86400
 ACTIVE_SECONDS = 60 * 86400
 DORMANT_SECONDS = 60 * 86400
+UNTOUCHED_SECONDS = 180 * 86400
 NONE_SECONDS = 30 * 86400
 # Valve doesn't publish a rate. On 2026-10-27 it answered 429 after about
-# 20 pages in two and a half minutes and served again within a minute, so
-# pace gently and, on a 429, wait 1, 2, 4... minutes and retry the same
-# page; five in a row ends the run.
+# 20 pages in two and a half minutes, and once limited it kept answering
+# 429 for over two hours. So a run fetches at most PAGES_PER_RUN pages,
+# gently paced, and a 429 ends it; the watcher runs it again later
+# (omatrophy.py's background loop) instead of waiting minutes in a run.
 PAUSE_SECONDS = 3
-BACKOFF_SECONDS = 60
-MAX_BACKOFFS = 5
-
+PAGES_PER_RUN = 15
 
 def cache_dir():
     return f'{CACHE}/community'
@@ -139,9 +141,15 @@ def due(app, played, now, nones):
     fetched = c.get('time', 0)
     if played > fetched:
         return True
-    limit = FRESH_SECONDS if now - played < ACTIVE_SECONDS else DORMANT_SECONDS
+    achievements = c.get('achievements') or []
+    unlocked = sum(1 for a in achievements if a.get('unlocked'))
+    if achievements and unlocked == len(achievements):
+        return False
+    if now - played < ACTIVE_SECONDS:
+        limit = FRESH_SECONDS
+    else:
+        limit = UNTOUCHED_SECONDS if unlocked == 0 else DORMANT_SECONDS
     return now - fetched > limit
-
 
 def write_atomic(path, value):
     """Write then rename, so the watcher never reads half a file."""
@@ -149,33 +157,16 @@ def write_atomic(path, value):
     os.replace(path + '.tmp', path)
 
 
-def rate_limited(e):
-    return isinstance(e, urllib.error.HTTPError) and e.code == 429
-
-
-def fetch_patiently(fetch_page, account, app, say, sleep):
-    """One page, waiting out rate limits; raises on any other error or
-    after MAX_BACKOFFS limits in a row."""
-    for attempt in range(MAX_BACKOFFS + 1):
-        try:
-            return fetch_page(account, app)
-        except Exception as e:
-            if not rate_limited(e) or attempt == MAX_BACKOFFS:
-                raise
-            wait = BACKOFF_SECONDS * 2 ** attempt
-            say(f'rate limited at {app}; waiting {wait // 60} min')
-            sleep(wait)
-
-
 def status():
     """The backfill's latest line, {time, line, done, total}; {} before the first run."""
     return read_json(f'{cache_dir()}/status.json', {})
 
 
-def backfill(account, played, local, fetch_page=fetch, pause=PAUSE_SECONDS, say=None, sleep=time.sleep):
+def backfill(account, played, local, fetch_page=fetch, pause=PAUSE_SECONDS, say=None, sleep=time.sleep,
+             budget=PAGES_PER_RUN):
     """Fetch the pages of played games with no local stats file, most recent
-    first. Rate limits are waited out; any other error (offline, a private
-    profile) ends the run, and the next one resumes where it stopped.
+    first, at most `budget` of them. Any error (a rate limit, offline, a
+    private profile) ends the run, and the next one resumes where it stopped.
     `played` is [(unix seconds, app)], `local` the apps with local stats.
     Returns (fetched, failed: bool)."""
     now = time.time()
@@ -192,11 +183,11 @@ def backfill(account, played, local, fetch_page=fetch, pause=PAUSE_SECONDS, say=
         if shout:
             shout(line)
 
-    for i, (_, app) in enumerate(todo):
+    for i, (_, app) in enumerate(todo[:budget]):
         if i:
             sleep(pause)
         try:
-            page = fetch_patiently(fetch_page, account, app, say, sleep)
+            page = fetch_page(account, app)
         except Exception as e:
             say(f'stopped at {app}: {e}')
             return fetched, True
@@ -207,5 +198,10 @@ def backfill(account, played, local, fetch_page=fetch, pause=PAUSE_SECONDS, say=
             write_atomic(f'{cache_dir()}/none.json', nones)
         fetched += 1
         say(f'{i + 1}/{len(todo)} {app}: ' + (f"{len(page['achievements'])} achievements" if page else 'none'))
-    say(f'done: {fetched} fetched' if todo else 'up to date')
+    if not todo:
+        say('up to date')
+    elif len(todo) > budget:
+        say(f'paused: {fetched} fetched, {len(todo) - fetched} left for later runs')
+    else:
+        say(f'done: {fetched} fetched')
     return fetched, False

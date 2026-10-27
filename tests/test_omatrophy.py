@@ -6,7 +6,7 @@ folders built here; no Steam install, no network, no real config.
 Run from the repo root: python3 -m unittest discover -s tests
 """
 import io, json, os, struct, sys, tempfile, time, unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -576,34 +576,64 @@ class CommunityBackfill(unittest.TestCase):
         self.run_backfill([(30, '2'), (time.time() + 60, '1')])
         self.assertEqual(self.asked, ['1'])
 
-    def test_rate_limits_are_waited_out_then_give_up(self):
+    def test_a_rate_limit_ends_the_run_without_waiting(self):
         import urllib.error
         limit = urllib.error.HTTPError('u', 429, 'Too Many Requests', {}, None)
-        calls = iter([limit, limit, None])
         waits = []
-        result = steam_community.backfill('42', [(1, '9')], set(), fetch_page=lambda a, g: (
-            (_ for _ in ()).throw(e) if isinstance(e := next(calls), Exception) else e), sleep=waits.append)
-        self.assertEqual(result, (1, False))
-        self.assertEqual(waits, [60, 120])
-        self.assertEqual(steam_community.status()['line'], 'done: 1 fetched')
-        always = steam_community.backfill('42', [(1, '8')], set(),
+        result = steam_community.backfill('42', [(2, '9'), (1, '8')], set(),
                                           fetch_page=lambda a, g: (_ for _ in ()).throw(limit), sleep=waits.append)
-        self.assertEqual(always, (0, True))
+        self.assertEqual(result, (0, True))
+        self.assertEqual(waits, [])
+        self.assertIn('stopped at 9', steam_community.status()['line'])
+
+    def test_a_run_fetches_at_most_its_budget(self):
+        played = [(10 - i, str(i)) for i in range(5)]
+        result = steam_community.backfill('42', played, set(), fetch_page=self.fetch({}),
+                                          sleep=lambda s: None, budget=2)
+        self.assertEqual(result, (2, False))
+        self.assertEqual(self.asked, ['0', '1'])
+        self.assertEqual(steam_community.status()['line'], 'paused: 2 fetched, 3 left for later runs')
+        steam_community.backfill('42', played, set(), fetch_page=self.fetch({}), sleep=lambda s: None, budget=2)
+        self.assertEqual(self.asked, ['0', '1', '2', '3'])
+
+    def write_page(self, app, fetched, unlocked, total=2):
+        steam_community.write_atomic(f'{steam_community.cache_dir()}/games/{app}.json', {
+            'time': fetched,
+            'achievements': [{'unlocked': i < unlocked} for i in range(total)]})
 
     def test_dormant_games_refresh_less_often(self):
         day = 86400
         now = 10_000_000_000
-        page = f'{steam_community.cache_dir()}/games/5.json'
         active, dormant = now - 50 * day, now - 400 * day
-        steam_community.write_atomic(page, {'time': now - 3 * day})
+        self.write_page('5', now - 3 * day, 1)
         self.assertFalse(steam_community.due('5', active, now, {}))
         self.assertTrue(steam_community.due('5', now - day, now, {}))  # played since the fetch
-        steam_community.write_atomic(page, {'time': now - 10 * day})
+        self.write_page('5', now - 10 * day, 1)
         self.assertTrue(steam_community.due('5', active, now, {}))
         self.assertFalse(steam_community.due('5', dormant, now, {}))
-        steam_community.write_atomic(page, {'time': now - 61 * day})
+        self.write_page('5', now - 61 * day, 1)
         self.assertTrue(steam_community.due('5', dormant, now, {}))
         self.assertTrue(steam_community.due('6', dormant, now, {}))  # never fetched
+
+    def test_untouched_dormant_games_wait_half_a_year(self):
+        day = 86400
+        now = 10_000_000_000
+        dormant = now - 400 * day
+        self.write_page('5', now - 61 * day, 0)
+        self.assertFalse(steam_community.due('5', dormant, now, {}))
+        self.write_page('5', now - 181 * day, 0)
+        self.assertTrue(steam_community.due('5', dormant, now, {}))
+        # Active games keep the weekly refresh, unlocks or not.
+        self.write_page('5', now - 10 * day, 0)
+        self.assertTrue(steam_community.due('5', now - 50 * day, now, {}))
+
+    def test_finished_games_refresh_only_when_played(self):
+        day = 86400
+        now = 10_000_000_000
+        self.write_page('5', now - 40 * day, 2)
+        self.assertFalse(steam_community.due('5', now - 50 * day, now, {}))
+        self.assertFalse(steam_community.due('5', now - 500 * day, now, {}))
+        self.assertTrue(steam_community.due('5', now - day, now, {}))
 
     def test_first_error_stops_the_run(self):
         result = self.run_backfill([(30, '1'), (20, '2')], pages={'1': OSError('429'), '2': None})
@@ -743,6 +773,48 @@ class Settings(unittest.TestCase):
                 self.assertEqual(json.load(f)['tracker-sort'], 'rarity')
             with self.assertRaises(SystemExit):
                 omatrophy.set_option('tracker-sort', 'random')
+
+
+class BackfillLoop(unittest.TestCase):
+    def test_wait_doubles_after_failures_up_to_a_cap(self):
+        wait = omatrophy.BACKFILL_WAIT
+        waits = []
+        for failed in (True, True, True, True, True, False):
+            wait = omatrophy.next_backfill_wait(failed, wait)
+            waits.append(wait // 3600)
+        self.assertEqual(waits, [2, 4, 8, 8, 8, 1])
+
+    def test_watcher_runs_the_backfill_again_and_backs_off(self):
+        class Store:
+            id, name = 'fake', 'Fake'
+            results = iter([(1, True), (0, True), (3, False)])
+
+            def backfill(self, say=None):
+                return next(self.results)
+
+        class Stop(Exception):
+            pass
+
+        waits = []
+
+        def sleep(seconds):
+            waits.append(seconds // 3600)
+            if len(waits) == 3:
+                raise Stop
+
+        with mock.patch.object(omatrophy, 'warm_names'), self.assertRaises(Stop):
+            omatrophy.background([Store()], [], sleep=sleep)
+        self.assertEqual(waits, [2, 4, 1])
+
+    def test_a_store_that_raises_counts_as_failed(self):
+        class Broken:
+            id, name = 'broken', 'Broken'
+
+            def backfill(self, say=None):
+                raise OSError('offline')
+
+        with redirect_stderr(io.StringIO()):
+            self.assertTrue(omatrophy.backfill_once([Broken()]))
 
 
 class WarmNames(unittest.TestCase):
