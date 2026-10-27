@@ -6,12 +6,12 @@ installed.
 
 | Command | Does |
 | --- | --- |
-| `watch` | The default. Prints [event lines](events.md) until killed. `Service.qml` runs this. |
+| `watch` | The default. Prints [event lines](events.md) until killed. `Service.qml` runs this. After `ready` it looks up uncached game names in the background (eight at a time, 4 s timeout each); events never wait on it. |
 | `test [kind]` | Queues one sample event for a running watcher, built from your most recently played game. `kind`: `bronze`, `silver`, `gold` (or `rare`), `platinum`; `unlock` (the default) keeps the achievement's real rarity. |
 | `status` | Prints `[{store, app, unlocked, total}]` for every game with achievements, most complete first. |
 | `cabinet` | Prints `{games, trophies, platinums, nearest}`: totals across every game, and `nearest`, the four started, unfinished games closest to 100%, each a `status` row plus `game` (name) and `header` (art URL). |
 | `now` | Prints [what the bar panel's Now tab shows](#now), in one read of every store. |
-| `games` | Prints [every game with achievements](#games) for the panel's Games tab. The first run looks up uncached names (eight at a time); later runs read the cache. |
+| `games` | Prints [every game with achievements](#games) for the panel's Games tab. Uncached names are looked up eight at a time; the watcher warms that cache in the background after `ready`, so this is usually a file read. |
 | `game [store app]` | Prints [one game's every achievement](#game) for the tracker. Without arguments: the game running now, else the one played last. Exits non-zero, with what to do, when the game has no cached achievements. |
 | `set position top-center\|top-left\|top-right` | Where cards appear. |
 | `set sound on\|off\|omatrophy\|classic` | The chime: on, off, or which set (which also turns it on). |

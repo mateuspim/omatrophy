@@ -417,6 +417,22 @@ class Settings(unittest.TestCase):
                 omatrophy.set_option('icons', 'neon')
 
 
+class WarmNames(unittest.TestCase):
+    def test_looks_up_every_game_and_survives_failures(self):
+        asked = []
+
+        class Fake:
+            def game_name(self, game):
+                asked.append(game)
+                if game == 'bad':
+                    raise OSError('offline')
+                return f'Game {game}'
+
+        fake = Fake()
+        omatrophy.warm_names([(fake, '1'), (fake, 'bad'), (fake, '2')], threads=2)
+        self.assertEqual(sorted(asked), ['1', '2', 'bad'])
+
+
 class Hidden(unittest.TestCase):
     def test_with_hidden_adds_removes_and_sorts(self):
         self.assertEqual(omatrophy.with_hidden(['steam:9'], 'steam:1', True), ['steam:1', 'steam:9'])

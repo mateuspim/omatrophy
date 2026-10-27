@@ -34,6 +34,8 @@
 - The platinum card in the toast's language: a metal rail, the trophy on a
   platinum tile, a spaced label, then the count and a filling bar.
 - Global rarity is cached a day per game and kept when offline.
+- The watcher fills the game-name cache in the background after it starts,
+  so the Games tab's first open doesn't wait on the network.
 - `omatrophy.py` CLI: `watch`, `test`, `status`, `cabinet`, `now`, `games`,
   `game`, `set`.
 - `dev/render.sh`: any view offscreen to a PNG, from fake sample data.

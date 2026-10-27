@@ -19,7 +19,7 @@ Usage:
 Each store (stores/) reads its launcher's own files; this file diffs them and
 turns new unlocks into events. Steam is the only store so far.
 """
-import json, os, sys, time
+import json, os, sys, threading, time
 from concurrent.futures import ThreadPoolExecutor
 
 import stores
@@ -114,12 +114,28 @@ def found_stores():
     return found
 
 
+def warm_names(pairs, threads=8):
+    """Look up every game's name once, so the panel's Games tab opens on a
+    warm cache. Stores cache names themselves; a cached one costs a file read."""
+    def lookup(pair):
+        try:
+            pair[0].game_name(pair[1])
+        except Exception:
+            pass
+    with ThreadPoolExecutor(threads) as pool:
+        list(pool.map(lookup, pairs))
+
+
 def watch(interval=1.0):
     found = found_stores()
     tokens = {s.id: s.games() for s in found}
     seen = {(s.id, g): unlocked_set(s, g)[1] for s in found for g in tokens[s.id]}
     inbox = os.path.getsize(INBOX) if os.path.exists(INBOX) else 0
     emit({'type': 'ready', 'stores': [s.id for s in found], 'games': len(seen)})
+    # In the background, after `ready`: name lookups go to the network and
+    # must never hold up an unlock.
+    threading.Thread(target=warm_names, args=([(s, g) for s in found for g in tokens[s.id]],),
+                     daemon=True).start()
     while True:
         time.sleep(interval)
         inbox = drain_inbox(inbox)
