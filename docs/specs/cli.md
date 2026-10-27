@@ -10,7 +10,7 @@ installed.
 | `test [kind]` | Queues one sample event for a running watcher, built from your most recently played game. `kind`: `bronze`, `silver`, `gold` (or `rare`), `platinum`; `unlock` (the default) keeps the achievement's real rarity. |
 | `status` | Prints `[{store, app, unlocked, total}]` for every game with achievements, most complete first. |
 | `set position top-center\|top-left\|top-right` | Where cards appear. |
-| `set sound on\|off` | The chime. |
+| `set sound on\|off\|omatrophy\|classic` | The chime: on, off, or which set (which also turns it on). |
 | `set icons omarchy\|vector\|painted` | Trophy art set. |
 | `demo [kind...]` | Prints sample events straight to stdout, then idles. For `dev/preview.sh`. |
 

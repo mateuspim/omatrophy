@@ -11,10 +11,11 @@ bar panel).
 | --- | --- | --- |
 | `position` | `"top-center"`, `"top-left"`, `"top-right"` | `"top-center"` |
 | `sound` | `true`, `false` | `true` |
+| `chimes` | `"omatrophy"` (`assets/sounds/<tier>.wav`), `"classic"` (freedesktop sounds) | `"omatrophy"` |
 | `icons` | `"omarchy"`, `"vector"`, `"painted"` | `"omarchy"` |
 
 ```json
-{ "position": "top-right", "sound": true, "icons": "omarchy" }
+{ "position": "top-right", "sound": true, "chimes": "omatrophy", "icons": "omarchy" }
 ```
 
 ## Files OmaTrophy owns

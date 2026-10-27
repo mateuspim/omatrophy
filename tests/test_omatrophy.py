@@ -209,8 +209,21 @@ class Settings(unittest.TestCase):
                 omatrophy.set_option('sound', 'off')
             with open(f'{home}/.config/omatrophy/config.json') as f:
                 self.assertEqual(json.load(f), {'position': 'top-left', 'sound': False})
+            with redirect_stdout(io.StringIO()):
+                omatrophy.set_option('sound', 'classic')
+            with open(f'{home}/.config/omatrophy/config.json') as f:
+                self.assertEqual(json.load(f), {'position': 'top-left', 'sound': True, 'chimes': 'classic'})
             with self.assertRaises(SystemExit):
                 omatrophy.set_option('icons', 'neon')
+
+
+class Sounds(unittest.TestCase):
+    def test_every_tier_has_a_sound(self):
+        import wave
+        root = os.path.join(os.path.dirname(__file__), '..', 'assets', 'sounds')
+        for tier in ('bronze', 'silver', 'gold', 'platinum'):
+            with wave.open(os.path.join(root, f'{tier}.wav')) as w:
+                self.assertGreater(w.getnframes(), 0, tier)
 
 
 class Qml(unittest.TestCase):

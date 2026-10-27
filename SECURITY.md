@@ -18,7 +18,7 @@ what OmaTrophy does with that access:
 
 - Runs: `python3 omatrophy.py watch` for as long as the shell runs (restarted
   10 s after it exits); `python3 omatrophy.py set|test` when you use the bar
-  panel; `pw-play` for the chime.
+  panel; `pw-play` for the chime (a bundled WAV, or a freedesktop sound with the classic set).
 - Reads: Steam's local achievement cache
   (`<Steam>/appcache/stats/UserGameStats*_*.bin`) and library art
   (`<Steam>/appcache/librarycache/`), once a second for changed files; its own

@@ -25,11 +25,15 @@ Column {
   property string iconSet: "omarchy"
   property string position: "top-center"
   property bool sound: true
+  property string chimes: "omatrophy"
 
   function set(key, value) {
     if (key === "icons") iconSet = value
     if (key === "position") position = value
-    if (key === "sound") sound = value === "on"
+    if (key === "sound") {
+      sound = value !== "off"
+      if (value !== "on" && value !== "off") chimes = value
+    }
     runner.exec(["python3", helperPath, "set", key, value])
   }
 
@@ -50,6 +54,7 @@ Column {
       if (c.icons) root.iconSet = c.icons
       if (c.position) root.position = c.position
       if (typeof c.sound === "boolean") root.sound = c.sound
+      if (c.chimes) root.chimes = c.chimes
     }
   }
 
@@ -207,8 +212,12 @@ Column {
 
   PanelSectionHeader { text: "SOUND"; foreground: root.foreground }
   ButtonGroup {
-    options: [{ value: "on", label: "Chime" }, { value: "off", label: "Silent" }]
-    value: root.sound ? "on" : "off"
+    options: [
+      { value: "omatrophy", label: "OmaTrophy" },
+      { value: "classic", label: "Classic" },
+      { value: "off", label: "Silent" }
+    ]
+    value: root.sound ? root.chimes : "off"
     foreground: root.foreground
     onChanged: value => root.set("sound", value)
   }

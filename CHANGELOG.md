@@ -9,5 +9,7 @@
 - Bar button with a style picker: three trophy art sets (Omarchy pixel grid
   with a theme-tinted inlay, faceted vector, painted), previews of every
   tier, position (top centre, left or right) and sound.
+- A chime per tier, synthesised for OmaTrophy (`tools/sounds.py`), with the
+  freedesktop sounds kept as the classic set.
 - Stores are pluggable (`stores/`); Steam is the first.
 - `omatrophy.py` CLI: `watch`, `test`, `status`, `set`.

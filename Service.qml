@@ -12,12 +12,15 @@ import qs.Commons as Commons
 //
 // Settings live in ~/.config/omatrophy/config.json and apply live:
 //   {"position": "top-center" | "top-left" | "top-right", "sound": true,
-//    "icons": "omarchy" | "vector" | "painted"}
+//    "chimes": "omatrophy" | "classic", "icons": "omarchy" | "vector" | "painted"}
 Scope {
   id: root
 
   readonly property string helperPath: decodeURIComponent(String(Qt.resolvedUrl("omatrophy.py")).replace(/^file:\/\//, ""))
   readonly property string sounds: "/usr/share/sounds/freedesktop/stereo/"
+  // The classic set: freedesktop sounds, before OmaTrophy had its own.
+  readonly property var classic: ({ bronze: "message-new-instant.oga", silver: "message-new-instant.oga",
+                                    gold: "bell.oga", platinum: "complete.oga" })
   // dev/preview.sh swaps in `omatrophy.py demo` to show cards without Steam.
   property var watchCommand: ["python3", helperPath, "watch"]
 
@@ -25,6 +28,7 @@ Scope {
   property var current: null
   property string position: "top-center"
   property bool sound: true
+  property string chimes: "omatrophy"
   property string iconSet: "omarchy"
 
   function enqueue(ev) {
@@ -37,8 +41,8 @@ Scope {
     if (!queue.length) { current = null; return }
     current = queue[0]
     queue = queue.slice(1)
-    if (sound && current.type !== "platinum")
-      chime.play(current.rare ? "bell.oga" : "message-new-instant.oga")
+    // The platinum card asks for its chime when the trophy lands.
+    if (current.type !== "platinum") chime.play(current.tier || "bronze")
   }
 
   // The focused monitor when the card starts; it stays there while shown.
@@ -60,6 +64,7 @@ Scope {
       try { c = JSON.parse(text()) } catch (e) { return }
       if (["top-center", "top-left", "top-right"].indexOf(c.position) >= 0) root.position = c.position
       if (typeof c.sound === "boolean") root.sound = c.sound
+      if (["omatrophy", "classic"].indexOf(c.chimes) >= 0) root.chimes = c.chimes
       if (["omarchy", "vector", "painted"].indexOf(c.icons) >= 0) root.iconSet = c.icons
     }
   }
@@ -85,8 +90,12 @@ Scope {
 
   Process {
     id: chime
-    function play(file) {
-      command = ["pw-play", "--volume", "0.6", root.sounds + file]
+    // One sound per tier: assets/sounds/<tier>.wav, or the classic set.
+    function play(tier) {
+      if (!root.sound) return
+      var file = root.chimes === "classic" ? root.sounds + (root.classic[tier] || root.classic.bronze)
+                 : decodeURIComponent(String(Qt.resolvedUrl("assets/sounds/" + tier + ".wav")).replace(/^file:\/\//, ""))
+      command = ["pw-play", "--volume", "0.6", file]
       running = true
     }
   }
@@ -135,7 +144,7 @@ Scope {
           item.edge = root.position
           item.iconSet = root.iconSet
           item.finished.connect(root.next)
-          if (item.chime) item.chime.connect(() => { if (root.sound) chime.play("complete.oga") })
+          if (item.chime) item.chime.connect(() => chime.play("platinum"))
           item.event = root.current
         }
       }

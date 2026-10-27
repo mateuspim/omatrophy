@@ -6,7 +6,7 @@ Usage:
   omatrophy.py test [kind]            queue a fake event for a running watcher: bronze, silver, gold, platinum
   omatrophy.py status                 progress of every game with achievements, as JSON
   omatrophy.py set position <where>   top-center, top-left or top-right (applies live)
-  omatrophy.py set sound on|off
+  omatrophy.py set sound on|off|omatrophy|classic
   omatrophy.py set icons omarchy|vector|painted
 
 Each store (stores/) reads its launcher's own files; this file diffs them and
@@ -176,19 +176,26 @@ def status():
     print(json.dumps(sorted(out, key=lambda g: -g['unlocked'] / g['total'])))
 
 
-SETTINGS = {'position': ('top-center', 'top-left', 'top-right'), 'sound': ('on', 'off'),
+SETTINGS = {'position': ('top-center', 'top-left', 'top-right'),
+            'sound': ('on', 'off', 'omatrophy', 'classic'),
             'icons': ('omarchy', 'vector', 'painted')}
 
 
 def set_option(key, value):
-    """Write one setting to ~/.config/omatrophy/config.json; the shell picks it up live."""
+    """Write one setting to ~/.config/omatrophy/config.json; the shell picks it up live.
+    `sound` takes on/off, or a chime set, which also turns sound on."""
     if value not in SETTINGS.get(key, ()):
         raise SystemExit(f'usage: omatrophy.py set position {"|".join(SETTINGS["position"])}\n'
-                         f'       omatrophy.py set sound on|off\n'
-                         f'       omatrophy.py set icons omarchy|vector|painted')
+                         f'       omatrophy.py set sound {"|".join(SETTINGS["sound"])}\n'
+                         f'       omatrophy.py set icons {"|".join(SETTINGS["icons"])}')
     path = os.path.expanduser('~/.config/omatrophy/config.json')
     cfg = read_json(path, {})
-    cfg[key] = value == 'on' if key == 'sound' else value
+    if key == 'sound':
+        cfg['sound'] = value != 'off'
+        if value not in ('on', 'off'):
+            cfg['chimes'] = value
+    else:
+        cfg[key] = value
     write_json(path, cfg, indent=2)
     print(f'{key} = {value}')
 

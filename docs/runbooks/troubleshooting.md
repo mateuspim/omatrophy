@@ -30,8 +30,9 @@ compositor's layers can hide it (unverified for specific games).
 
 ## No sound
 
-`pw-play` (PipeWire) must be installed, the freedesktop sound theme present
-(`/usr/share/sounds/freedesktop/stereo/`), and sound on in the panel.
+`pw-play` (PipeWire) must be installed and sound on in the panel. The
+classic set also needs the freedesktop sound theme
+(`/usr/share/sounds/freedesktop/stereo/`).
 
 ## Rarity is missing (every trophy is bronze)
 

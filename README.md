@@ -29,7 +29,9 @@ and preview every tier.
 - Three trophy styles: Omarchy (a pixel grid with an inlay in your theme
   accent), Faceted and Painted.
 - Theme-native: cards draw from your Omarchy theme colours.
-- Top centre, top left or top right; a chime you can turn off.
+- A chime per tier, from a short tick for bronze to a ringing bloom for
+  platinum, made for OmaTrophy; or the classic desktop sounds, or silence.
+- Top centre, top left or top right.
 - Built for more stores than Steam: each one is a small module
   ([adding a store](docs/guide/stores.md)).
 
@@ -64,7 +66,7 @@ sound. Each choice applies to the next toast. From a terminal:
 
 ```bash
 omatrophy.py set position top-right     # top-center, top-left, top-right
-omatrophy.py set sound off
+omatrophy.py set sound off              # on, off, omatrophy, classic
 omatrophy.py set icons vector           # omarchy, vector, painted
 omatrophy.py test platinum              # bronze, silver, gold, platinum
 omatrophy.py status                     # progress of every game
