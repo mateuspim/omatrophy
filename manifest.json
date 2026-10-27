@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "pym.omatrophy",
+  "name": "OmaTrophy",
+  "version": "0.1.0",
+  "author": "Mateus Pim",
+  "license": "MIT",
+  "description": "Steam achievement toasts over your games, with a platinum moment at 100%.",
+  "kinds": [
+    "service",
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "service": "Service.qml",
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "OmaTrophy",
+    "description": "Trophy style, previews and toast settings",
+    "category": "Gaming",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "aliases": [
+      "steam",
+      "achievements",
+      "trophy"
+    ]
+  }
+}

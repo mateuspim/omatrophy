@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" version="1.2" baseProfile="tiny" width="128" height="128" viewBox="0 0 128 128">
+  <!-- OmaTrophy / bronze. Generated from shared hand-authored paths. -->
+  <defs>
+    <linearGradient id="metal" gradientUnits="userSpaceOnUse" x1="28" y1="28" x2="100" y2="45"><stop offset="0" stop-color="#79452b"/><stop offset="0.17" stop-color="#e6ac77"/><stop offset="0.29" stop-color="#ffe0af"/><stop offset="0.43" stop-color="#e6ac77"/><stop offset="0.7" stop-color="#b67448"/><stop offset="0.91" stop-color="#79452b"/><stop offset="1" stop-color="#492a1c"/></linearGradient>
+    <linearGradient id="handles" gradientUnits="userSpaceOnUse" x1="10" y1="26" x2="118" y2="62"><stop offset="0" stop-color="#79452b"/><stop offset="0.1" stop-color="#e6ac77"/><stop offset="0.22" stop-color="#b67448"/><stop offset="0.45" stop-color="#492a1c"/><stop offset="0.68" stop-color="#79452b"/><stop offset="0.89" stop-color="#cb8e63"/><stop offset="1" stop-color="#492a1c"/></linearGradient>
+    <linearGradient id="edge" gradientUnits="userSpaceOnUse" x1="20" y1="10" x2="105" y2="110"><stop offset="0" stop-color="#ffe0af"/><stop offset="0.4" stop-color="#e6ac77"/><stop offset="1" stop-color="#b67448"/></linearGradient>
+    <linearGradient id="shadow" gradientUnits="userSpaceOnUse" x1="30" y1="20" x2="98" y2="30"><stop offset="0" stop-color="#b67448"/><stop offset="0.48" stop-color="#79452b"/><stop offset="1" stop-color="#492a1c"/></linearGradient>
+    <linearGradient id="leftFacet" gradientUnits="userSpaceOnUse" x1="33" y1="28" x2="59" y2="77"><stop offset="0" stop-color="#ffe0af"/><stop offset="0.38" stop-color="#e6ac77"/><stop offset="1" stop-color="#b67448"/></linearGradient>
+    <linearGradient id="rightFacet" gradientUnits="userSpaceOnUse" x1="84" y1="24" x2="91" y2="74"><stop offset="0" stop-color="#b67448"/><stop offset="0.45" stop-color="#79452b"/><stop offset="1" stop-color="#492a1c"/></linearGradient>
+    <linearGradient id="bevel" gradientUnits="userSpaceOnUse" x1="32" y1="0" x2="97" y2="13"><stop offset="0" stop-color="#e6ac77"/><stop offset="0.27" stop-color="#ffe0af"/><stop offset="0.6" stop-color="#cb8e63"/><stop offset="1" stop-color="#79452b"/></linearGradient>
+    <linearGradient id="recessRim" gradientUnits="userSpaceOnUse" x1="58" y1="40" x2="69" y2="61"><stop offset="0" stop-color="#79452b"/><stop offset="0.45" stop-color="#b67448"/><stop offset="0.75" stop-color="#e6ac77"/><stop offset="1" stop-color="#ffe0af"/></linearGradient>
+    <linearGradient id="plate" gradientUnits="userSpaceOnUse" x1="55" y1="40" x2="73" y2="60"><stop offset="0" stop-color="#b67448"/><stop offset="0.47" stop-color="#e6ac77"/><stop offset="1" stop-color="#cb8e63"/></linearGradient>
+  </defs>
+
+  <!-- Open angular handles, behind the bowl. -->
+  <path fill="url(#handles)" fill-rule="evenodd" d="M33 25H20L10 35V49L20 64L42 72L44 63L27 56L19 45V38L23 34H34Z M95 25H108L118 35V49L108 64L86 72L84 63L101 56L109 45V38L105 34H94Z"/>
+  <path fill="url(#edge)" d="M20 25H33V27H21L12 36V48L22 62L40 69L42 72L20 64L10 49V35Z M95 25H108L118 35L115 35L107 28H95Z"/>
+  <path fill="url(#shadow)" d="M94 34H105L109 38V45L101 56L86 62L87 65L103 58L112 46V37L106 31H95Z"/>
+  <!-- Short flared stem and two solid, chamfered base steps. -->
+  <path fill="url(#metal)" d="M58 76H70L72 90L79 99H49L56 90Z"/>
+  <path fill="url(#edge)" d="M58 78H62L61 90L56 96H51L56 90Z"/>
+  <path fill="url(#bevel)" d="M46 98H82L88 107H40Z"/>
+  <path fill="url(#metal)" d="M40 107H88V111H40Z"/>
+  <path fill="url(#bevel)" d="M35 108H93L100 114H28Z"/>
+  <path fill="url(#metal)" d="M28 114H100V116L98 118H30L28 116Z"/>
+  <path fill="url(#edge)" d="M35 108H93L95 110H33Z M29 114H99V115H29Z"/>
+  <!-- Broad face with two restrained side facets. -->
+  <path fill="url(#metal)" d="M31 21H97L93 53Q92 63 83 70L71 79Q64 84 57 79L45 70Q36 63 35 53Z"/>
+  <path fill="url(#leftFacet)" d="M31 21H41L44 51Q45 62 51 69L60 81L57 79L45 70Q36 63 35 53Z"/>
+  <path fill="url(#rightFacet)" d="M87 21H97L93 53Q92 63 83 70L71 79L68 81L77 69Q83 62 84 51Z"/>
+  <path fill="url(#edge)" d="M32 23H34L38 53Q39 62 47 69L57 77L45 70Q36 63 35 53Z"/>
+  <!-- Recessed blank shield: 19 / 66 = 29% of the bowl width.
+       Safe runtime engraving area: x=58..70, y=43..55. -->
+  <path fill="url(#recessRim)" d="M54.5 40Q64 38 73.5 40V50.5Q73.5 57 64 61Q54.5 57 54.5 50.5Z"/>
+  <path fill="url(#plate)" d="M55.5 41Q64 39.3 72.5 41V50.5Q72.5 56.3 64 59.8Q55.5 56.3 55.5 50.5Z"/>
+  <!-- Low, crisp lip and a narrow underside give the cup real thickness. -->
+  <path fill="url(#shadow)" d="M31 21H97L96.5 25H31.5Z"/>
+  <path fill="url(#metal)" d="M28 10H100L103 13V20L100 23H28L25 20V13Z"/>
+  <path fill="url(#bevel)" d="M28 10H100L103 13H25Z"/>
+  <path fill="url(#edge)" d="M28 10H100L101 11H27Z"/>
+  <path fill="url(#shadow)" d="M25 20H103L100 23H28Z"/>
+
+</svg>

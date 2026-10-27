@@ -1,0 +1,443 @@
+import QtQuick
+import QtQuick.Effects
+import QtQuick.Particles
+import QtQuick.Shapes
+import qs.Commons as Commons
+
+// One unlock: slides in from its edge (down from the top in the center, in
+// from the side at a corner), pops the achievement icon, flips a trophy in
+// the unlock's metal onto its corner and runs a shine across it, rolls the
+// count to the new number, holds, slides back out, then reports finished.
+//
+// The metal comes from rarity (omatrophy.py `tier`): bronze, silver, or gold
+// for 10% of players or fewer. Gold also gets the accent border, a glitter
+// burst off the trophy and a sweep of light across the card.
+//
+// Loaded by a fresh URL per toast (see Service.qml), so it uses no other QML
+// file from this folder; the Trophy component is repeated from
+// PlatinumCard.qml for that reason.
+Item {
+  id: root
+  property var event: null
+  property string edge: "top-center"
+  // Which trophy art: assets/omarchy (flat pixel grid, theme-tinted inlay),
+  // assets/vector (SVG) or assets/painted (PNG).
+  property string iconSet: "omarchy"
+  signal finished()
+
+  readonly property int pad: 40
+  readonly property int cardWidth: 460
+  readonly property string tier: event && event.tier ? event.tier : "bronze"
+  readonly property bool gold: tier === "gold"
+  readonly property color tierColor: ({ bronze: "#e9a46b", silver: "#dfe6ee", gold: "#f3cf4a" })[tier] || "#e9a46b"
+  readonly property color fg: Commons.Color.notifications.text
+  readonly property color accent: Commons.Color.accent
+  readonly property real progress: event && event.total ? event.unlocked / event.total : 0
+  readonly property real before: event && event.total ? Math.max(0, event.unlocked - 1) / event.total : 0
+  // Off-screen start: above the window, or past the screen edge it hugs.
+  readonly property real outX: edge === "top-left" ? -(cardWidth + pad + 10) : (edge === "top-right" ? cardWidth + pad + 10 : 0)
+  readonly property real outY: edge === "top-center" ? -(card.height + pad + 10) : 0
+
+  width: cardWidth + pad * 2
+  height: card.height + pad * 2
+  clip: true
+
+  onEventChanged: if (event) show.restart()
+
+  // The Omarchy logo's corners: cut in two grid steps, never rounded. With
+  // `broken`, an open outline with the two breaks of the Omarchy mark (left
+  // middle, bottom right), for the border; otherwise a closed shape to fill.
+  function stepped(w, h, s, inset, broken) {
+    var x0 = inset, y0 = inset, x1 = w - inset, y1 = h - inset, m = (y0 + y1) / 2, g = 20
+    var pts = [[x0, m - g / 2], [x0, y0 + 2 * s], [x0 + s, y0 + 2 * s], [x0 + s, y0 + s], [x0 + 2 * s, y0 + s], [x0 + 2 * s, y0],
+               [x1 - 2 * s, y0], [x1 - 2 * s, y0 + s], [x1 - s, y0 + s], [x1 - s, y0 + 2 * s], [x1, y0 + 2 * s],
+               [x1, y1 - 2 * s], [x1 - s, y1 - 2 * s], [x1 - s, y1 - s], [x1 - 2 * s, y1 - s], [x1 - 2 * s, y1]]
+    var path = "M" + pts.map(function(p) { return p[0] + " " + p[1] }).join(" L")
+    // The bottom-right break sits a little in from the corner.
+    if (broken) path += " L" + (x1 - 2 * s - 22) + " " + y1 + " M" + (x1 - 2 * s - 46) + " " + y1
+    path += " L" + (x0 + 2 * s) + " " + y1 + " L" + (x0 + 2 * s) + " " + (y1 - s) + " L" + (x0 + s) + " " + (y1 - s)
+          + " L" + (x0 + s) + " " + (y1 - 2 * s) + " L" + x0 + " " + (y1 - 2 * s) + " L" + x0 + " " + (m + g / 2)
+    return broken ? path : path + " Z"
+  }
+
+  component Trophy: Item {
+    id: trophy
+    property string metal: "bronze"
+    property string set: "vector"
+    property color accent: "white"
+    property string engraving: ""
+    // Where the shine band sits, in trophy widths: below 0 and above 1 are off the metal.
+    property real shine: -1
+    property real spin: 0
+    transform: Rotation { origin.x: trophy.width / 2; origin.y: trophy.height / 2; axis { x: 0; y: 1; z: 0 } angle: trophy.spin }
+
+    Image {
+      id: cup
+      anchors.fill: parent
+      source: Qt.resolvedUrl("assets/" + trophy.set + "/trophy-" + trophy.metal + (trophy.set === "painted" ? ".png" : ".svg"))
+      // The omarchy set is pixel art: keep its edges crisp.
+      smooth: trophy.set !== "omarchy"
+      sourceSize: Qt.size(256, 256)
+    }
+    // The omarchy set's inlay is a white layer of its own, painted here in
+    // the theme accent so the trophy follows the theme.
+    Item {
+      anchors.fill: parent
+      visible: trophy.set === "omarchy"
+      Rectangle { id: inlayPaint; anchors.fill: parent; color: trophy.accent; visible: false; layer.enabled: true }
+      Image {
+        id: inlay
+        anchors.fill: parent
+        source: trophy.set === "omarchy" ? Qt.resolvedUrl("assets/omarchy/trophy-accent.svg") : ""
+        sourceSize: Qt.size(256, 256)
+        visible: false
+      }
+      MultiEffect { anchors.fill: parent; source: inlayPaint; maskEnabled: true; maskSource: inlay }
+    }
+    // Engraved into the plate (omarchy set: centred at 64,52 of 128).
+    Text {
+      visible: trophy.engraving !== "" && trophy.set === "omarchy"
+      x: trophy.width * 0.5 - width / 2
+      y: trophy.height * (52 / 128) - height / 2
+      text: trophy.engraving
+      color: trophy.accent
+      font.family: Commons.Style.font.family
+      font.pixelSize: Math.round(trophy.width * 0.12)
+      font.bold: true
+    }
+    // The glint: a soft diagonal band on the painted metals, a hard
+    // vertical scan line on the flat omarchy set.
+    Item {
+      id: band
+      anchors.fill: parent
+      visible: false
+      layer.enabled: true
+      readonly property bool flat: trophy.set === "omarchy"
+      Rectangle {
+        x: trophy.shine * trophy.width - width / 2
+        y: -trophy.height * 0.3
+        width: trophy.width * (band.flat ? 0.12 : 0.34)
+        height: trophy.height * 1.6
+        rotation: band.flat ? 0 : 20
+        gradient: Gradient {
+          orientation: Gradient.Horizontal
+          GradientStop { position: 0; color: band.flat ? "#80ffffff" : "#00ffffff" }
+          GradientStop { position: 0.5; color: band.flat ? "#80ffffff" : "#d8ffffff" }
+          GradientStop { position: 1; color: band.flat ? "#80ffffff" : "#00ffffff" }
+        }
+      }
+    }
+    // The shine only lands on metal: the band, masked by the cup's own shape.
+    MultiEffect {
+      anchors.fill: parent
+      source: band
+      maskEnabled: true
+      maskSource: cup
+    }
+  }
+
+  SequentialAnimation {
+    id: show
+    ScriptAction { script: {
+      card.slideX = root.outX; card.slideY = root.outY; card.opacity = 0
+      iconBox.scale = 0.55; medal.scale = 0; medal.spin = 540; medal.shine = -1
+      bar.shown = root.before; roll.offset = 0; sweep.x = -sweep.width
+    } }
+    ParallelAnimation {
+      NumberAnimation { target: card; property: "slideX"; to: 0; duration: 420; easing.type: Easing.OutCubic }
+      NumberAnimation { target: card; property: "slideY"; to: 0; duration: 420; easing.type: Easing.OutCubic }
+      NumberAnimation { target: card; property: "opacity"; to: 1; duration: 260 }
+      SequentialAnimation {
+        PauseAnimation { duration: 140 }
+        NumberAnimation { target: iconBox; property: "scale"; to: 1; duration: 520; easing.type: Easing.OutBack; easing.overshoot: 2.4 }
+      }
+    }
+    // The trophy flips onto the icon's corner.
+    ParallelAnimation {
+      NumberAnimation { target: medal; property: "spin"; to: 0; duration: 700; easing.type: Easing.OutCubic }
+      SequentialAnimation {
+        NumberAnimation { target: medal; property: "scale"; to: 1.25; duration: 420; easing.type: Easing.OutCubic }
+        NumberAnimation { target: medal; property: "scale"; to: 1; duration: 260; easing.type: Easing.InOutQuad }
+      }
+      SequentialAnimation {
+        PauseAnimation { duration: 250 }
+        NumberAnimation { target: roll; property: "offset"; to: 1; duration: 380; easing.type: Easing.OutBack }
+      }
+      NumberAnimation { target: bar; property: "shown"; to: root.progress; duration: 900; easing.type: Easing.InOutCubic }
+    }
+    ScriptAction { script: if (root.gold) glitter.burst(40) }
+    ParallelAnimation {
+      NumberAnimation { target: medal; property: "shine"; from: -0.4; to: 1.4; duration: 650; easing.type: Easing.InOutQuad }
+      NumberAnimation { target: sweep; property: "x"; to: root.cardWidth; duration: root.gold ? 1200 : 0; easing.type: Easing.InOutQuad }
+    }
+    PauseAnimation { duration: 4600 }
+    ParallelAnimation {
+      NumberAnimation { target: card; property: "slideX"; to: root.outX; duration: 340; easing.type: Easing.InCubic }
+      NumberAnimation { target: card; property: "slideY"; to: root.outY; duration: 340; easing.type: Easing.InCubic }
+      NumberAnimation { target: card; property: "opacity"; to: 0; duration: 340 }
+    }
+    ScriptAction { script: root.finished() }
+  }
+
+  Item {
+    id: card
+    property real slideX: 0
+    property real slideY: 0
+    x: root.pad + slideX
+    y: root.pad + slideY
+    width: root.cardWidth
+    height: row.height + 32
+
+    // A real soft shadow, cast by the card's own stepped shape.
+    Shape {
+      anchors.fill: parent
+      layer.enabled: true
+      layer.effect: MultiEffect {
+        shadowEnabled: true
+        shadowColor: "#000000"
+        shadowOpacity: 0.6
+        shadowBlur: 1.0
+        blurMax: 32
+        shadowVerticalOffset: 6
+      }
+      ShapePath {
+        fillColor: Commons.Color.notifications.background
+        strokeColor: "transparent"
+        PathSvg { path: root.stepped(card.width, card.height, 6, 0, false) }
+      }
+    }
+
+    // The same shape, white, as the mask that keeps art and light inside it.
+    Shape {
+      id: cardMask
+      anchors.fill: parent
+      visible: false
+      layer.enabled: true
+      ShapePath {
+        fillColor: "white"
+        strokeColor: "transparent"
+        PathSvg { path: root.stepped(card.width, card.height, 6, 0, false) }
+      }
+    }
+
+    Item {
+      id: surface
+      anchors.fill: parent
+      layer.enabled: true
+      layer.effect: MultiEffect {
+        maskEnabled: true
+        maskSource: cardMask
+      }
+
+      // The gold sweep: a soft band of light crossing the card once.
+      Rectangle {
+        id: sweep
+        width: 150
+        height: parent.height
+        x: -width
+        visible: root.gold
+        gradient: Gradient {
+          orientation: Gradient.Horizontal
+          GradientStop { position: 0; color: "transparent" }
+          GradientStop { position: 0.5; color: Qt.alpha(root.tierColor, 0.16) }
+          GradientStop { position: 1; color: "transparent" }
+        }
+      }
+    }
+
+    // The border, broken like the Omarchy mark.
+    Shape {
+      anchors.fill: parent
+      ShapePath {
+        fillColor: "transparent"
+        strokeColor: root.gold ? root.accent : Qt.alpha(root.accent, 0.7)
+        strokeWidth: root.gold ? 2 : 1.5
+        joinStyle: ShapePath.MiterJoin
+        capStyle: ShapePath.FlatCap
+        PathSvg { path: root.stepped(card.width, card.height, 6, root.gold ? 2 : 1.5 / 2, true) }
+      }
+    }
+
+    Row {
+      id: row
+      x: 16
+      y: 16
+      spacing: 18
+
+      Item {
+        width: 68
+        height: 68
+
+        Rectangle {
+          id: iconBox
+          anchors.fill: parent
+          color: Qt.alpha(root.fg, 0.06)
+          border.width: 1
+          border.color: Qt.alpha(root.tierColor, 0.55)
+          radius: Commons.Style.cornerRadius
+          clip: true
+
+          Image {
+            id: icon
+            anchors.fill: parent
+            anchors.margins: 1
+            source: root.event ? root.event.icon : ""
+            fillMode: Image.PreserveAspectCrop
+            asynchronous: true
+          }
+        }
+
+        // The trophy, on a dark disc at the icon's corner.
+        Item {
+          x: parent.width - 28
+          y: parent.height - 30
+          width: 40
+          height: 40
+
+          ParticleSystem {
+            anchors.centerIn: parent
+            width: 2
+            height: 2
+            ImageParticle {
+              source: "qrc:///particleresources/star.png"
+              color: root.tierColor
+              colorVariation: 0.15
+              rotationVariation: 180
+              rotationVelocityVariation: 220
+              entryEffect: ImageParticle.Scale
+            }
+            Emitter {
+              id: glitter
+              x: -8; y: -8; width: 16; height: 16
+              enabled: false
+              lifeSpan: 1000; lifeSpanVariation: 300
+              size: 13; sizeVariation: 6; endSize: 1
+              velocity: AngleDirection { angleVariation: 180; magnitude: 110; magnitudeVariation: 60 }
+              acceleration: PointDirection { y: 90 }
+            }
+          }
+
+          // Square on the omarchy grid, round for the other sets.
+          Rectangle {
+            anchors.fill: parent
+            radius: root.iconSet === "omarchy" ? 0 : width / 2
+            scale: medal.scale
+            color: Commons.Color.notifications.background
+            border.width: 1.5
+            border.color: Qt.alpha(root.tierColor, 0.8)
+          }
+          Trophy {
+            id: medal
+            anchors.centerIn: parent
+            width: 30
+            height: 30
+            metal: root.tier
+            set: root.iconSet
+            accent: root.accent
+          }
+        }
+      }
+
+      Column {
+        width: root.cardWidth - 68 - 16 * 2 - 18
+        spacing: 3
+
+        Item {
+          width: parent.width
+          height: caption.height
+          Text {
+            id: caption
+            text: root.tier.toUpperCase() + " TROPHY"
+            color: root.tierColor
+            font.family: Commons.Style.font.family
+            font.pixelSize: Commons.Style.font.caption
+            font.bold: true
+            font.letterSpacing: 2
+          }
+          Text {
+            anchors.right: parent.right
+            text: root.event && root.event.percent !== null && root.event.percent !== undefined
+                  ? root.event.percent.toFixed(1) + "% of players" : ""
+            color: Qt.alpha(root.fg, 0.55)
+            font.family: Commons.Style.font.family
+            font.pixelSize: Commons.Style.font.caption
+          }
+        }
+        Text {
+          width: parent.width
+          text: root.event ? root.event.name : ""
+          color: root.fg
+          font.family: Commons.Style.font.family
+          font.pixelSize: Commons.Style.font.heading
+          font.bold: true
+          elide: Text.ElideRight
+        }
+        Text {
+          width: parent.width
+          text: root.event ? root.event.desc : ""
+          color: Qt.alpha(root.fg, 0.7)
+          font.family: Commons.Style.font.family
+          font.pixelSize: Commons.Style.font.bodySmall
+          wrapMode: Text.WordWrap
+          maximumLineCount: 2
+          elide: Text.ElideRight
+        }
+        Item { width: 1; height: 4 }
+        Item {
+          width: parent.width
+          height: gameName.height
+          Text {
+            id: gameName
+            width: parent.width - roll.width - 12
+            text: root.event ? root.event.game : ""
+            color: Qt.alpha(root.fg, 0.5)
+            font.family: Commons.Style.font.family
+            font.pixelSize: Commons.Style.font.caption
+            elide: Text.ElideRight
+          }
+          // The count rolls up from the number before this unlock.
+          Item {
+            id: roll
+            property real offset: 0
+            anchors.right: parent.right
+            width: newCount.width
+            height: newCount.height
+            clip: true
+            Text {
+              y: -roll.offset * parent.height
+              anchors.right: parent.right
+              text: root.event ? Math.max(0, root.event.unlocked - 1) + " / " + root.event.total : ""
+              color: Qt.alpha(root.fg, 0.5)
+              font.family: Commons.Style.font.family
+              font.pixelSize: Commons.Style.font.caption
+            }
+            Text {
+              id: newCount
+              y: (1 - roll.offset) * parent.height
+              anchors.right: parent.right
+              text: root.event ? root.event.unlocked + " / " + root.event.total : ""
+              color: root.fg
+              font.family: Commons.Style.font.family
+              font.pixelSize: Commons.Style.font.caption
+              font.bold: true
+            }
+          }
+        }
+        Item { width: 1; height: 4 }
+        // Progress toward 100%, filling in from the count before this unlock.
+        Rectangle {
+          width: parent.width
+          height: 6
+          color: Qt.alpha(root.fg, 0.1)
+          Rectangle {
+            id: bar
+            property real shown: 0
+            width: parent.width * shown
+            height: parent.height
+            color: root.accent
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,10 @@
+__pycache__/
+
+# Local-only session notes
+HANDOFF.md
+
+# Design-agent run output: logs carry local paths, in-game captures carry a
+# real desktop and game art
+design/**/codex.log
+design/**/last-message.md
+design/ref/*-ingame.png
