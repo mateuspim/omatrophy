@@ -14,6 +14,8 @@ Usage:
   omatrophy.py set sound on|off|omatrophy|classic
   omatrophy.py set icons omarchy|vector|painted
   omatrophy.py set tracker-sort recent|rarity|name|game
+  omatrophy.py set community on|off   fill in games this machine never ran from your public Steam profile
+  omatrophy.py sync                   run that backfill now, with progress
   omatrophy.py hide <store> <game>    keep a game you won't finish out of "closest to platinum"
   omatrophy.py unhide <store> <game>  bring it back
 
@@ -83,7 +85,10 @@ def check_game(store, game, seen):
     new = now - seen.get(key, set())
     seen[key] = now
     cutoff = time.time() - FRESH_SECONDS
-    fresh = [a for a in achs if a['api'] in new and (not a['time'] or a['time'] >= cutoff)]
+    # A remote unlock came through an online backfill: it happened on
+    # another machine, so it isn't news here (ADR 11).
+    fresh = [a for a in achs if a['api'] in new and not a.get('remote')
+             and (not a['time'] or a['time'] >= cutoff)]
     for a in sorted(fresh, key=lambda a: a['time']):
         emit(unlock_event(store, game, a, achs))
     if fresh and achs and len(now) == len(achs):
@@ -127,6 +132,30 @@ def warm_names(pairs, threads=8):
         list(pool.map(lookup, pairs))
 
 
+def background(found, pairs):
+    """The watcher's slow chores, after `ready`: warm the name cache, then
+    let each store backfill games it has no local data for."""
+    warm_names(pairs)
+    for s in found:
+        try:
+            s.backfill()
+        except Exception as e:
+            print(f'omatrophy: {s.name} backfill failed: {e}', file=sys.stderr, flush=True)
+
+
+def sync():
+    """Run every store's backfill now, printing progress."""
+    found = found_stores()
+    if not read_json(config_path(), {}).get('community'):
+        raise SystemExit('The community backfill is off. Turn it on with: omatrophy.py set community on\n'
+                         '(it needs a public Steam profile with public game details; see ADR 11)')
+    for s in found:
+        result = s.backfill(say=lambda line, s=s: print(f'{s.id}: {line}', flush=True))
+        if result:
+            fetched, failed = result
+            print(f'{s.id}: fetched {fetched}' + (' (stopped early; run again later)' if failed else ''))
+
+
 def watch(interval=1.0):
     found = found_stores()
     tokens = {s.id: s.games() for s in found}
@@ -135,7 +164,7 @@ def watch(interval=1.0):
     emit({'type': 'ready', 'stores': [s.id for s in found], 'games': len(seen)})
     # In the background, after `ready`: name lookups go to the network and
     # must never hold up an unlock.
-    threading.Thread(target=warm_names, args=([(s, g) for s in found for g in tokens[s.id]],),
+    threading.Thread(target=background, args=(found, [(s, g) for s in found for g in tokens[s.id]]),
                      daemon=True).start()
     while True:
         time.sleep(interval)
@@ -385,7 +414,8 @@ def config_path():
 SETTINGS = {'position': ('top-center', 'top-left', 'top-right'),
             'sound': ('on', 'off', 'omatrophy', 'classic'),
             'icons': ('omarchy', 'vector', 'painted'),
-            'tracker-sort': ('recent', 'rarity', 'name', 'game')}
+            'tracker-sort': ('recent', 'rarity', 'name', 'game'),
+            'community': ('on', 'off')}
 
 
 def set_option(key, value):
@@ -395,13 +425,16 @@ def set_option(key, value):
         raise SystemExit(f'usage: omatrophy.py set position {"|".join(SETTINGS["position"])}\n'
                          f'       omatrophy.py set sound {"|".join(SETTINGS["sound"])}\n'
                          f'       omatrophy.py set icons {"|".join(SETTINGS["icons"])}\n'
-                         f'       omatrophy.py set tracker-sort {"|".join(SETTINGS["tracker-sort"])}')
+                         f'       omatrophy.py set tracker-sort {"|".join(SETTINGS["tracker-sort"])}\n'
+                         f'       omatrophy.py set community on|off')
     path = config_path()
     cfg = read_json(path, {})
     if key == 'sound':
         cfg['sound'] = value != 'off'
         if value not in ('on', 'off'):
             cfg['chimes'] = value
+    elif key == 'community':
+        cfg['community'] = value == 'on'
     else:
         cfg[key] = value
     write_json(path, cfg, indent=2)
@@ -457,6 +490,8 @@ def main(argv):
         demo(argv[2:] or ['unlock', 'rare', 'platinum'])
     elif cmd == 'set' and len(argv) == 4:
         set_option(argv[2], argv[3])
+    elif cmd == 'sync':
+        sync()
     elif cmd in ('hide', 'unhide') and len(argv) == 4:
         set_hidden(argv[2], argv[3], cmd == 'hide')
     else:

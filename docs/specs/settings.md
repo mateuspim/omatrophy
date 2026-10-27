@@ -14,6 +14,7 @@ bar panel).
 | `chimes` | `"omatrophy"` (`assets/sounds/<tier>.wav`), `"classic"` (freedesktop sounds) | `"omatrophy"` |
 | `icons` | `"omarchy"`, `"vector"`, `"painted"` | `"omarchy"` |
 | `tracker-sort` | `"recent"`, `"rarity"`, `"name"`, `"game"` (the store's own order) | `"recent"` |
+| `community` | `true`, `false`: fill in games that never ran here from your public Steam profile (ADR 11) | `false` |
 | `hidden` | Games left out of "closest to platinum", as `"store:game"` (`"steam:20920"`), sorted. Written by `omatrophy.py hide`/`unhide` and the Games tab. | `[]` |
 
 ```json
@@ -28,7 +29,7 @@ bar panel).
 | `~/.config/omatrophy/config.json` | The settings above. |
 | `~/.local/state/omatrophy/names.json` | Steam game names, so offline toasts keep them. |
 | `~/.local/state/omatrophy/inbox.jsonl` | Events queued by `omatrophy.py test`. |
-| `~/.cache/omatrophy/` | Achievement icons (`icons/<store>/<game>/`), art, and global rarity (`rarity/<game>.json`, refreshed daily). Safe to delete. |
+| `~/.cache/omatrophy/` | Achievement icons (`icons/<store>/<game>/`), art, global rarity (`rarity/<game>.json`, refreshed daily) and, with `community` on, profile pages (`community/games/<app>.json`, refetched weekly or after you play; `community/none.json` for games without achievements). Safe to delete. |
 
 ## `manifest.json`
 

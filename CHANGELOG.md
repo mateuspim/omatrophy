@@ -35,6 +35,9 @@
 - The platinum card in the toast's language: a metal rail, the trophy on a
   platinum tile, a spaced label, then the count and a filling bar.
 - Global rarity is cached a day per game and kept when offline.
+- An opt-in backfill (`set community on`, `sync`) fills in games that
+  never ran on this machine from the public Steam profile's achievement
+  pages, cached and refetched weekly; their unlocks never toast (ADR 11).
 - The watcher fills the game-name cache in the background after it starts,
   so the Games tab's first open doesn't wait on the network.
 - `omatrophy.py` CLI: `watch`, `test`, `status`, `cabinet`, `now`, `games`,

@@ -11,7 +11,7 @@ from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 import omatrophy  # noqa: E402
-from stores import steam  # noqa: E402
+from stores import steam, steam_community  # noqa: E402
 
 APP = '123450'
 UID = '42'
@@ -480,6 +480,158 @@ class PanelJson(unittest.TestCase):
             with self.assertRaises(SystemExit) as e:
                 omatrophy.game_detail(steam.Steam(), '999')
         self.assertIn('launch it once', str(e.exception))
+
+
+def community_page(app, unlocked, name='Remote Game', extra=()):
+    """A profile achievement page as Steam serves it: the data sits in a
+    JSON script whose renderContext.queryData is itself JSON (ADR 11)."""
+    schema = {'appid': int(app), 'groups': [{'id': 0, 'achievements': [
+        {'internal_key': 256, 'api_name': 'ACH_A', 'name': 'Alpha', 'description': 'Do alpha', 'hidden': False,
+         'archived': False, 'icon_achieved': 'https://x/a.jpg', 'icon_unachieved': 'https://x/a_g.jpg'},
+        {'internal_key': 257, 'api_name': 'ACH_B', 'name': 'Beta', 'description': 'Secret', 'hidden': True,
+         'archived': False, 'icon_achieved': 'https://x/b.jpg', 'icon_unachieved': 'https://x/b_g.jpg'},
+        {'internal_key': 258, 'api_name': 'ACH_OLD', 'name': 'Gone', 'archived': True}]}]}
+    user = {'appid': int(app), 'achievements': {str(k): {'internal_key': k, 'unlocked': True, 'unlock_time': t}
+                                                for k, t in unlocked.items()}}
+    queries = [{'queryKey': ['achievements', int(app), 'user_achievements', '1'], 'state': {'data': user}},
+               {'queryKey': ['achievements', int(app), 'schema'], 'state': {'data': schema}},
+               {'queryKey': ['StoreItem', f'app_{app}', 'default_info'], 'state': {'data': {'name': name}}},
+               {'queryKey': ['AOWarningCookie'], 'state': {'data': None}}] + list(extra)
+    ssr = json.dumps({'route': '/id/:vanityurl/achievements/:appid',
+                      'renderContext': {'queryData': json.dumps({'mutations': [], 'queries': queries})}})
+    return f'<html><script type="application/json" id="valve-ssr-data" nonce="n">{ssr}</script></html>'
+
+
+class CommunityPage(unittest.TestCase):
+    def test_reads_schema_unlocks_and_name(self):
+        page = steam_community.parse_page(community_page('55', {256: 1700000000}), '55')
+        self.assertEqual(page['name'], 'Remote Game')
+        a, b = page['achievements']
+        self.assertEqual((a['api'], a['name'], a['desc'], a['unlocked'], a['time']),
+                         ('ACH_A', 'Alpha', 'Do alpha', True, 1700000000))
+        self.assertEqual((a['icon'], a['icon_locked']), ('https://x/a.jpg', 'https://x/a_g.jpg'))
+        self.assertEqual((b['unlocked'], b['time'], b['hidden']), (False, 0, True))
+
+    def test_archived_achievements_are_left_out(self):
+        page = steam_community.parse_page(community_page('55', {}), '55')
+        self.assertNotIn('ACH_OLD', [a['api'] for a in page['achievements']])
+
+    def test_pages_without_achievement_data_read_as_none(self):
+        # A game without achievements redirects to the profile page.
+        self.assertIsNone(steam_community.parse_page('<html><body>profile</body></html>', '55'))
+        self.assertIsNone(steam_community.parse_page(
+            '<script id="valve-ssr-data">{"renderContext": {"queryData": "not json"}}</script>', '55'))
+        # Another game's data is not this game's.
+        self.assertIsNone(steam_community.parse_page(community_page('66', {}), '55'))
+
+    def test_steamid64_from_the_account_id(self):
+        self.assertEqual(steam_community.steamid64('12345678'), 76561197972611406)
+
+
+class CommunityBackfill(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        patch = mock.patch.object(steam_community, 'CACHE', tmp.name)
+        patch.start()
+        self.addCleanup(patch.stop)
+        self.asked = []
+
+    def fetch(self, pages):
+        def fetch_page(account, app):
+            self.asked.append(app)
+            if isinstance(pages.get(app), Exception):
+                raise pages[app]
+            return pages.get(app)
+        return fetch_page
+
+    def run_backfill(self, played, local=(), pages=None):
+        page = steam_community.parse_page(community_page('1', {256: 5}), '1')
+        pages = pages if pages is not None else {'1': page, '2': None}
+        return steam_community.backfill('42', played, set(local), fetch_page=self.fetch(pages), sleep=lambda s: None)
+
+    def test_fetches_played_games_without_local_stats_newest_first(self):
+        result = self.run_backfill([(30, '2'), (20, '1'), (10, '3')], local={'3'})
+        self.assertEqual(result, (2, False))
+        self.assertEqual(self.asked, ['2', '1'])
+        self.assertEqual(set(steam_community.cached_games()), {'1'})
+        self.assertEqual(steam_community.cached('1')['achievements'][0]['time'], 5)
+        self.assertIn('2', steam_community.none_index())
+
+    def test_fresh_pages_and_known_nones_are_not_fetched_again(self):
+        self.run_backfill([(30, '2'), (20, '1')])
+        self.asked.clear()
+        self.run_backfill([(30, '2'), (20, '1')])
+        self.assertEqual(self.asked, [])
+        # Played since the last fetch: fetch again.
+        self.run_backfill([(30, '2'), (time.time() + 60, '1')])
+        self.assertEqual(self.asked, ['1'])
+
+    def test_first_error_stops_the_run(self):
+        result = self.run_backfill([(30, '1'), (20, '2')], pages={'1': OSError('429'), '2': None})
+        self.assertEqual(result, (0, True))
+        self.assertEqual(self.asked, ['1'])
+
+
+class CommunityStore(unittest.TestCase):
+    """The Steam store with `community` on: cached pages fill in games that
+    never ran here, local data wins, and remote unlocks never toast."""
+
+    def write_page(self, app, unlocked):
+        page = steam_community.parse_page(community_page(app, unlocked), app)
+        steam_community.write_atomic(f'{steam_community.cache_dir()}/games/{app}.json', dict(page, time=1))
+
+    def lib(self, community):
+        lib = FakeLibrary()
+        lib.__enter__()
+        self.addCleanup(lib.__exit__)
+        with open(os.path.join(os.environ['HOME'], '.config/omatrophy/config.json'), 'w') as f:
+            json.dump({'community': community}, f)
+        patch = mock.patch.object(steam_community, 'CACHE', steam.CACHE)
+        patch.start()
+        self.addCleanup(patch.stop)
+        self.write_page('40', {256: 1700000000})
+        self.write_page('10', {})
+        return steam.Steam()
+
+    def test_cached_pages_add_games_with_remote_achievements(self):
+        store = self.lib(True)
+        self.assertEqual(set(store.games()), {'10', '20', '30', '40'})
+        achs = store.achievements('40')
+        self.assertEqual([a['unlocked'] for a in achs], [True, False])
+        self.assertTrue(all(a['remote'] for a in achs))
+        # Local stats win over a cached page.
+        self.assertEqual(store.achievements('10')[0]['name'], 'Done Game 0')
+
+    def test_off_means_local_only(self):
+        store = self.lib(False)
+        self.assertEqual(set(store.games()), {'10', '20', '30'})
+        self.assertEqual(store.achievements('40'), [])
+
+    def test_remote_unlocks_never_toast(self):
+        store = self.lib(True)
+        self.write_page('40', {256: int(time.time()), 257: int(time.time())})
+        out = io.StringIO()
+        with redirect_stdout(out):
+            omatrophy.check_game(store, '40', {})
+        self.assertEqual(out.getvalue(), '')
+
+    def test_page_names_fill_the_name_cache(self):
+        store = self.lib(True)
+        store.remember_names()
+        with open(steam.NAMES) as f:
+            self.assertEqual(json.load(f)['40'], 'Remote Game')
+
+    def test_set_community_writes_a_bool(self):
+        self.lib(False)
+        with redirect_stdout(io.StringIO()):
+            omatrophy.set_option('community', 'on')
+        self.assertIs(read_config()['community'], True)
+
+
+def read_config():
+    with open(os.path.join(os.environ['HOME'], '.config/omatrophy/config.json')) as f:
+        return json.load(f)
 
 
 class PickGame(unittest.TestCase):

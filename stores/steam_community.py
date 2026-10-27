@@ -1,0 +1,155 @@
+"""Steam's public Community profile, as a backfill for games this machine never ran.
+
+Steam keeps a game's stats file only once the game has run here (ADR 1), so
+a fresh install knows a handful of games. A public profile's achievement
+page has the rest without a key: it embeds its data as JSON in
+<script id="valve-ssr-data">, whose renderContext.queryData holds the
+react-query cache (schema, the user's unlocks, the store item). Only that
+JSON is read, never the markup (ADR 11). Opt-in with `set community on`.
+"""
+import json, os, re, time, urllib.request
+
+from .base import CACHE, read_json, write_json
+
+STEAMID64_BASE = 76561197960265728
+PAGE = 'https://steamcommunity.com/profiles/{id64}/stats/{app}/achievements/'
+SSR = re.compile(r'<script[^>]*id="valve-ssr-data"[^>]*>(.*?)</script>', re.S)
+# A page is refetched after a week (or when the game was played since);
+# "no achievements" holds for a month.
+FRESH_SECONDS = 7 * 86400
+NONE_SECONDS = 30 * 86400
+# Valve doesn't publish a rate; one page every 1.5 s keeps a first sync of
+# a few hundred games near ten minutes without hammering the site.
+PAUSE_SECONDS = 1.5
+
+
+def cache_dir():
+    return f'{CACHE}/community'
+
+
+def steamid64(account):
+    return STEAMID64_BASE + int(account)
+
+
+def queries(html):
+    """{queryKey as a tuple: data} from the page's embedded react-query cache, or None."""
+    m = SSR.search(html)
+    if not m:
+        return None
+    try:
+        q = json.loads(json.loads(m.group(1))['renderContext']['queryData'])
+        return {tuple(x['queryKey']): x['state'].get('data') for x in q['queries']}
+    except (ValueError, KeyError, TypeError):
+        return None
+
+
+def parse_page(html, app):
+    """{'name', 'achievements': [...]} for one game, in the shape the Steam
+    store answers, or None when the page has no achievement data (a game
+    without achievements redirects to the profile, which has none)."""
+    found = queries(html)
+    if not found:
+        return None
+    schema, user, info = None, None, None
+    for key, data in found.items():
+        if len(key) >= 3 and key[0] == 'achievements' and str(key[1]) == str(app):
+            if key[2] == 'schema':
+                schema = data
+            elif key[2] == 'user_achievements':
+                user = data
+        elif len(key) >= 3 and key[0] == 'StoreItem' and key[1] == f'app_{app}' and key[2] == 'default_info':
+            info = data
+    if not isinstance(schema, dict) or not isinstance(user, dict):
+        return None
+    got = user.get('achievements') or {}
+    out = []
+    for group in schema.get('groups') or []:
+        for a in group.get('achievements') or []:
+            if a.get('archived') or a.get('developeronly'):
+                continue
+            mine = got.get(str(a.get('internal_key'))) or {}
+            unlocked = bool(mine.get('unlocked'))
+            out.append({'api': str(a.get('api_name', '')), 'name': str(a.get('name', '')),
+                        'desc': str(a.get('description') or ''),
+                        'icon': a.get('icon_achieved', ''), 'icon_locked': a.get('icon_unachieved', ''),
+                        'hidden': bool(a.get('hidden')), 'unlocked': unlocked,
+                        'time': int(mine.get('unlock_time') or 0) if unlocked else 0})
+    if not out:
+        return None
+    name = info.get('name') if isinstance(info, dict) else None
+    return {'name': name, 'achievements': out}
+
+
+def fetch(account, app):
+    """The parsed page for one game, None for a game without achievements.
+    Raises on network errors so the caller can stop the run."""
+    url = PAGE.format(id64=steamid64(account), app=app)
+    req = urllib.request.Request(url, headers={'User-Agent': 'omatrophy'})
+    with urllib.request.urlopen(req, timeout=4) as r:
+        return parse_page(r.read().decode('utf8', 'replace'), app)
+
+
+def cached(app):
+    """The cached page for one game, {'time', 'name', 'achievements'}; {} when none."""
+    return read_json(f'{cache_dir()}/games/{app}.json', {})
+
+
+def cached_games():
+    """{app: mtime} of games with a cached page. A folder listing, no
+    parsing: the watcher asks every second."""
+    try:
+        return {e.name[:-5]: e.stat().st_mtime for e in os.scandir(f'{cache_dir()}/games')
+                if e.name.endswith('.json')}
+    except OSError:
+        return {}
+
+
+def none_index():
+    """{app: unix seconds} of games found to have no achievements."""
+    return read_json(f'{cache_dir()}/none.json', {})
+
+
+def due(app, played, now, nones):
+    """True when a game's page should be fetched: never fetched, stale, or
+    played since the last fetch."""
+    if app in nones:
+        return now - nones[app] > NONE_SECONDS
+    c = cached(app)
+    if not c:
+        return True
+    return now - c.get('time', 0) > FRESH_SECONDS or played > c.get('time', 0)
+
+
+def write_atomic(path, value):
+    """Write then rename, so the watcher never reads half a file."""
+    write_json(path + '.tmp', value)
+    os.replace(path + '.tmp', path)
+
+
+def backfill(account, played, local, fetch_page=fetch, pause=PAUSE_SECONDS, say=None, sleep=time.sleep):
+    """Fetch the pages of played games with no local stats file, most recent
+    first; stop at the first error (offline, rate-limited, private profile).
+    `played` is [(unix seconds, app)], `local` the apps with local stats.
+    Returns (fetched, failed: bool)."""
+    now = time.time()
+    nones = none_index()
+    todo = [(t, app) for t, app in played if app not in local and due(app, t, now, nones)]
+    fetched = 0
+    for i, (_, app) in enumerate(todo):
+        if i:
+            sleep(pause)
+        try:
+            page = fetch_page(account, app)
+        except Exception as e:
+            if say:
+                say(f'stopped at {app}: {e}')
+            return fetched, True
+        if page:
+            write_atomic(f'{cache_dir()}/games/{app}.json', dict(page, time=int(time.time())))
+        else:
+            nones[app] = int(time.time())
+            write_atomic(f'{cache_dir()}/none.json', nones)
+        fetched += 1
+        if say:
+            say(f'{i + 1}/{len(todo)} {app}: ' + (f"{len(page['achievements'])} achievements" if page else 'none'))
+    return fetched, False

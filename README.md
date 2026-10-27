@@ -125,7 +125,19 @@ settings file in [docs/specs/settings.md](docs/specs/settings.md).
 ## Game stores
 
 Steam is supported today, native or Flatpak; set `STEAM_DIR` if yours lives
-elsewhere. Other launchers plug in as one module each:
+elsewhere.
+
+Steam keeps a game's achievements on disk only once that game has run on
+this machine, so a fresh install shows just a few games. If your profile
+and game details are public, fill in the rest from your Steam Community
+profile:
+
+```bash
+omatrophy.py set community on   # off by default; sends your SteamID64 to steamcommunity.com
+omatrophy.py sync               # optional: fetch now with progress (the watcher also does it)
+```
+
+Toasts still come only from this machine's own data. Other launchers plug in as one module each:
 [adding a store](docs/guide/stores.md).
 
 ## Requirements

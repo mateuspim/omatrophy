@@ -10,6 +10,12 @@ STATE = os.path.expanduser('~/.local/state/omatrophy')
 CACHE = os.path.expanduser('~/.cache/omatrophy')
 
 
+def config():
+    """The user's settings; resolved per call so tests can point HOME elsewhere."""
+    cfg = read_json(os.path.expanduser('~/.config/omatrophy/config.json'), {})
+    return cfg if isinstance(cfg, dict) else {}
+
+
 class Store:
     """One launcher. Game ids are the store's own, as strings."""
 
@@ -30,8 +36,9 @@ class Store:
         stable key, `icon` an image URL or '' (fetched only
         when that unlock is shown), `time` unix seconds or 0 when unknown.
         Optional keys: `hidden` (the store keeps it secret until unlocked),
-        `icon_locked` (the greyed-out icon) and, on locked counter
-        achievements, `progress: {value, max}` ("12 of 15")."""
+        `icon_locked` (the greyed-out icon), on locked counter
+        achievements `progress: {value, max}` ("12 of 15"), and `remote`
+        (read from an online backfill, not this machine: never toasted)."""
         return []
 
     def running(self):
@@ -52,6 +59,12 @@ class Store:
     def percent(self, game, api):
         """Share of players with this achievement, or None when the store doesn't say."""
         return self.percents(game).get(api)
+
+    def backfill(self, say=None):
+        """Slowly fill in games this machine has no local data for, from an
+        online source, when the user opted in. Optional; runs in the
+        watcher's background thread and by `omatrophy.py sync`."""
+        return None
 
     def art(self, game):
         """{'hero': wide art URL or '', 'header': banner URL or ''} for the platinum card."""

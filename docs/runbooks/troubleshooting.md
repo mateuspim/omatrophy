@@ -22,6 +22,24 @@ Start with the log:
 Check the pipeline with `python3 omatrophy.py test silver`: a toast means the
 shell side works and the problem is upstream.
 
+## Only a few of my games show
+
+Steam writes a game's achievement file only once the game has run on this
+machine, so a new install lists just those games (`python3 omatrophy.py
+status` shows what is on disk). Launching a game adds it within a second.
+For the rest, turn on the community backfill (ADR 11): `omatrophy.py set
+community on`, then `omatrophy.py sync` to watch it work.
+
+- **"stopped at <app>: HTTP Error 429" or a timeout.** Steam is rate
+  limiting or slow; run `sync` again later, it resumes where it stopped.
+- **Every game says "none".** Your profile or its game details are private:
+  Steam > Profile > Edit Profile > Privacy Settings, set *My profile* and
+  *Game details* to Public.
+- **A game still shows old progress.** Pages are refetched after a week, or
+  when you have played the game since; delete
+  `~/.cache/omatrophy/community/games/<app>.json` to fetch it on the next
+  run.
+
 ## The toast is under the game
 
 Fullscreen games on a different monitor than the focused one: the card goes

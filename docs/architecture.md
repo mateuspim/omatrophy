@@ -23,6 +23,7 @@ turns those lines into cards on screen.
 | --- | --- |
 | `stores/base.py` | The `Store` contract and shared helpers (JSON files, HTTP, image cache). |
 | `stores/steam.py` | Steam: binary and text KeyValues parsers, stats cache, rarity (cached a day), names, art, the running game (`/proc`) and last-played times (`localconfig.vdf`). |
+| `stores/steam_community.py` | The opt-in backfill for games that never ran here: reads the JSON embedded in a public profile's achievement pages, cached under `~/.cache/omatrophy/community/` (ADR 11). |
 | `stores/__init__.py` | The list of stores; `available()` keeps the installed ones. |
 | `omatrophy.py` | Watch loop, diffing, tiers, event shapes, test inbox, settings, the panel's and tracker's JSON (`now`, `games`, `game`), CLI. |
 | `Service.qml` | Runs the watcher, parses lines, queues events, plays the chime, shows one card at a time in an Overlay-layer window on the focused monitor. |

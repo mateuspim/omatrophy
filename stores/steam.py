@@ -8,7 +8,8 @@ what was played last from userdata/<account>/config/localconfig.vdf.
 """
 import os, re, struct, threading, time
 
-from .base import CACHE, STATE, Store, cached, http_json, read_json, write_json
+from . import steam_community
+from .base import CACHE, STATE, Store, cached, config, http_json, read_json, write_json
 
 ICON_BASE = 'https://cdn.fastly.steamstatic.com/steamcommunity/public/images/apps'
 ART_BASE = 'https://cdn.fastly.steamstatic.com/steam/apps'
@@ -264,7 +265,7 @@ class Steam(Store):
     def available(self):
         return self.uid is not None
 
-    def games(self):
+    def local_games(self):
         """{appid: mtime} of the account's stats files."""
         pre, out = f'UserGameStats_{self.uid}_', {}
         for e in os.scandir(self.stats):
@@ -272,12 +273,48 @@ class Steam(Store):
                 out[e.name[len(pre):-4]] = e.stat().st_mtime
         return out
 
+    def games(self):
+        """Local stats files, plus, with `community` on, cached profile pages
+        of games that never ran here (ADR 11). Local data wins."""
+        local = self.local_games()
+        if not config().get('community'):
+            return local
+        # An mtime, like the local tokens: `test` sorts games by it.
+        remote = {app: t for app, t in steam_community.cached_games().items() if app not in local}
+        return dict(remote, **local)
+
     def achievements(self, app):
         achs = read_achievements(self.stats, self.uid, app)
+        if not achs and not os.path.exists(f'{self.stats}/UserGameStats_{self.uid}_{app}.bin') \
+                and config().get('community'):
+            return [dict(a, remote=True) for a in steam_community.cached(app).get('achievements', [])]
         for a in achs:
             a['icon'] = f"{ICON_BASE}/{app}/{a['icon']}" if a['icon'] else ''
             a['icon_locked'] = f"{ICON_BASE}/{app}/{a['icon_locked']}" if a['icon_locked'] else ''
         return achs
+
+    def backfill(self, say=None):
+        """Fetch profile pages for played games with no local stats, when
+        `community` is on. Names from the pages go into the name cache."""
+        if not config().get('community'):
+            return None
+        result = steam_community.backfill(self.uid, self.recent(), set(self.local_games()), say=say)
+        self.remember_names()
+        return result
+
+    def remember_names(self):
+        """Copy game names from cached profile pages into the name cache,
+        so delisted or offline games keep a name."""
+        found = {app: steam_community.cached(app).get('name') for app in steam_community.cached_games()}
+        found = {app: n for app, n in found.items() if n}
+        if not found:
+            return
+        with NAMES_LOCK:
+            names = read_json(NAMES, {})
+            if all(names.get(a) == n for a, n in found.items()):
+                return
+            names.update(found)
+            write_json(NAMES, names)
 
     def running(self):
         return running_game()

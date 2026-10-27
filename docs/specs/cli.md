@@ -17,6 +17,8 @@ installed.
 | `set sound on\|off\|omatrophy\|classic` | The chime: on, off, or which set (which also turns it on). |
 | `set icons omarchy\|vector\|painted` | Trophy art set. |
 | `set tracker-sort recent\|rarity\|name\|game` | The tracker's sort; the tracker writes it when you change it. |
+| `set community on\|off` | The opt-in backfill of games that never ran on this machine from your public Steam profile ([ADR 11](../adr/0011-backfill-from-the-community-profile.md)). With it on, the watcher fetches in the background after `ready`. |
+| `sync` | Runs that backfill now, one line per game (`steam: 3/444 1903340: 55 achievements`), then `fetched N`; "stopped early" after an error (offline, rate-limited, private profile), and the next run picks up where it stopped. Exits non-zero while `community` is off. |
 | `hide <store> <game>` | Adds `"store:game"` to `hidden` in config.json: the game leaves `cabinet`'s `nearest` and the Games tab's Closest sort. Exits non-zero for an unknown store. |
 | `unhide <store> <game>` | Takes it back out. |
 | `demo [kind...]` | Prints sample events straight to stdout, then idles. For `dev/preview.sh`. |

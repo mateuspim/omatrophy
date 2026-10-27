@@ -29,15 +29,20 @@ what OmaTrophy does with that access:
 - Writes: `~/.config/omatrophy/config.json` (settings and hidden games,
   only when you change them),
   `~/.local/state/omatrophy/` (game-name cache, test inbox),
-  `~/.cache/omatrophy/` (achievement icons, art, and global rarity per game,
-  refreshed daily).
+  `~/.cache/omatrophy/` (achievement icons, art, global rarity per game,
+  refreshed daily, and with the backfill on, profile pages per game in
+  `community/`).
 - Root: never.
 - Network: HTTPS to Steam's public, keyless endpoints only, when an unlock is
   shown or the bar panel or tracker opens, plus one name lookup per uncached
   game when the watcher starts: the store's app details (game name, cached),
   global achievement percentages, and Steam's CDN for icons and art. Your account id is not
-  sent.
-- Secrets: none. No API key, no login; a private Steam profile works.
+  sent, unless you turn on the community backfill (`omatrophy.py set
+  community on`, off by default): then the watcher fetches your public
+  profile's achievement page for each played game with no local data, one
+  about every 1.5 s, and your SteamID64 is in those URLs (ADR 11).
+- Secrets: none. No API key, no login; a private Steam profile works (the
+  optional backfill needs a public one).
 
 The toast window takes no input or focus (an empty input mask). The tracker
 overlay takes the keyboard only while it is open, and closes on Escape or a
