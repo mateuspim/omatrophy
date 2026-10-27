@@ -94,7 +94,18 @@ def fetch(account, app):
     url = PAGE.format(id64=steamid64(account), app=app)
     req = urllib.request.Request(url, headers={'User-Agent': 'omatrophy'})
     with urllib.request.urlopen(req, timeout=4) as r:
-        return parse_page(r.read().decode('utf8', 'replace'), app)
+        return page_or_none(r.read().decode('utf8', 'replace'), app, r.geturl())
+
+
+def page_or_none(html, app, final_url):
+    """A game without achievements redirects off its achievements page; a
+    page that stays there yet carries no data is an error (throttled, a
+    changed layout), not "none", or the game would be skipped for a month."""
+    page = parse_page(html, app)
+    path = final_url.split('?')[0].rstrip('/')
+    if page is None and (path.endswith(f'/achievements/{app}') or path.endswith(f'/stats/{app}/achievements')):
+        raise ValueError(f'achievement page for {app} had no data')
+    return page
 
 
 def cached(app):
@@ -152,9 +163,13 @@ def fetch_patiently(fetch_page, account, app, say, sleep):
             if not rate_limited(e) or attempt == MAX_BACKOFFS:
                 raise
             wait = BACKOFF_SECONDS * 2 ** attempt
-            if say:
-                say(f'rate limited at {app}; waiting {wait // 60} min')
+            say(f'rate limited at {app}; waiting {wait // 60} min')
             sleep(wait)
+
+
+def status():
+    """The backfill's latest line, {time, line, done, total}; {} before the first run."""
+    return read_json(f'{cache_dir()}/status.json', {})
 
 
 def backfill(account, played, local, fetch_page=fetch, pause=PAUSE_SECONDS, say=None, sleep=time.sleep):
@@ -167,14 +182,23 @@ def backfill(account, played, local, fetch_page=fetch, pause=PAUSE_SECONDS, say=
     nones = none_index()
     todo = [(t, app) for t, app in played if app not in local and due(app, t, now, nones)]
     fetched = 0
+    shout = say
+
+    def say(line):
+        # Also kept in status.json, so progress is visible without the
+        # shell log (and the panel can show it).
+        write_atomic(f'{cache_dir()}/status.json',
+                     {'time': int(time.time()), 'line': line, 'done': fetched, 'total': len(todo)})
+        if shout:
+            shout(line)
+
     for i, (_, app) in enumerate(todo):
         if i:
             sleep(pause)
         try:
             page = fetch_patiently(fetch_page, account, app, say, sleep)
         except Exception as e:
-            if say:
-                say(f'stopped at {app}: {e}')
+            say(f'stopped at {app}: {e}')
             return fetched, True
         if page:
             write_atomic(f'{cache_dir()}/games/{app}.json', dict(page, time=int(time.time())))
@@ -182,6 +206,6 @@ def backfill(account, played, local, fetch_page=fetch, pause=PAUSE_SECONDS, say=
             nones[app] = int(time.time())
             write_atomic(f'{cache_dir()}/none.json', nones)
         fetched += 1
-        if say:
-            say(f'{i + 1}/{len(todo)} {app}: ' + (f"{len(page['achievements'])} achievements" if page else 'none'))
+        say(f'{i + 1}/{len(todo)} {app}: ' + (f"{len(page['achievements'])} achievements" if page else 'none'))
+    say(f'done: {fetched} fetched' if todo else 'up to date')
     return fetched, False

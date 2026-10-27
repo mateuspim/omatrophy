@@ -524,6 +524,15 @@ class CommunityPage(unittest.TestCase):
         # Another game's data is not this game's.
         self.assertIsNone(steam_community.parse_page(community_page('66', {}), '55'))
 
+    def test_empty_achievement_page_is_an_error_not_none(self):
+        self.assertIsNone(steam_community.page_or_none('<html></html>', '55', 'https://steamcommunity.com/id/me'))
+        for url in ('https://steamcommunity.com/id/me/achievements/55',
+                    'https://steamcommunity.com/profiles/1/stats/55/achievements/'):
+            with self.assertRaises(ValueError):
+                steam_community.page_or_none('<html></html>', '55', url)
+        self.assertIsNone(steam_community.page_or_none('<html></html>', '55', 'https://steamcommunity.com/id/me/achievements/551'))
+        self.assertTrue(steam_community.page_or_none(community_page('55', {}), '55', url))
+
     def test_steamid64_from_the_account_id(self):
         self.assertEqual(steam_community.steamid64('12345678'), 76561197972611406)
 
@@ -576,6 +585,7 @@ class CommunityBackfill(unittest.TestCase):
             (_ for _ in ()).throw(e) if isinstance(e := next(calls), Exception) else e), sleep=waits.append)
         self.assertEqual(result, (1, False))
         self.assertEqual(waits, [60, 120])
+        self.assertEqual(steam_community.status()['line'], 'done: 1 fetched')
         always = steam_community.backfill('42', [(1, '8')], set(),
                                           fetch_page=lambda a, g: (_ for _ in ()).throw(limit), sleep=waits.append)
         self.assertEqual(always, (0, True))

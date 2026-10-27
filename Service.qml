@@ -81,8 +81,9 @@ Scope {
     // The watcher's own messages (a missing Steam folder, backfill
     // progress) go to the shell log. Read them even if nobody looks: an
     // unread pipe fills and would stall the watcher's background thread.
+    // console.warn because the shell's log file drops QML info lines.
     stderr: SplitParser {
-      onRead: line => console.info(line)
+      onRead: line => console.warn(line)
     }
     // Steam folder missing, a parse error: try again rather than go quiet.
     onExited: restart.start()
