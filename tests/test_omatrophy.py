@@ -331,6 +331,37 @@ class Rarity(unittest.TestCase):
                 self.assertEqual(steam.Steam.percents(None, APP), {'ACH_0': 12.5})
 
 
+class GameName(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        for name, value in (('CACHE', tmp.name), ('NAMES', f'{tmp.name}/names.json')):
+            patch = mock.patch.object(steam, name, value)
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def test_names_are_cached(self):
+        with mock.patch.object(steam, 'http_json', return_value={APP: {'success': True, 'data': {'name': 'Hit'}}}) as http:
+            self.assertEqual(steam.Steam.game_name(None, APP), 'Hit')
+            self.assertEqual(steam.Steam.game_name(None, APP), 'Hit')
+        self.assertEqual(http.call_count, 1)
+
+    def test_a_delisted_game_is_not_asked_again_for_a_day(self):
+        with mock.patch.object(steam, 'http_json', return_value={APP: {'success': False}}) as http:
+            self.assertEqual(steam.Steam.game_name(None, APP), f'App {APP}')
+            self.assertEqual(steam.Steam.game_name(None, APP), f'App {APP}')
+        self.assertEqual(http.call_count, 1)
+        with mock.patch.object(steam.time, 'time', return_value=time.time() + steam.NAME_MISS_SECONDS + 1), \
+             mock.patch.object(steam, 'http_json', return_value={APP: {'success': True, 'data': {'name': 'Back'}}}):
+            self.assertEqual(steam.Steam.game_name(None, APP), 'Back')
+
+    def test_offline_lookups_are_retried(self):
+        with mock.patch.object(steam, 'http_json', side_effect=OSError('offline')) as http:
+            steam.Steam.game_name(None, APP)
+            steam.Steam.game_name(None, APP)
+        self.assertEqual(http.call_count, 2)
+
+
 def ach(api, unlocked=False, t=0, **kw):
     return dict({'api': api, 'name': api.title(), 'desc': f'Do {api}', 'icon': f'{api}.jpg',
                  'unlocked': unlocked, 'time': t}, **kw)

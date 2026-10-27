@@ -17,6 +17,9 @@ NAMES = f'{STATE}/names.json'
 # Global rarity drifts slowly; a day-old copy keeps the panel and the tracker
 # from asking Steam on every open.
 RARITY_SECONDS = 24 * 3600
+# A delisted game's store page answers success: false, every time; without
+# remembering that, `games` asked again on each open and waited on it.
+NAME_MISS_SECONDS = 24 * 3600
 # `omatrophy.py games` looks names up from several threads; the cache file is
 # read and rewritten whole, so one writer at a time.
 NAMES_LOCK = threading.Lock()
@@ -332,10 +335,21 @@ class Steam(Store):
             names = read_json(NAMES, {})
         if app in names:
             return names[app]
-        try:
-            name = http_json(f'https://store.steampowered.com/api/appdetails?appids={app}&filters=basic')[app]['data']['name']
-        except Exception:
+        misses_path = f'{CACHE}/name-misses.json'
+        if time.time() - read_json(misses_path, {}).get(app, 0) < NAME_MISS_SECONDS:
             return f'App {app}'
+        try:
+            answer = http_json(f'https://store.steampowered.com/api/appdetails?appids={app}&filters=basic')[app]
+        except Exception:
+            # Offline or a hiccup: ask again next time.
+            return f'App {app}'
+        if not answer.get('success'):
+            with NAMES_LOCK:
+                misses = read_json(misses_path, {})
+                misses[app] = int(time.time())
+                write_json(misses_path, misses)
+            return f'App {app}'
+        name = answer['data']['name']
         with NAMES_LOCK:
             names = read_json(NAMES, {})
             names[app] = name
