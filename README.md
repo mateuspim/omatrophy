@@ -79,6 +79,8 @@ game with its count, sorted by last played, closest to platinum or name.
 
 Click any game for the **tracker**, a card over the screen with every
 achievement: rarity, the trophy it would earn, and the date you got it.
+Locked counter achievements show how far along you are ("52 / 80") when
+the game tracks the count.
 Up and Down (Page Up/Down, Home, End) move the highlight; Enter, or Space
 when you aren't searching, reveals a hidden achievement. Tab cycles All,
 Locked, Unlocked and Rare; typing searches; Escape clears the search, then

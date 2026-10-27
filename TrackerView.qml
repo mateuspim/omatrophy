@@ -529,9 +529,29 @@ Item {
               opacity: row.ach.unlocked ? 1 : 0.35
             }
           }
-          Caption {
+          // A locked counter achievement shows how far along it is
+          // instead of a bare "Locked".
+          Row {
             anchors.right: parent.right
-            text: row.ach.unlocked ? (row.ach.time ? root.day(row.ach.time) : "Unlocked") : "Locked"
+            spacing: Commons.Style.space(6)
+            Rectangle {
+              visible: !!row.ach.progress
+              anchors.verticalCenter: parent.verticalCenter
+              width: Commons.Style.space(48)
+              height: 3
+              radius: 1.5
+              color: Qt.alpha(root.foreground, 0.15)
+              Rectangle {
+                width: row.ach.progress ? parent.width * row.ach.progress.value / row.ach.progress.max : 0
+                height: parent.height
+                radius: parent.radius
+                color: Commons.Color.accent
+              }
+            }
+            Caption {
+              text: row.ach.unlocked ? (row.ach.time ? root.day(row.ach.time) : "Unlocked")
+                : row.ach.progress ? row.ach.progress.value + " / " + row.ach.progress.max : "Locked"
+            }
           }
         }
       }

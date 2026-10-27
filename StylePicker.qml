@@ -549,11 +549,33 @@ Column {
                   text: nextRow.modelData.desc
                 }
               }
-              Caption {
+              // A counter achievement says how far along it is ("9 / 14")
+              // beside its rarity, over a thin bar.
+              Column {
                 id: pctText
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
-                text: nextRow.modelData.percent !== null ? nextRow.modelData.percent.toFixed(1) + "%" : ""
+                spacing: 3
+                Caption {
+                  anchors.right: parent.right
+                  readonly property var prog: nextRow.modelData.progress
+                  readonly property var pct: nextRow.modelData.percent
+                  text: [prog ? prog.value + " / " + prog.max : "",
+                         pct !== null && pct !== undefined ? pct.toFixed(1) + "%" : ""]
+                    .filter(function(s) { return s !== "" }).join(" · ")
+                }
+                Rectangle {
+                  anchors.right: parent.right
+                  visible: !!nextRow.modelData.progress
+                  width: Commons.Style.space(40)
+                  height: 2
+                  color: Qt.alpha(root.foreground, 0.15)
+                  Rectangle {
+                    width: nextRow.modelData.progress ? parent.width * nextRow.modelData.progress.value / nextRow.modelData.progress.max : 0
+                    height: parent.height
+                    color: Commons.Color.accent
+                  }
+                }
               }
             }
           }

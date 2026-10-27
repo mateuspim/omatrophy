@@ -65,6 +65,57 @@ class SteamDir:
     def close(self):
         self.tmp.cleanup()
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
+
+
+class Progress(unittest.TestCase):
+    SPEC = {'value': {'operation': 'statvalue', 'operand1': 'relics'}, 'min_val': '0', 'max_val': '15'}
+
+    def test_counts_the_named_stat(self):
+        self.assertEqual(steam.progress(self.SPEC, {'relics': 12.0}), {'value': 12.0, 'max': 15.0})
+
+    def test_clamps_to_the_bounds(self):
+        self.assertEqual(steam.progress(self.SPEC, {'relics': 40.0})['value'], 15.0)
+        self.assertEqual(steam.progress(self.SPEC, {'relics': -3.0})['value'], 0.0)
+
+    def test_counts_from_min_val(self):
+        spec = dict(self.SPEC, min_val=10, max_val=20)
+        self.assertEqual(steam.progress(spec, {'relics': 14.0}), {'value': 4.0, 'max': 10.0})
+
+    def test_unknown_stat_or_bad_bounds_mean_no_progress(self):
+        self.assertIsNone(steam.progress(self.SPEC, {}))
+        self.assertIsNone(steam.progress(dict(self.SPEC, max_val='0'), {'relics': 1.0}))
+        self.assertIsNone(steam.progress(dict(self.SPEC, max_val='lots'), {'relics': 1.0}))
+        self.assertIsNone(steam.progress(None, {'relics': 1.0}))
+
+    def test_other_operations_are_skipped(self):
+        spec = dict(self.SPEC, value={'operation': 'sum', 'operand1': 'relics'})
+        self.assertIsNone(steam.progress(spec, {'relics': 1.0}))
+
+    def test_stat_values_fall_back_to_the_default(self):
+        schema_stats = {'1': {'bits': {}}, '3': {'type': 'INT', 'name': 'relics', 'default': 0},
+                        '4': {'type': 'FLOAT', 'name': 'miles', 'default': '2.5'}}
+        self.assertEqual(steam.stat_values(schema_stats, {'3': {'data': 7}}), {'relics': 7.0, 'miles': 2.5})
+
+    def test_locked_counter_achievement_carries_progress(self):
+        with SteamDir(['Collector', 'Spark']) as fake:
+            sch = schema(['Collector', 'Spark'])
+            sch[APP]['stats']['1']['bits']['0']['progress'] = self.SPEC
+            sch[APP]['stats']['1']['bits']['1']['progress'] = self.SPEC
+            sch[APP]['stats']['3'] = {'type': 'INT', 'name': 'relics', 'default': 0}
+            fake.write(f'UserGameStatsSchema_{APP}.bin', kv(sch))
+            body = user({1: 1000})
+            body['cache']['3'] = {'data': 12}
+            fake.write(f'UserGameStats_{UID}_{APP}.bin', kv(body))
+            achs = steam.read_achievements(fake.stats, UID, APP)
+        self.assertEqual(achs[0]['progress'], {'value': 12.0, 'max': 15.0})
+        # Unlocked ones need no counter.
+        self.assertNotIn('progress', achs[1])
+
 
 class Tier(unittest.TestCase):
     def test_rarity_picks_the_metal(self):

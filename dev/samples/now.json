@@ -47,21 +47,27 @@
     "icon": "",
     "time": 0,
     "desc": "Map every system in the Veil",
-    "percent": 48.2
+    "percent": 48.2,
+    "progress": {
+     "value": 9,
+     "max": 14
+    }
    },
    {
     "name": "Hidden Achievement",
     "icon": "",
     "time": 0,
     "desc": "",
-    "percent": 41.0
+    "percent": 41.0,
+    "progress": null
    },
    {
     "name": "Pacifist Run",
     "icon": "",
     "time": 0,
     "desc": "Finish a chapter without a kill",
-    "percent": 22.7
+    "percent": 22.7,
+    "progress": null
    }
   ],
   "hero": ""

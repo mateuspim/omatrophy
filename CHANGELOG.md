@@ -25,6 +25,9 @@
   opened from any game in the panel or with `omarchy-shell shell summon`.
   Arrow keys, Page Up/Down, Home and End move a highlighted row; Enter
   reveals a hidden achievement.
+- Locked counter achievements show their progress ("52 / 80" and a thin
+  bar) in the tracker and under Up next, from the stat Steam's schema ties
+  them to.
 - The platinum card in the toast's language: a metal rail, the trophy on a
   platinum tile, a spaced label, then the count and a filling bar.
 - Global rarity is cached a day per game and kept when offline.

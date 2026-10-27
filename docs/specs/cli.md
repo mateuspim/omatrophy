@@ -39,8 +39,8 @@ are URLs (`https://` or `file://`) or `""`.
   logo), `since` when it started,
   `session` the unlocks since then (newest first, up to 12), `next` the three
   locked achievements most players have, as `{name, icon, time, desc,
-  percent}`; `icon` is the greyed-out one and `desc` is `""` for hidden
-  achievements.
+  percent, progress}`; `icon` is the greyed-out one, `desc` is `""` for
+  hidden achievements and `progress` is as in [game](#game).
 - `recent`: the three games played last, minus the running one.
 - `shelf`: every complete game, newest platinum first, with `latest` empty.
 
@@ -57,12 +57,16 @@ closest to platinum, name). `played` is `0` when the store doesn't say.
  "header": "...", "hero": "...", "platinum": 0, "playing": true,
  "achievements": [{"api": "...", "name": "...", "desc": "...", "icon": "...",
                    "icon_locked": "...", "hidden": false, "unlocked": true,
-                   "time": 1793059700, "percent": 82.4, "tier": "bronze"}]}
+                   "time": 1793059700, "percent": 82.4, "tier": "bronze",
+                   "progress": null}]}
 ```
 
 Achievements come in the store's order; the tracker sorts them. `percent` is
 `null` when the store doesn't say, and `tier` is the metal the unlock would
-get ([ADR 3](../adr/0003-rarity-picks-the-metal.md)).
+get ([ADR 3](../adr/0003-rarity-picks-the-metal.md)). `progress` is
+`{"value": 12, "max": 15}` on a locked counter achievement whose store
+tracks the count (Steam: the schema's progress stat), else `null`; `value`
+is already clamped to `0..max`.
 
 ## Overlay
 

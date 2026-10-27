@@ -268,7 +268,8 @@ def playing_card(store, game, achs, since):
     card.update(since=since, hero=store.art(game)['hero'])
     card['session'] = [brief(a) for a in latest_unlocks(achs, 12, since)]
     card['next'] = [dict(brief(a), icon=a.get('icon_locked') or a['icon'],
-                         desc='' if a.get('hidden') else a['desc'], percent=pcts.get(a['api']))
+                         desc='' if a.get('hidden') else a['desc'], percent=pcts.get(a['api']),
+                         progress=a.get('progress'))
                     for a in next_up(achs, pcts, 3)]
     return card
 
@@ -314,7 +315,8 @@ def detail(a, pcts):
     pct = pcts.get(a['api'])
     return {'api': a['api'], 'name': a['name'], 'desc': a['desc'], 'icon': a['icon'],
             'icon_locked': a.get('icon_locked', ''), 'hidden': bool(a.get('hidden')),
-            'unlocked': a['unlocked'], 'time': a['time'], 'percent': pct, 'tier': tier(pct)}
+            'unlocked': a['unlocked'], 'time': a['time'], 'percent': pct, 'tier': tier(pct),
+            'progress': a.get('progress')}
 
 
 def pick_game(found):

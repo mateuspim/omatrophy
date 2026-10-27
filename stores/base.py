@@ -29,8 +29,9 @@ class Store:
         """[{api, name, desc, icon, unlocked, time}] for one game: `api` a
         stable key, `icon` an image URL or '' (fetched only
         when that unlock is shown), `time` unix seconds or 0 when unknown.
-        Optional keys: `hidden` (the store keeps it secret until unlocked)
-        and `icon_locked` (the greyed-out icon)."""
+        Optional keys: `hidden` (the store keeps it secret until unlocked),
+        `icon_locked` (the greyed-out icon) and, on locked counter
+        achievements, `progress: {value, max}` ("12 of 15")."""
         return []
 
     def running(self):

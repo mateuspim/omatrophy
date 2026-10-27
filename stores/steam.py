@@ -170,16 +170,62 @@ def account_id(stats):
     return max(counts, key=counts.get) if counts else None
 
 
+def number(v):
+    """A schema or stats value as a float, or None; Steam writes numbers as ints, floats or strings."""
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def stat_values(stats_schema, cache):
+    """{stat name: value} for every INT or FLOAT stat; a stat the game hasn't
+    written yet holds its schema default."""
+    out = {}
+    for sid, s in stats_schema.items():
+        if not isinstance(s, dict) or 'name' not in s or s.get('type') not in ('INT', 'FLOAT', 'AVGRATE'):
+            continue
+        c = cache.get(sid)
+        v = number(c.get('data')) if isinstance(c, dict) else None
+        out[s['name']] = v if v is not None else (number(s.get('default')) or 0.0)
+    return out
+
+
+def progress(spec, values):
+    """{value, max} for a counter achievement ("12 of 15 relics"), or None.
+    The schema ties the achievement to a stat: progress.value.operand1 names
+    it, min_val and max_val bound it."""
+    if not isinstance(spec, dict):
+        return None
+    value = spec.get('value')
+    if not isinstance(value, dict) or value.get('operation', 'statvalue') != 'statvalue':
+        return None
+    lo, hi = number(spec.get('min_val')) or 0.0, number(spec.get('max_val'))
+    have = values.get(value.get('operand1'))
+    if hi is None or have is None or hi <= lo:
+        return None
+    have = min(max(have, lo), hi)
+    return {'value': whole(have - lo), 'max': whole(hi - lo)}
+
+
+def whole(x):
+    """An int when the count is whole, so the views print "12 / 15", not "12.0 / 15.0"."""
+    return int(x) if x == int(x) else round(x, 2)
+
+
 def read_achievements(stats, uid, app):
-    """[{api, name, desc, icon, unlocked, time}] for one game, from the schema plus the user's cache."""
+    """[{api, name, desc, icon, unlocked, time}] for one game, from the schema
+    plus the user's cache; locked counter achievements add `progress`."""
     sf = f'{stats}/UserGameStatsSchema_{app}.bin'
     uf = f'{stats}/UserGameStats_{uid}_{app}.bin'
     if not (os.path.exists(sf) and os.path.exists(uf)):
         return []
     sch, us = read_kv(sf), read_kv(uf)
     cache = us.get('cache', {})
+    stats_schema = sch.get(app, {}).get('stats', {})
+    values = stat_values(stats_schema, cache)
     out = []
-    for sid, s in sch.get(app, {}).get('stats', {}).items():
+    for sid, s in stats_schema.items():
         if not isinstance(s, dict) or 'bits' not in s:
             continue
         c = cache.get(sid)
@@ -192,13 +238,17 @@ def read_achievements(stats, uid, app):
             name = nm.get('english') if isinstance(nm, dict) else nm
             desc = ds.get('english', '') if isinstance(ds, dict) else ds
             t = times.get(bit, 0)
-            out.append({'api': str(a.get('name', f'{sid}_{bit}')),
-                        'name': str(name if name is not None else a.get('name')),
-                        'desc': str(desc or ''), 'icon': d.get('icon', ''),
-                        'icon_locked': d.get('icon_gray', ''),
-                        # Steam writes hidden as an int or a string, depending on the schema's age.
-                        'hidden': str(d.get('hidden', 0)) == '1',
-                        'unlocked': t > 0 or bool(data >> int(bit) & 1), 'time': t})
+            ach = {'api': str(a.get('name', f'{sid}_{bit}')),
+                   'name': str(name if name is not None else a.get('name')),
+                   'desc': str(desc or ''), 'icon': d.get('icon', ''),
+                   'icon_locked': d.get('icon_gray', ''),
+                   # Steam writes hidden as an int or a string, depending on the schema's age.
+                   'hidden': str(d.get('hidden', 0)) == '1',
+                   'unlocked': t > 0 or bool(data >> int(bit) & 1), 'time': t}
+            prog = None if ach['unlocked'] else progress(a.get('progress'), values)
+            if prog:
+                ach['progress'] = prog
+            out.append(ach)
     return out
 
 
