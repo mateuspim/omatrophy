@@ -23,6 +23,8 @@ Item {
   property string search: ""
   property string iconSet: "omarchy"
   property var rows: []
+  // Hidden achievements revealed with Enter, by api name; hover reveals too.
+  property var revealed: ({})
 
   readonly property color foreground: Commons.Color.menu.text
   readonly property color background: Commons.Color.menu.background
@@ -69,7 +71,29 @@ Item {
   function rebuild() {
     if (!game) { rows = []; return }
     rows = game.achievements.filter(keep).sort(order)
+    list.currentIndex = -1
     list.positionViewAtBeginning()
+  }
+
+  // Move the highlighted row; the first key press lands on the first row.
+  function moveTo(index) {
+    if (list.count === 0) return
+    list.currentIndex = Math.max(0, Math.min(list.count - 1, index))
+    list.positionViewAtIndex(list.currentIndex, ListView.Contain)
+  }
+
+  function pageRows() {
+    return Math.max(1, Math.floor(list.height / Commons.Style.space(58)))
+  }
+
+  function toggleReveal() {
+    if (list.currentIndex < 0 || list.currentIndex >= rows.length) return
+    var a = rows[list.currentIndex]
+    if (!a.hidden || a.unlocked) return
+    var next = Object.assign({}, revealed)
+    if (next[a.api]) delete next[a.api]
+    else next[a.api] = true
+    revealed = next
   }
 
   // A filter's label with its count, once there is one to count.
@@ -213,13 +237,22 @@ Item {
         } else if (event.key === Qt.Key_Backspace) {
           root.search = root.search.slice(0, -1)
         } else if (event.key === Qt.Key_Down) {
-          list.flick(0, -1200)
+          root.moveTo(list.currentIndex + 1)
         } else if (event.key === Qt.Key_Up) {
-          list.flick(0, 1200)
+          root.moveTo(list.currentIndex - 1)
         } else if (event.key === Qt.Key_PageDown) {
-          list.contentY = Math.min(list.contentY + list.height, Math.max(0, list.contentHeight - list.height))
+          root.moveTo(list.currentIndex + root.pageRows())
         } else if (event.key === Qt.Key_PageUp) {
-          list.contentY = Math.max(0, list.contentY - list.height)
+          root.moveTo(list.currentIndex - root.pageRows())
+        } else if (event.key === Qt.Key_Home) {
+          root.moveTo(0)
+        } else if (event.key === Qt.Key_End) {
+          root.moveTo(list.count - 1)
+        } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+          root.toggleReveal()
+        } else if (event.key === Qt.Key_Space && !root.search && list.currentIndex >= 0) {
+          // Space types into a search under way, so "first light" works.
+          root.toggleReveal()
         } else if (event.text && event.text.length === 1 && event.text.charCodeAt(0) >= 32 && event.text.charCodeAt(0) !== 127) {
           root.search += event.text
         } else {
@@ -401,20 +434,29 @@ Item {
       model: root.rows
       spacing: Commons.Style.space(2)
       boundsBehavior: Flickable.StopAtBounds
+      currentIndex: -1
+      highlightFollowsCurrentItem: false
 
       delegate: Rectangle {
         id: row
         required property var modelData
+        required property int index
         readonly property var ach: modelData
         // Hidden achievements stay a secret until unlocked, or until you
-        // hover to reveal them.
-        readonly property bool secret: ach.hidden && !ach.unlocked && !rowHover.containsMouse
+        // hover or press Enter to reveal them.
+        readonly property bool secret: ach.hidden && !ach.unlocked && !rowHover.containsMouse && !root.revealed[ach.api]
         width: list.width
         height: Commons.Style.space(56)
         radius: Commons.Style.cornerRadius
-        color: rowHover.containsMouse ? Commons.Style.hoverFill : "transparent"
+        color: ListView.isCurrentItem || rowHover.containsMouse ? Commons.Style.hoverFill : "transparent"
 
-        MouseArea { id: rowHover; anchors.fill: parent; hoverEnabled: true }
+        // Hover moves the highlight too, so mouse and keys share one row.
+        MouseArea {
+          id: rowHover
+          anchors.fill: parent
+          hoverEnabled: true
+          onEntered: list.currentIndex = row.index
+        }
 
         Rectangle {
           id: iconFrame
@@ -457,7 +499,7 @@ Item {
           }
           Caption {
             width: parent.width
-            text: row.secret ? "Hover to reveal" : row.ach.desc
+            text: row.secret ? "Hover or press Enter to reveal" : row.ach.desc
             visible: text !== ""
           }
         }
@@ -573,7 +615,7 @@ Item {
       anchors.bottom: parent.bottom
       anchors.bottomMargin: card.contentBottomInset + Commons.Style.space(8)
       anchors.horizontalCenter: parent.horizontalCenter
-      text: "Tab filters · type to search · Esc closes · rarity is the share of all players"
+      text: "↑↓ move · Enter reveals · Tab filters · type to search · Esc closes · rarity is the share of all players"
       opacity: 0.4
     }
   }

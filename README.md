@@ -33,7 +33,8 @@ achievement list.
   platinum or name.
 - An achievement tracker over the screen: every achievement of a game with
   its rarity and the day you got it, filtered to locked, unlocked or rare,
-  and searched as you type. Hidden ones stay hidden until you hover.
+  and searched as you type; mouse or keyboard. Hidden ones stay hidden until
+  you hover or press Enter.
 - Three trophy styles: Omarchy (a pixel grid with an inlay in your theme
   accent), Faceted and Painted.
 - Theme-native: cards draw from your Omarchy theme colours.
@@ -78,8 +79,10 @@ game with its count, sorted by last played, closest to platinum or name.
 
 Click any game for the **tracker**, a card over the screen with every
 achievement: rarity, the trophy it would earn, and the date you got it.
-Tab cycles All, Locked, Unlocked and Rare; typing searches; Escape clears
-the search, then closes. From a script:
+Up and Down (Page Up/Down, Home, End) move the highlight; Enter, or Space
+when you aren't searching, reveals a hidden achievement. Tab cycles All,
+Locked, Unlocked and Rare; typing searches; Escape clears the search, then
+closes. From a script:
 
 ```bash
 omarchy-shell shell summon pym.omatrophy '{}'   # the running or last game

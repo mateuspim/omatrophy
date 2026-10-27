@@ -23,6 +23,8 @@
 - An achievement tracker overlay: every achievement of a game with rarity
   and unlock date, filters (all, locked, unlocked, rare) and type-to-search;
   opened from any game in the panel or with `omarchy-shell shell summon`.
+  Arrow keys, Page Up/Down, Home and End move a highlighted row; Enter
+  reveals a hidden achievement.
 - The platinum card in the toast's language: a metal rail, the trophy on a
   platinum tile, a spaced label, then the count and a filling bar.
 - Global rarity is cached a day per game and kept when offline.

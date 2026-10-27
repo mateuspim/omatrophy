@@ -32,7 +32,7 @@ turns those lines into cards on screen.
 | `StylePicker.qml` | Three tabs. Now: totals, the running game (or the last three) and the platinum shelf, from `omatrophy.py now`. Games: every game, sortable, from `omatrophy.py games` on first open. Settings: trophy style, previews, position and sound, through `omatrophy.py set`. |
 | `FreshObject.qml` | Builds a sibling QML file from its current text, so the cards, the panel content and the tracker pick up edits without a restart. |
 | `Tracker.qml` | The `overlay` entry point: a dimmed full-screen window that takes the keyboard while open and loads `TrackerView.qml`. |
-| `TrackerView.qml` | One game's every achievement with rarity and dates; filters and type-to-search. Read-only. |
+| `TrackerView.qml` | One game's every achievement with rarity and dates; filters, type-to-search and a keyboard-driven highlight. Read-only. |
 | `assets/<set>/` | Trophy art: `omarchy` (pixel grid, theme-tinted inlay), `vector`, `painted`. |
 
 ## Data flow
