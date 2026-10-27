@@ -1,5 +1,6 @@
 """Tests for omatrophy.py and the Steam store: Steam's binary KeyValues, the
-stats cache, unlock diffing, the test inbox and settings. Everything runs against temporary
+stats cache, unlock diffing, the panel's and tracker's JSON, the test inbox and
+settings. Everything runs against temporary
 folders built here; no Steam install, no network, no real config.
 
 Run from the repo root: python3 -m unittest discover -s tests
@@ -371,6 +372,137 @@ class NowTab(unittest.TestCase):
         d = omatrophy.detail(ach('a', hidden=True, icon_locked='g.jpg'), {'a': 4.0})
         self.assertEqual((d['percent'], d['tier'], d['hidden'], d['icon_locked']), (4.0, 'gold', True, 'g.jpg'))
         self.assertEqual(omatrophy.detail(ach('b'), {})['tier'], 'bronze')
+
+
+class FakeLibrary:
+    """A whole throwaway Steam install for the panel's and tracker's JSON:
+    three games' stats, the account's localconfig, library art, and warm
+    name and rarity caches, so nothing reaches the network. Use as a
+    context manager; it patches the environment and the store's paths."""
+
+    GAMES = {'10': ('Done Game', 2, {0: 100, 1: 200}),
+             '20': ('Half Game', 4, {0: 300, 1: 400}),
+             '30': ('Fresh Game', 3, {})}
+
+    def __init__(self, played=None, running=None, hidden=()):
+        self.played = played if played is not None else {'20': 1800000000, '10': 1700000000}
+        self.running = running
+        self.hidden = list(hidden)
+
+    def __enter__(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        root = self.root = os.path.join(self.tmp.name, 'Steam')
+        stats = os.path.join(root, 'appcache', 'stats')
+        os.makedirs(stats)
+        for app, (name, count, unlocked) in self.GAMES.items():
+            bits = {str(i): {'name': f'ACH_{i}', 'display': {'name': {'english': f'{name} {i}'}}}
+                    for i in range(count)}
+            with open(f'{stats}/UserGameStatsSchema_{app}.bin', 'wb') as f:
+                f.write(kv({app: {'stats': {'1': {'bits': bits}}}}))
+            with open(f'{stats}/UserGameStats_{UID}_{app}.bin', 'wb') as f:
+                f.write(kv(user(unlocked)))
+            os.makedirs(f'{root}/appcache/librarycache/{app}')
+            open(f'{root}/appcache/librarycache/{app}/library_hero.jpg', 'w').close()
+        os.makedirs(f'{root}/userdata/{UID}/config')
+        apps = ''.join(f'"{a}" {{ "LastPlayed" "{t}" }}' for a, t in self.played.items())
+        with open(f'{root}/userdata/{UID}/config/localconfig.vdf', 'w') as f:
+            f.write(f'"UserLocalConfigStore" {{ "Software" {{ "Valve" {{ "Steam" {{ "apps" {{ {apps} }} }} }} }} }}')
+        home = os.path.join(self.tmp.name, 'home')
+        os.makedirs(f'{home}/.config/omatrophy')
+        with open(f'{home}/.config/omatrophy/config.json', 'w') as f:
+            json.dump({'hidden': self.hidden}, f)
+        cache = os.path.join(self.tmp.name, 'cache')
+        for app in self.GAMES:
+            os.makedirs(f'{cache}/rarity', exist_ok=True)
+            with open(f'{cache}/rarity/{app}.json', 'w') as f:
+                json.dump({'time': int(time.time()), 'percents': {'ACH_0': 50.0, 'ACH_1': 5.0, 'ACH_3': 30.0}}, f)
+        names = os.path.join(self.tmp.name, 'names.json')
+        with open(names, 'w') as f:
+            json.dump({a: g[0] for a, g in self.GAMES.items()}, f)
+        self.patches = [mock.patch.dict(os.environ, {'STEAM_DIR': root, 'STEAM_ACCOUNT': UID, 'HOME': home}),
+                        mock.patch.object(steam, 'NAMES', names), mock.patch.object(steam, 'CACHE', cache),
+                        mock.patch.object(steam, 'running_game', return_value=self.running),
+                        mock.patch('urllib.request.urlopen', side_effect=AssertionError('network in a test'))]
+        for p in self.patches:
+            p.start()
+        return self
+
+    def __exit__(self, *exc):
+        for p in reversed(self.patches):
+            p.stop()
+        self.tmp.cleanup()
+
+
+class PanelJson(unittest.TestCase):
+    def test_games_lists_every_game_with_names_art_and_hidden(self):
+        with FakeLibrary(hidden=['steam:30']):
+            rows = {r['app']: r for r in omatrophy.games()}
+        self.assertEqual(set(rows), {'10', '20', '30'})
+        self.assertEqual((rows['20']['game'], rows['20']['unlocked'], rows['20']['total']), ('Half Game', 2, 4))
+        self.assertEqual(rows['10']['platinum'], 200)
+        self.assertEqual(rows['20']['played'], 1800000000)
+        self.assertEqual(rows['30']['played'], 0)
+        self.assertEqual([a for a, r in rows.items() if r['hidden']], ['30'])
+        self.assertTrue(rows['10']['header'].startswith('https://'))
+
+    def test_now_while_playing(self):
+        with FakeLibrary(running={'game': '20', 'since': 350}):
+            now = omatrophy.now()
+        self.assertEqual((now['games'], now['trophies'], now['platinums']), (3, 4, 1))
+        playing = now['playing']
+        self.assertEqual((playing['app'], playing['since']), ('20', 350))
+        self.assertTrue(playing['hero'].startswith('file://'))
+        self.assertEqual([a['name'] for a in playing['session']], ['Half Game 1'])
+        self.assertEqual([a['name'] for a in playing['next']], ['Half Game 3', 'Half Game 2'])
+        self.assertEqual([c['app'] for c in now['recent']], ['10'])
+        self.assertEqual([c['app'] for c in now['shelf']], ['10'])
+        self.assertEqual(now['shelf'][0]['latest'], [])
+
+    def test_now_idle_lists_recent_games(self):
+        with FakeLibrary():
+            now = omatrophy.now()
+        self.assertIsNone(now['playing'])
+        self.assertEqual([c['app'] for c in now['recent']], ['20', '10'])
+
+    def test_game_detail_for_the_tracker(self):
+        with FakeLibrary(running={'game': '20', 'since': 0}):
+            store = steam.Steam()
+            d = omatrophy.game_detail(store, '20')
+        self.assertTrue(d['playing'])
+        self.assertEqual((d['game'], d['unlocked'], d['total'], d['platinum']), ('Half Game', 2, 4, 0))
+        tiers = {a['api']: (a['percent'], a['tier']) for a in d['achievements']}
+        self.assertEqual(tiers['ACH_0'], (50.0, 'bronze'))
+        self.assertEqual(tiers['ACH_1'], (5.0, 'gold'))
+        self.assertEqual(tiers['ACH_2'], (None, 'bronze'))
+
+    def test_game_detail_without_cached_achievements_says_what_to_do(self):
+        with FakeLibrary():
+            with self.assertRaises(SystemExit) as e:
+                omatrophy.game_detail(steam.Steam(), '999')
+        self.assertIn('launch it once', str(e.exception))
+
+
+class PickGame(unittest.TestCase):
+    def test_running_game_wins(self):
+        with FakeLibrary(running={'game': '30', 'since': 0}):
+            store, app = omatrophy.pick_game(omatrophy.found_stores())
+        self.assertEqual((store.id, app), ('steam', '30'))
+
+    def test_running_game_without_achievements_falls_back_to_last_played(self):
+        with FakeLibrary(running={'game': '777', 'since': 0}):
+            _, app = omatrophy.pick_game(omatrophy.found_stores())
+        self.assertEqual(app, '20')
+
+    def test_last_played_skips_games_without_achievements(self):
+        with FakeLibrary(played={'555': 1900000000, '10': 1700000000}):
+            _, app = omatrophy.pick_game(omatrophy.found_stores())
+        self.assertEqual(app, '10')
+
+    def test_nothing_played_says_how_to_name_a_game(self):
+        with FakeLibrary(played={}):
+            with self.assertRaises(SystemExit) as e:
+                omatrophy.pick_game(omatrophy.found_stores())
+        self.assertIn('omatrophy.py game steam', str(e.exception))
 
 
 class Stores(unittest.TestCase):
