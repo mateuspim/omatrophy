@@ -132,20 +132,31 @@ Scope {
       implicitWidth: card.item ? card.item.width : 1
       implicitHeight: card.item ? card.item.height : 1
 
-      // Loaded by a fresh URL each time so edits to the card files show on
-      // the next toast; the shell otherwise keeps its compiled copy until
-      // `omarchy restart shell`, which games don't always survive.
-      Loader {
+      // Built from the card file's current text for every event
+      // (FreshObject.qml), so edits show on the next toast; the shell
+      // otherwise keeps its startup copy until `omarchy restart shell`,
+      // which games don't always survive.
+      FreshObject {
         id: card
-        readonly property bool platinum: root.current && root.current.type === "platinum"
-        // Re-evaluated on every event, so each card starts fresh.
-        source: root.current ? Qt.resolvedUrl(platinum ? "PlatinumCard.qml" : "TrophyToast.qml") + "?v=" + Date.now() : ""
-        onLoaded: {
+        width: item ? item.width : 0
+        height: item ? item.height : 0
+
+        function show() {
+          if (!root.current) return
+          var item = load(root.current.type === "platinum" ? "PlatinumCard.qml" : "TrophyToast.qml")
+          // A card that doesn't build would stall the queue; skip to the next.
+          if (!item) { Qt.callLater(root.next); return }
           item.edge = root.position
           item.iconSet = root.iconSet
           item.finished.connect(root.next)
           if (item.chime) item.chime.connect(() => chime.play("platinum"))
           item.event = root.current
+        }
+
+        Component.onCompleted: show()
+        Connections {
+          target: root
+          function onCurrentChanged() { card.show() }
         }
       }
     }

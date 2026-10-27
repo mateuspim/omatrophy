@@ -14,10 +14,12 @@ Subclass `stores.base.Store` in `stores/<id>.py`:
 | `name` | Name shown to people (`Epic Games`). |
 | `available()` | True when the launcher is installed and there is achievement data to read. Called once at start; keep it cheap. |
 | `games()` | `{game id: change token}`. Called once a second, so read directory metadata, not file contents. The token (mtime, size, hash) must change whenever unlocks may have. |
-| `achievements(game)` | `[{api, name, desc, icon, unlocked, time}]`: `api` stable per achievement, `icon` an image URL or `""` (only fetched when that unlock is shown), `time` unix seconds or 0. Raising is fine: the watcher treats it as "not readable yet" and retries on the next change. |
+| `achievements(game)` | `[{api, name, desc, icon, unlocked, time}]`: `api` stable per achievement, `icon` an image URL or `""` (only fetched when that unlock is shown), `time` unix seconds or 0. Optional: `hidden` (secret until unlocked) and `icon_locked` (the greyed-out icon). Raising is fine: the watcher treats it as "not readable yet" and retries on the next change. |
 | `game_name(game)` | Display name. Cache it if it costs a request. |
-| `percent(game, api)` | Share of players, or `None`. `None` makes every unlock bronze. |
-| `art(game)` | `{'hero', 'header'}` image URLs for the platinum card, or `""`. |
+| `percents(game)` | `{api: share of players}`, or `{}`. Cache it: the panel and tracker ask often. `{}` makes every unlock bronze. `percent(game, api)` reads from it. |
+| `art(game)` | `{'hero', 'header'}` image URLs for the platinum card, panel and tracker, or `""`. |
+| `running()` | `{'game': id, 'since': unix seconds}` for the game being played now, or `None`. Optional; the panel's now-playing card needs it. |
+| `recent()` | `[(unix seconds, game id)]` last played, newest first. Optional; the panel's recent games need it. |
 
 Then add the class to `STORES` in `stores/__init__.py`.
 

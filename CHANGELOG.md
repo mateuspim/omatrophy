@@ -14,4 +14,18 @@
   the brief in `design/sounds/`), with the
   freedesktop sounds kept as the classic set.
 - Stores are pluggable (`stores/`); Steam is the first.
-- `omatrophy.py` CLI: `watch`, `test`, `status`, `cabinet`, `set`.
+- The bar panel in three tabs. Now: the game you're playing (hero art,
+  progress, this session's unlocks, the likeliest next ones) or the last
+  three you played, and a shelf of platinums. Games: every game with its
+  count, sorted by recent, closest to platinum or name. Settings: the style,
+  previews, position and sound. Shimmering placeholders while data loads,
+  in the panel and the tracker.
+- An achievement tracker overlay: every achievement of a game with rarity
+  and unlock date, filters (all, locked, unlocked, rare) and type-to-search;
+  opened from any game in the panel or with `omarchy-shell shell summon`.
+- The platinum card in the toast's language: a metal rail, the trophy on a
+  platinum tile, a spaced label, then the count and a filling bar.
+- Global rarity is cached a day per game and kept when offline.
+- `omatrophy.py` CLI: `watch`, `test`, `status`, `cabinet`, `now`, `games`,
+  `game`, `set`.
+- `dev/render.sh`: any view offscreen to a PNG, from fake sample data.

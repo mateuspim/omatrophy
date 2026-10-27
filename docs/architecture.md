@@ -11,6 +11,10 @@ turns those lines into cards on screen.
            omatrophy.py test ──▶ inbox.jsonl ─┘        config.json ───────────┘ (watched live)
                                                            ▲
                          Panel.qml ──▶ StylePicker.qml ──▶ omatrophy.py set
+                                          │   ▲
+                                 summon   │   └── omatrophy.py now
+                                          ▼
+                                     Tracker.qml ──▶ TrackerView.qml ◀── omatrophy.py game
 ```
 
 ## Components
@@ -18,14 +22,17 @@ turns those lines into cards on screen.
 | File | Role |
 | --- | --- |
 | `stores/base.py` | The `Store` contract and shared helpers (JSON files, HTTP, image cache). |
-| `stores/steam.py` | Steam: binary KeyValues parser, stats cache, rarity, names, art. |
+| `stores/steam.py` | Steam: binary and text KeyValues parsers, stats cache, rarity (cached a day), names, art, the running game (`/proc`) and last-played times (`localconfig.vdf`). |
 | `stores/__init__.py` | The list of stores; `available()` keeps the installed ones. |
-| `omatrophy.py` | Watch loop, diffing, tiers, event shapes, test inbox, settings, CLI. |
+| `omatrophy.py` | Watch loop, diffing, tiers, event shapes, test inbox, settings, the panel's and tracker's JSON (`now`, `games`, `game`), CLI. |
 | `Service.qml` | Runs the watcher, parses lines, queues events, plays the chime, shows one card at a time in an Overlay-layer window on the focused monitor. |
 | `TrophyToast.qml` | One unlock: icon, trophy in the tier's metal, rarity, progress. |
 | `PlatinumCard.qml` | 100% of a game: badge, ring, trophy, then a wide card over the hero art. |
-| `Panel.qml` | Bar button; opens a `KeyboardPanel` that loads `StylePicker.qml`. |
-| `StylePicker.qml` | Trophy style, previews, position and sound; writes through `omatrophy.py set`. |
+| `Panel.qml` | Bar button; opens a `KeyboardPanel` that loads `StylePicker.qml`, and turns its `track` signal into a summon of the tracker. |
+| `StylePicker.qml` | Three tabs. Now: totals, the running game (or the last three) and the platinum shelf, from `omatrophy.py now`. Games: every game, sortable, from `omatrophy.py games` on first open. Settings: trophy style, previews, position and sound, through `omatrophy.py set`. |
+| `FreshObject.qml` | Builds a sibling QML file from its current text, so the cards, the panel content and the tracker pick up edits without a restart. |
+| `Tracker.qml` | The `overlay` entry point: a dimmed full-screen window that takes the keyboard while open and loads `TrackerView.qml`. |
+| `TrackerView.qml` | One game's every achievement with rarity and dates; filters and type-to-search. Read-only. |
 | `assets/<set>/` | Trophy art: `omarchy` (pixel grid, theme-tinted inlay), `vector`, `painted`. |
 
 ## Data flow
@@ -37,11 +44,14 @@ turns those lines into cards on screen.
    achievements, diffs the unlocked set and prints an `unlock` line per new,
    recent unlock (ADR 4), then a `platinum` line if that completed the game.
 3. `Service.qml` queues `unlock` and `platinum` lines, plays a chime, and
-   loads the matching card by a fresh URL (ADR 5) into a click-through
+   builds the matching card from its current text (ADR 10) into a click-through
    window on the Overlay layer (ADR 2). The card reports `finished`; the next
    event shows.
 4. Settings live in `~/.config/omatrophy/config.json`; `Service.qml` and the
    picker watch it, so changes apply to the next card.
+5. The panel runs `omatrophy.py now` each time it opens. Clicking a game
+   summons the plugin's overlay with `{store, app}`; `Tracker.qml` passes it
+   to `TrackerView.qml`, which runs `omatrophy.py game` (ADR 9).
 
 Line shapes are in [specs/events.md](specs/events.md), the CLI in
 [specs/cli.md](specs/cli.md), the settings file in

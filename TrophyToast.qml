@@ -14,7 +14,7 @@ import qs.Commons as Commons
 // for 10% of players or fewer. Gold also gets the accent border, a glitter
 // burst off the trophy and a sweep of light across the card.
 //
-// Loaded by a fresh URL per toast (see Service.qml), so it uses no other QML
+// Built from its text per toast (FreshObject.qml), so it uses no other QML
 // file from this folder; the Trophy component is repeated from
 // PlatinumCard.qml for that reason.
 Item {

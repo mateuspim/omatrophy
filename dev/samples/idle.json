@@ -1,0 +1,147 @@
+{
+ "games": 84,
+ "trophies": 1207,
+ "platinums": 9,
+ "playing": null,
+ "recent": [
+  {
+   "store": "steam",
+   "app": "2",
+   "unlocked": 40,
+   "total": 40,
+   "game": "Lanterns of Aster",
+   "header": "",
+   "played": 1792827200,
+   "platinum": 1792827200,
+   "latest": [
+    {
+     "name": "All Lit",
+     "icon": "",
+     "time": 1792827200
+    },
+    {
+     "name": "Keeper",
+     "icon": "",
+     "time": 1792740800
+    }
+   ]
+  },
+  {
+   "store": "steam",
+   "app": "3",
+   "unlocked": 12,
+   "total": 61,
+   "game": "Tidebreaker",
+   "header": "",
+   "played": 1792481600,
+   "platinum": 0,
+   "latest": [
+    {
+     "name": "Shoreline",
+     "icon": "",
+     "time": 1792481600
+    }
+   ]
+  },
+  {
+   "store": "steam",
+   "app": "4",
+   "unlocked": 3,
+   "total": 25,
+   "game": "Paper Kingdoms",
+   "header": "",
+   "played": 1791272000,
+   "platinum": 0,
+   "latest": [
+    {
+     "name": "Fold",
+     "icon": "",
+     "time": 1791272000
+    }
+   ]
+  }
+ ],
+ "shelf": [
+  {
+   "store": "steam",
+   "app": "10",
+   "unlocked": 30,
+   "total": 30,
+   "game": "Lanterns of Aster",
+   "header": "",
+   "played": 0,
+   "platinum": 1790408000,
+   "latest": []
+  },
+  {
+   "store": "steam",
+   "app": "11",
+   "unlocked": 30,
+   "total": 30,
+   "game": "Moss & Iron",
+   "header": "",
+   "played": 0,
+   "platinum": 1787816000,
+   "latest": []
+  },
+  {
+   "store": "steam",
+   "app": "12",
+   "unlocked": 30,
+   "total": 30,
+   "game": "Glasswing",
+   "header": "",
+   "played": 0,
+   "platinum": 1785224000,
+   "latest": []
+  },
+  {
+   "store": "steam",
+   "app": "13",
+   "unlocked": 30,
+   "total": 30,
+   "game": "Orbit Bakery",
+   "header": "",
+   "played": 0,
+   "platinum": 1782632000,
+   "latest": []
+  },
+  {
+   "store": "steam",
+   "app": "14",
+   "unlocked": 30,
+   "total": 30,
+   "game": "Hollow Choir",
+   "header": "",
+   "played": 0,
+   "platinum": 1780040000,
+   "latest": []
+  }
+ ],
+ "nearest": [
+  {
+   "store": "steam",
+   "app": "20",
+   "unlocked": 44,
+   "total": 46,
+   "game": "Ember Crown",
+   "header": ""
+  },
+  {
+   "store": "steam",
+   "app": "21",
+   "unlocked": 27,
+   "total": 30,
+   "game": "Velvet Circuit",
+   "header": ""
+  },
+  {
+   "store": "steam",
+   "app": "22",
+   "unlocked": 88,
+   "total": 100,
+   "game": "Deep Signal",
+   "header": ""
+  }
+ ]
+}

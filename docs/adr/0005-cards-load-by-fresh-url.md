@@ -1,6 +1,6 @@
 # 5. Load cards by a fresh URL; keep them standalone
 
-- Status: Accepted
+- Status: Superseded by [10](0010-build-views-from-their-text.md)
 - Date: 2026-10-26 (documented from the code)
 
 ## Context
@@ -23,3 +23,5 @@ in both cards. They import `qs.Commons as Commons` and always write
 
 - Card edits show on the next toast; no restart.
 - Shared card code is duplicated; keep the two `Trophy` copies in step.
+- Later views follow the same rule: `Tracker.qml` loads `TrackerView.qml`
+  this way (ADR 9), so it repeats the `Trophy` component too.

@@ -25,10 +25,12 @@ bar panel).
 | `~/.config/omatrophy/config.json` | The settings above. |
 | `~/.local/state/omatrophy/names.json` | Steam game names, so offline toasts keep them. |
 | `~/.local/state/omatrophy/inbox.jsonl` | Events queued by `omatrophy.py test`. |
-| `~/.cache/omatrophy/` | Achievement icons (`icons/<store>/<game>/`) and art. Safe to delete. |
+| `~/.cache/omatrophy/` | Achievement icons (`icons/<store>/<game>/`), art, and global rarity (`rarity/<game>.json`, refreshed daily). Safe to delete. |
 
 ## `manifest.json`
 
-Kinds `service` (`Service.qml`) and `bar-widget` (`Panel.qml`), bar category
-Gaming, default section right, one instance. The panel's IPC target is
-`pym.omatrophy` (`open`, `close`, `toggle`, from Omarchy's `Panel`).
+Kinds `service` (`Service.qml`), `bar-widget` (`Panel.qml`) and `overlay`
+(`Tracker.qml`), bar category Gaming, default section right, one instance.
+The panel's IPC target is `pym.omatrophy` (`open`, `close`, `toggle`, from
+Omarchy's `Panel`). `omarchy-shell shell summon pym.omatrophy '<json>'` opens
+the tracker ([payload](cli.md#overlay), ADR 9).

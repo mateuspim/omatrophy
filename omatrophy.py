@@ -5,7 +5,11 @@ Usage:
   omatrophy.py watch                  print one JSON event per new unlock (the shell service runs this)
   omatrophy.py test [kind]            queue a fake event for a running watcher: bronze, silver, gold, platinum
   omatrophy.py status                 progress of every game with achievements, as JSON
-  omatrophy.py cabinet                trophy totals and the games nearest platinum, as JSON (the bar panel)
+  omatrophy.py cabinet                trophy totals and the games nearest platinum, as JSON
+  omatrophy.py now                    what is playing, recent games, platinums and totals, as JSON (the bar panel)
+  omatrophy.py games                  every game with achievements and its progress, as JSON (the panel's Games tab)
+  omatrophy.py game [store app]       every achievement of one game with rarity, as JSON (the tracker);
+                                      without arguments, the game running now or played last
   omatrophy.py set position <where>   top-center, top-left or top-right (applies live)
   omatrophy.py set sound on|off|omatrophy|classic
   omatrophy.py set icons omarchy|vector|painted
@@ -14,6 +18,7 @@ Each store (stores/) reads its launcher's own files; this file diffs them and
 turns new unlocks into events. Steam is the only store so far.
 """
 import json, os, sys, time
+from concurrent.futures import ThreadPoolExecutor
 
 import stores
 from stores.base import STATE, cached, read_json, write_json
@@ -167,14 +172,27 @@ def demo(kinds):
         time.sleep(3600)
 
 
+def library(found=None):
+    """(store, game, achievements) for every game with achievements."""
+    out = []
+    for s in found or found_stores():
+        for game in s.games():
+            try:
+                achs = s.achievements(game)
+            except Exception:
+                continue
+            if achs:
+                out.append((s, game, achs))
+    return out
+
+
+def progress_row(store, game, achs):
+    return {'store': store.id, 'app': game, 'unlocked': sum(a['unlocked'] for a in achs), 'total': len(achs)}
+
+
 def progress():
     """(store, {store, app, unlocked, total}) for every game with achievements, most complete first."""
-    out = []
-    for s in found_stores():
-        for game in s.games():
-            achs = s.achievements(game)
-            if achs:
-                out.append((s, {'store': s.id, 'app': game, 'unlocked': sum(a['unlocked'] for a in achs), 'total': len(achs)}))
+    out = [(s, progress_row(s, g, achs)) for s, g, achs in library()]
     return sorted(out, key=lambda r: -r[1]['unlocked'] / r[1]['total'])
 
 
@@ -203,6 +221,136 @@ def cabinet(n=4):
         s = stores[(r['store'], r['app'])]
         nearest.append(dict(r, game=s.game_name(r['app']), header=s.art(r['app'])['header']))
     print(json.dumps(dict(totals([r for _, r in found]), nearest=nearest)))
+
+
+def platinum_time(achs):
+    """When a complete game got its last achievement; 0 while any is locked."""
+    if not achs or not all(a['unlocked'] for a in achs):
+        return 0
+    return max(a['time'] for a in achs)
+
+
+def latest_unlocks(achs, n, since=0):
+    """The n most recent unlocks (at or after `since`), newest first."""
+    done = [a for a in achs if a['unlocked'] and a['time'] and a['time'] >= since]
+    return sorted(done, key=lambda a: -a['time'])[:n]
+
+
+def next_up(achs, pcts, n):
+    """The n locked achievements most players have, the likeliest next unlocks."""
+    locked = [a for a in achs if not a['unlocked']]
+    return sorted(locked, key=lambda a: -(pcts.get(a['api']) or 0))[:n]
+
+
+def recent_games(played, owned, skip, n):
+    """The n most recently played games we hold achievements for, minus `skip`."""
+    out = []
+    for when, key in played:
+        if key in owned and key != skip and key not in [k for _, k in out]:
+            out.append((when, key))
+    return out[:n]
+
+
+def brief(a):
+    return {'name': a['name'], 'icon': a['icon'], 'time': a['time']}
+
+
+def game_card(store, game, achs, played=0):
+    """One game as the panel draws it: art, progress, latest unlocks, platinum date."""
+    return dict(progress_row(store, game, achs), game=store.game_name(game), header=store.art(game)['header'],
+                played=played, platinum=platinum_time(achs), latest=[brief(a) for a in latest_unlocks(achs, 5)])
+
+
+def playing_card(store, game, achs, since):
+    """The game running now: its card, this session's unlocks and the likeliest next ones."""
+    pcts = store.percents(game)
+    card = game_card(store, game, achs, since)
+    card.update(since=since, hero=store.art(game)['hero'])
+    card['session'] = [brief(a) for a in latest_unlocks(achs, 12, since)]
+    card['next'] = [dict(brief(a), icon=a.get('icon_locked') or a['icon'],
+                         desc='' if a.get('hidden') else a['desc'], percent=pcts.get(a['api']))
+                    for a in next_up(achs, pcts, 3)]
+    return card
+
+
+def now(recent_n=3):
+    """Everything the panel's Now tab shows, in one read of every store."""
+    found = found_stores()
+    lib = library(found)
+    by_key = {(s.id, g): (s, achs) for s, g, achs in lib}
+    rows = [progress_row(s, g, achs) for s, g, achs in lib]
+    playing, skip = None, None
+    for s in found:
+        run = s.running()
+        if run and (s.id, run['game']) in by_key:
+            skip = (s.id, run['game'])
+            playing = playing_card(s, run['game'], by_key[skip][1], run['since'])
+            break
+    played = sorted(((t, (s.id, g)) for s in found for t, g in s.recent()), key=lambda r: -r[0])
+    recent = []
+    for when, key in recent_games(played, by_key, skip, recent_n):
+        s, achs = by_key[key]
+        recent.append(game_card(s, key[1], achs, when))
+    shelf = sorted((dict(game_card(s, g, achs), latest=[]) for s, g, achs in lib if platinum_time(achs)),
+                   key=lambda c: -c['platinum'])
+    return dict(totals(rows), playing=playing, recent=recent, shelf=shelf)
+
+
+def games():
+    """Every game with achievements as a slim card, for the Games tab. Names
+    not cached yet are looked up eight at a time, so a first open of a large
+    library takes seconds, not minutes; later opens read the cache."""
+    found = found_stores()
+    lib = library(found)
+    played = {(s.id, g): t for s in found for t, g in s.recent()}
+    with ThreadPoolExecutor(8) as pool:
+        names = list(pool.map(lambda item: item[0].game_name(item[1]), lib))
+    return [dict(progress_row(s, g, achs), game=name, header=s.art(g)['header'],
+                 platinum=platinum_time(achs), played=played.get((s.id, g), 0))
+            for (s, g, achs), name in zip(lib, names)]
+
+
+def detail(a, pcts):
+    pct = pcts.get(a['api'])
+    return {'api': a['api'], 'name': a['name'], 'desc': a['desc'], 'icon': a['icon'],
+            'icon_locked': a.get('icon_locked', ''), 'hidden': bool(a.get('hidden')),
+            'unlocked': a['unlocked'], 'time': a['time'], 'percent': pct, 'tier': tier(pct)}
+
+
+def pick_game(found):
+    """(store, game) running now, else played last among games with achievements."""
+    for s in found:
+        run = s.running()
+        if run and run['game'] in s.games():
+            return s, run['game']
+    played = sorted(((t, s, g) for s in found for t, g in s.recent() if g in s.games()), key=lambda r: -r[0])
+    if played:
+        return played[0][1], played[0][2]
+    raise SystemExit('No game to show: play one, or name it: omatrophy.py game steam <appid>')
+
+
+def game_detail(store, game):
+    """Every achievement of one game with rarity, for the tracker."""
+    achs = store.achievements(game)
+    if not achs:
+        raise SystemExit(f'{store.name} has no achievements cached for {game}; launch it once in {store.name}')
+    pcts = store.percents(game)
+    art = store.art(game)
+    run = store.running()
+    return dict(progress_row(store, game, achs), game=store.game_name(game), header=art['header'], hero=art['hero'],
+                platinum=platinum_time(achs), playing=bool(run and run['game'] == game),
+                achievements=[detail(a, pcts) for a in achs])
+
+
+def game(args):
+    found = found_stores()
+    if not args:
+        store, app = pick_game(found)
+    elif len(args) == 2 and args[0] in [s.id for s in found]:
+        store, app = next(s for s in found if s.id == args[0]), args[1]
+    else:
+        raise SystemExit(f'usage: omatrophy.py game [{"|".join(s.id for s in found)} <game id>]')
+    print(json.dumps(game_detail(store, app)))
 
 
 SETTINGS = {'position': ('top-center', 'top-left', 'top-right'),
@@ -239,6 +387,12 @@ def main(argv):
         status()
     elif cmd == 'cabinet':
         cabinet()
+    elif cmd == 'now':
+        print(json.dumps(now()))
+    elif cmd == 'games':
+        print(json.dumps(games()))
+    elif cmd == 'game':
+        game(argv[2:])
     elif cmd == 'demo':
         demo(argv[2:] or ['unlock', 'rare', 'platinum'])
     elif cmd == 'set' and len(argv) == 4:

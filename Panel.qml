@@ -3,11 +3,20 @@ import Quickshell
 import qs.Ui
 import qs.Commons
 
-// The bar button: a trophy that opens the style picker.
+// The bar button: a trophy that opens the cabinet (StylePicker.qml), whose
+// games open the achievement tracker overlay (Tracker.qml).
 Panel {
   id: root
   moduleName: "pym.omatrophy"
   ipcTarget: "pym.omatrophy"
+
+  // The tracker is this plugin's overlay entry point; the shell hands its
+  // summon to Tracker.qml.
+  function openTracker(store, app) {
+    root.close()
+    if (root.bar && root.bar.shell)
+      root.bar.shell.summon("pym.omatrophy", JSON.stringify({ store: store, app: app }))
+  }
 
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
@@ -17,9 +26,9 @@ Panel {
     anchors.fill: parent
     bar: root.bar
     text: ""
-    tooltipText: "OmaTrophy: trophy style and previews"
+    tooltipText: "OmaTrophy: trophies, games and settings"
     Accessible.role: Accessible.Button
-    Accessible.name: "OmaTrophy settings"
+    Accessible.name: "OmaTrophy"
     onPressed: function(b) { root.toggle() }
   }
 
@@ -30,7 +39,7 @@ Panel {
     bar: root.bar
     open: root.opened
     focusTarget: keyCatcher
-    contentWidth: fittedContentWidth(Style.space(380))
+    contentWidth: fittedContentWidth(Style.space(420))
     contentHeight: fittedContentHeight(picker.item ? picker.item.implicitHeight : Style.space(300))
 
     PanelKeyCatcher {
@@ -48,16 +57,24 @@ Panel {
         boundsBehavior: Flickable.StopAtBounds
         interactive: contentHeight > height
 
-        // Loaded by a fresh URL on each open, like the toast cards, so edits
-        // to the picker show without restarting the shell. Text uses the
-        // popup colours: the bar's own foreground is meant for the bar's
+        // Built from the file's current text on each open (FreshObject.qml),
+        // so edits to the picker show without restarting the shell. Text uses
+        // the popup colours: the bar's own foreground is meant for the bar's
         // background and can vanish on the panel's (a light bar, a dark panel).
-        Loader {
+        FreshObject {
           id: picker
           width: scroller.width
-          active: root.opened
-          source: root.opened ? Qt.resolvedUrl("StylePicker.qml") + "?v=" + Date.now() : ""
-          onLoaded: item.width = Qt.binding(function() { return scroller.width })
+          height: item ? item.implicitHeight : 0
+        }
+        Connections {
+          target: root
+          function onOpenedChanged() {
+            if (!root.opened) { picker.clear(); return }
+            var item = picker.load("StylePicker.qml")
+            if (!item) return
+            item.width = Qt.binding(function() { return scroller.width })
+            item.track.connect(root.openTracker)
+          }
         }
       }
     }

@@ -16,10 +16,12 @@ made.
 | [2](0002-overlay-layer-click-through.md) | Show cards on the Overlay layer, click-through and unfocusable | Accepted |
 | [3](0003-rarity-picks-the-metal.md) | Rarity picks the metal; 100% is platinum | Accepted |
 | [4](0004-skip-stale-unlocks.md) | Skip unlocks older than 15 minutes | Accepted |
-| [5](0005-cards-load-by-fresh-url.md) | Load cards by a fresh URL; keep them standalone | Accepted |
+| [5](0005-cards-load-by-fresh-url.md) | Load cards by a fresh URL; keep them standalone | Superseded by 10 |
 | [6](0006-watcher-speaks-json-lines.md) | A Python watcher speaks JSON lines to the shell | Accepted |
 | [7](0007-pluggable-stores.md) | Stores are pluggable; the watcher stays generic | Accepted |
 | [8](0008-never-restart-the-shell-mid-game.md) | Develop without restarting the live shell | Accepted |
+| [9](0009-tracker-is-an-overlay.md) | The achievement tracker is the plugin's overlay entry point | Accepted |
+| [10](0010-build-views-from-their-text.md) | Build live-edited views from their text | Accepted |
 
 ## Rules
 

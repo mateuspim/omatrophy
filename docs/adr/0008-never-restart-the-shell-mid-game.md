@@ -12,7 +12,7 @@ can disturb it.
 
 `dev/preview.sh` runs a throwaway Quickshell instance with the theme's
 colours and `omatrophy.py demo` events, and never touches the live shell.
-Cards reload by fresh URL (ADR 5). Agents check `pgrep -f SteamLaunch` and
+Cards reload by fresh URL (ADR 5; since ADR 10, built from their text). Agents check `pgrep -f SteamLaunch` and
 ask before `omarchy restart shell`.
 
 ## Consequences

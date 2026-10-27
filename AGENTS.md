@@ -10,9 +10,10 @@ says how the parts fit, `docs/adr/` why, `docs/specs/` what the contracts are
 
 ## Project
 
-- Layout: every `.qml` file at the root. `manifest.json` names two entry
-  points: `Service.qml` (the watcher process and the toast window) and
-  `Panel.qml` (the bar button). Don't add QML subfolders. `omatrophy.py` is
+- Layout: every `.qml` file at the root. `manifest.json` names three entry
+  points: `Service.qml` (the watcher process and the toast window),
+  `Panel.qml` (the bar button) and `Tracker.qml` (the achievement tracker
+  overlay). Don't add QML subfolders. `omatrophy.py` is
   the watcher and CLI; `stores/` holds one module per game store; trophy art
   in `assets/<set>/`; design sources in `design/`; dev tools in `dev/` and
   `tools/`; tests in `tests/`.
@@ -23,11 +24,12 @@ says how the parts fit, `docs/adr/` why, `docs/specs/` what the contracts are
 - Qt 6.12: QtQuick exports its own `Color`. Write
   `import qs.Commons as Commons` and `Commons.Color.x`; never a bare `Color.`
   (`tests/` enforces it).
-- `TrophyToast.qml`, `PlatinumCard.qml` and `StylePicker.qml` load by a fresh
-  URL so edits show without a shell restart (ADR 5). They must not use other
-  QML types from this folder; the `Trophy` component is repeated in both
-  cards on purpose. `Service.qml`, `Panel.qml` and `manifest.json` need
-  `omarchy restart shell`.
+- `TrophyToast.qml`, `PlatinumCard.qml`, `StylePicker.qml` and
+  `TrackerView.qml` are built from their current text by `FreshObject.qml`
+  so edits show without a shell restart (ADR 10; Omarchy's Quickshell caches
+  plugin files, so a `?v=` URL no longer works). They must not use other QML types from this folder; the `Trophy`
+  component is repeated on purpose. `Service.qml`, `Panel.qml`, `Tracker.qml`,
+  `FreshObject.qml` and `manifest.json` need `omarchy restart shell`.
 - Popup text uses `Commons.Color.popups.text`, never the bar's foreground:
   the bar's colour is meant for the bar's background.
 - Stores read the launcher's local data and need no account keys (ADR 1,
@@ -70,8 +72,9 @@ says how the parts fit, `docs/adr/` why, `docs/specs/` what the contracts are
   config.
 - Visual checks: `dev/preview.sh [bronze|silver|gold|platinum]` or
   `dev/preview.sh --picker` runs a throwaway Quickshell instance with sample
-  events; it never touches the live shell. Hero captures for the README come
-  from offscreen renders with fake data only.
+  events; it never touches the live shell. `dev/render.sh <view> out.png`
+  renders offscreen from the fake games in `dev/samples/`; hero captures for
+  the README come from it only, never with `--live`.
 - Live shell log (read-only):
   `quickshell log -p /usr/share/omarchy/shell -t 200 | grep -i omatrophy`.
 

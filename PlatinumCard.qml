@@ -11,16 +11,20 @@ import qs.Commons as Commons
 //   4. on landing: a bloom of light, a glitter burst, a flash ring, slow
 //      rays, a shine across the metal, and the chime (`chime` signal)
 //   5. the badge opens into a wide card over the game's hero art
-//   6. PLATINUM writes itself letter by letter, the name rises in, the
-//      trophy count rolls up from zero
+//   6. PLATINUM TROPHY writes itself letter by letter, the name rises in,
+//      the count rolls up from zero and the bar fills with it
 // then it holds, glinting now and then, folds back into the badge and leaves.
+//
+// It speaks the toast's language (TrophyToast.qml): a metal rail down the
+// left edge, the trophy on a tile washed in its metal, a spaced label over
+// the name, then a count and a progress bar.
 //
 // The badge stays against the screen edge it came from: at top-right the
 // card opens leftward with the badge on its right. Light and particles draw
 // outside the card, into `pad` of transparent margin, which Service.qml
 // takes back out of the window margins.
 //
-// Loaded by a fresh URL per card (see Service.qml), so it uses no other QML
+// Built from its text per card (FreshObject.qml), so it uses no other QML
 // file from this folder; the Trophy component below is repeated in
 // TrophyToast.qml for that reason.
 Item {
@@ -216,7 +220,7 @@ Item {
     // 6. text
     ScriptAction { script: twinkle.enabled = true }
     ParallelAnimation {
-      NumberAnimation { target: root; property: "reveal"; to: 9; duration: 650 }
+      NumberAnimation { target: root; property: "reveal"; to: 16; duration: 800 }
       SequentialAnimation {
         PauseAnimation { duration: 200 }
         ParallelAnimation {
@@ -382,6 +386,13 @@ Item {
           GradientStop { position: 1; color: "transparent" }
         }
       }
+
+      // The metal's rail down the left edge, as on every toast.
+      Rectangle {
+        width: 3
+        height: card.height
+        color: root.metal
+      }
     }
 
 
@@ -491,11 +502,22 @@ Item {
         }
       }
 
+      // The toast's trophy tile, washed in platinum, over a dark base so it
+      // reads on any hero art.
       Rectangle {
         anchors.centerIn: parent
         width: 92
         height: 92
         color: Qt.alpha(root.bg, 0.6)
+        Rectangle {
+          anchors.fill: parent
+          border.width: 1
+          border.color: Qt.alpha(root.metal, 0.6)
+          gradient: Gradient {
+            GradientStop { position: 0; color: Qt.alpha(root.metal, 0.18) }
+            GradientStop { position: 1; color: Qt.alpha(root.metal, 0.04) }
+          }
+        }
       }
 
       // Progress as a square with stepped corners, walked clockwise from the
@@ -575,14 +597,14 @@ Item {
       width: root.full - root.badge - 30 - 26
       x: root.mirror ? badgeSlot.x - 30 - width : badgeSlot.x + badgeSlot.width + 30
       anchors.verticalCenter: parent.verticalCenter
-      spacing: 4
+      spacing: 2
 
-      // PLATINUM, one letter at a time.
+      // PLATINUM TROPHY, one letter at a time, set like the toast's label.
       Row {
         anchors.right: root.mirror ? parent.right : undefined
-        spacing: 7
+        spacing: 2
         Repeater {
-          model: "PLATINUM".split("")
+          model: "PLATINUM TROPHY".split("")
           Text {
             required property string modelData
             required property int index
@@ -592,7 +614,7 @@ Item {
             opacity: shown
             transform: Translate { y: (1 - shown) * 10 }
             font.family: Commons.Style.font.family
-            font.pixelSize: Commons.Style.font.subtitle
+            font.pixelSize: Commons.Style.font.bodySmall
             font.bold: true
           }
         }
@@ -613,17 +635,53 @@ Item {
           opacity: 0
         }
       }
-      Text {
+      Column {
         id: stats
         width: parent.width
-        horizontalAlignment: root.mirror ? Text.AlignRight : Text.AlignLeft
-        // A clean exit: the game has nothing left to give.
-        text: root.event ? ("exit 0 · " + Math.round(root.counted) + " / " + root.event.total
-              + (root.span(root.event) ? " · " + root.span(root.event) : "")) : ""
-        color: Qt.alpha(root.fg, 0.8)
-        font.family: Commons.Style.font.family
-        font.pixelSize: Commons.Style.font.body
+        spacing: 2
         opacity: 0
+        Text {
+          width: parent.width
+          horizontalAlignment: root.mirror ? Text.AlignRight : Text.AlignLeft
+          text: root.span(root.event) ? "Every achievement, in " + root.span(root.event) : "Every achievement"
+          color: Qt.alpha(root.fg, 0.7)
+          font.family: Commons.Style.font.family
+          font.pixelSize: Commons.Style.font.body
+        }
+        Item { width: 1; height: 8 }
+        Item {
+          width: parent.width
+          height: count.height
+          // A clean exit: the game has nothing left to give.
+          Text {
+            text: "exit 0"
+            color: Qt.alpha(root.fg, 0.5)
+            font.family: Commons.Style.font.family
+            font.pixelSize: Commons.Style.font.bodySmall
+          }
+          Text {
+            id: count
+            anchors.right: parent.right
+            text: root.event ? Math.round(root.counted) + " / " + root.event.total : ""
+            color: root.fg
+            font.family: Commons.Style.font.family
+            font.pixelSize: Commons.Style.font.bodySmall
+            font.bold: true
+          }
+        }
+        Item { width: 1; height: 5 }
+        // Fills with the count, in the metal rather than the accent: this
+        // bar only ever ends full.
+        Rectangle {
+          width: parent.width
+          height: 4
+          color: Qt.alpha(root.fg, 0.1)
+          Rectangle {
+            width: root.event && root.event.total ? parent.width * root.counted / root.event.total : 0
+            height: parent.height
+            color: root.metal
+          }
+        }
       }
     }
   }

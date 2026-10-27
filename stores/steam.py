@@ -2,15 +2,23 @@
 
 Steam writes unlocks to <Steam>/appcache/stats/UserGameStats_<account>_<app>.bin,
 so this needs no API key and works with a private profile. Rarity comes from
-Steam's public, keyless global-percentages endpoint.
+Steam's public, keyless global-percentages endpoint. What is running comes
+from /proc (Steam starts every game through `reaper SteamLaunch AppId=N`),
+what was played last from userdata/<account>/config/localconfig.vdf.
 """
-import os, struct
+import os, re, struct, threading, time
 
-from .base import STATE, Store, cached, http_json, read_json, write_json
+from .base import CACHE, STATE, Store, cached, http_json, read_json, write_json
 
 ICON_BASE = 'https://cdn.fastly.steamstatic.com/steamcommunity/public/images/apps'
 ART_BASE = 'https://cdn.fastly.steamstatic.com/steam/apps'
 NAMES = f'{STATE}/names.json'
+# Global rarity drifts slowly; a day-old copy keeps the panel and the tracker
+# from asking Steam on every open.
+RARITY_SECONDS = 24 * 3600
+# `omatrophy.py games` looks names up from several threads; the cache file is
+# read and rewritten whole, so one writer at a time.
+NAMES_LOCK = threading.Lock()
 
 
 def parse_kv(b, pos=0):
@@ -40,6 +48,96 @@ def parse_kv(b, pos=0):
             raise ValueError(f'unknown type {t}')
         d[k] = v
     return d, pos
+
+
+def parse_text_vdf(text):
+    """Parse Steam's text KeyValues (localconfig.vdf, appmanifest)."""
+    root, stack, key = {}, [], None
+    cur = root
+    for quoted, brace in re.findall(r'"((?:[^"\\]|\\.)*)"|([{}])', text):
+        if brace == '{':
+            child = {}
+            cur[key] = child
+            stack.append(cur)
+            cur, key = child, None
+        elif brace == '}':
+            if not stack:
+                break
+            cur, key = stack.pop(), None
+        elif key is None:
+            key = quoted
+        else:
+            cur[key], key = quoted, None
+    return root
+
+
+def find_apps(tree):
+    """The `apps` block that carries LastPlayed; Steam nests it under
+    UserLocalConfigStore/Software/Valve/Steam, with varying key case."""
+    for k, v in tree.items():
+        if not isinstance(v, dict):
+            continue
+        if k.lower() == 'apps' and any(isinstance(x, dict) and 'LastPlayed' in x for x in v.values()):
+            return v
+        found = find_apps(v)
+        if found:
+            return found
+    return None
+
+
+def last_played(text):
+    """[(unix seconds, appid)] newest first, from localconfig.vdf's text."""
+    apps = find_apps(parse_text_vdf(text)) or {}
+    rows = [(int(v['LastPlayed']), k) for k, v in apps.items()
+            if isinstance(v, dict) and str(v.get('LastPlayed', '')).isdigit() and int(v['LastPlayed']) > 0]
+    return sorted(rows, reverse=True)
+
+
+def launched_app(cmdline):
+    """The appid in a `reaper SteamLaunch AppId=N -- ...` command line (NUL-separated), or None.
+    Matches whole arguments so a shell that merely mentions SteamLaunch doesn't count."""
+    args = cmdline.split(b'\0')
+    if b'SteamLaunch' not in args:
+        return None
+    for a in args:
+        if a.startswith(b'AppId=') and a[6:].isdigit():
+            return a[6:].decode()
+    return None
+
+
+def started_at(stat, boot, ticks):
+    """Unix start time of a process from its /proc/<pid>/stat line."""
+    # The command name (field 2) may hold spaces and parentheses; count from the last ')'.
+    fields = stat[stat.rindex(')') + 2:].split()
+    return boot + int(fields[19]) / ticks
+
+
+def boot_time(proc='/proc'):
+    with open(f'{proc}/stat') as f:
+        for line in f:
+            if line.startswith('btime '):
+                return int(line.split()[1])
+    return 0
+
+
+def running_game(proc='/proc'):
+    """{'game': appid, 'since': unix seconds} for the Steam game running now, or None."""
+    try:
+        pids = [p for p in os.listdir(proc) if p.isdigit()]
+    except OSError:
+        return None
+    for pid in pids:
+        try:
+            with open(f'{proc}/{pid}/cmdline', 'rb') as f:
+                app = launched_app(f.read())
+            if not app:
+                continue
+            with open(f'{proc}/{pid}/stat') as f:
+                since = started_at(f.read(), boot_time(proc), os.sysconf('SC_CLK_TCK'))
+            return {'game': app, 'since': int(since)}
+        except (OSError, ValueError, IndexError):
+            continue
+    return None
 
 
 def read_kv(path):
@@ -97,6 +195,9 @@ def read_achievements(stats, uid, app):
             out.append({'api': str(a.get('name', f'{sid}_{bit}')),
                         'name': str(name if name is not None else a.get('name')),
                         'desc': str(desc or ''), 'icon': d.get('icon', ''),
+                        'icon_locked': d.get('icon_gray', ''),
+                        # Steam writes hidden as an int or a string, depending on the schema's age.
+                        'hidden': str(d.get('hidden', 0)) == '1',
                         'unlocked': t > 0 or bool(data >> int(bit) & 1), 'time': t})
     return out
 
@@ -125,31 +226,49 @@ class Steam(Store):
         achs = read_achievements(self.stats, self.uid, app)
         for a in achs:
             a['icon'] = f"{ICON_BASE}/{app}/{a['icon']}" if a['icon'] else ''
+            a['icon_locked'] = f"{ICON_BASE}/{app}/{a['icon_locked']}" if a['icon_locked'] else ''
         return achs
+
+    def running(self):
+        return running_game()
+
+    def recent(self):
+        try:
+            with open(f'{self.root}/userdata/{self.uid}/config/localconfig.vdf', encoding='utf8', errors='replace') as f:
+                return last_played(f.read())
+        except OSError:
+            return []
 
     def game_name(self, app):
         """Store name, cached in the state folder; the appid when offline."""
-        names = read_json(NAMES, {})
+        with NAMES_LOCK:
+            names = read_json(NAMES, {})
         if app in names:
             return names[app]
         try:
             name = http_json(f'https://store.steampowered.com/api/appdetails?appids={app}&filters=basic')[app]['data']['name']
         except Exception:
             return f'App {app}'
-        names[app] = name
-        write_json(NAMES, names)
+        with NAMES_LOCK:
+            names = read_json(NAMES, {})
+            names[app] = name
+            write_json(NAMES, names)
         return name
 
-    def percent(self, app, api):
+    def percents(self, app):
+        """Global rarity for every achievement, cached a day; a stale copy when offline."""
+        path = f'{CACHE}/rarity/{app}.json'
+        old = read_json(path, {})
+        if old.get('time', 0) > time.time() - RARITY_SECONDS:
+            return old['percents']
         try:
             r = http_json(f'https://api.steampowered.com/ISteamUserStats/'
                           f'GetGlobalAchievementPercentagesForApp/v0002/?gameid={app}')
-            for a in r['achievementpercentages']['achievements']:
-                if a['name'] == api:
-                    return float(a['percent'])
+            pcts = {a['name']: float(a['percent']) for a in r['achievementpercentages']['achievements']}
         except Exception:
-            pass
-        return None
+            return old.get('percents', {})
+        write_json(path, {'time': int(time.time()), 'percents': pcts})
+        return pcts
 
     def library_art(self, app, name):
         """Art Steam already keeps for its library view, if any (newer clients nest it in a hashed folder)."""

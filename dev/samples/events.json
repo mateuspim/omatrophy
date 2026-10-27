@@ -1,0 +1,58 @@
+{
+ "bronze": {
+  "type": "unlock",
+  "store": "steam",
+  "app": "1",
+  "game": "Starfall Odyssey",
+  "name": "Long Way Home",
+  "desc": "Cross the Veil",
+  "icon": "",
+  "unlocked": 31,
+  "total": 52,
+  "time": 1793000000,
+  "percent": 64.0,
+  "rare": false,
+  "tier": "bronze"
+ },
+ "silver": {
+  "type": "unlock",
+  "store": "steam",
+  "app": "1",
+  "game": "Starfall Odyssey",
+  "name": "Long Way Home",
+  "desc": "Cross the Veil",
+  "icon": "",
+  "unlocked": 31,
+  "total": 52,
+  "time": 1793000000,
+  "percent": 22.7,
+  "rare": false,
+  "tier": "silver"
+ },
+ "gold": {
+  "type": "unlock",
+  "store": "steam",
+  "app": "1",
+  "game": "Starfall Odyssey",
+  "name": "Long Way Home",
+  "desc": "Cross the Veil",
+  "icon": "",
+  "unlocked": 31,
+  "total": 52,
+  "time": 1793000000,
+  "percent": 3.4,
+  "rare": true,
+  "tier": "gold"
+ },
+ "platinum": {
+  "type": "platinum",
+  "store": "steam",
+  "app": "1",
+  "game": "Starfall Odyssey",
+  "total": 52,
+  "first": 1791963200,
+  "last": 1793000000,
+  "hero": "",
+  "header": ""
+ }
+}

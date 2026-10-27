@@ -28,15 +28,29 @@ class Store:
     def achievements(self, game):
         """[{api, name, desc, icon, unlocked, time}] for one game: `api` a
         stable key, `icon` an image URL or '' (fetched only
-        when that unlock is shown), `time` unix seconds or 0 when unknown."""
+        when that unlock is shown), `time` unix seconds or 0 when unknown.
+        Optional keys: `hidden` (the store keeps it secret until unlocked)
+        and `icon_locked` (the greyed-out icon)."""
+        return []
+
+    def running(self):
+        """{'game': id, 'since': unix seconds} for the game being played now, or None."""
+        return None
+
+    def recent(self):
+        """[(unix seconds, game id)] last played, newest first; [] when the store doesn't say."""
         return []
 
     def game_name(self, game):
         return f'{self.name} {game}'
 
+    def percents(self, game):
+        """{api: share of players} for one game; {} when the store doesn't say."""
+        return {}
+
     def percent(self, game, api):
         """Share of players with this achievement, or None when the store doesn't say."""
-        return None
+        return self.percents(game).get(api)
 
     def art(self, game):
         """{'hero': wide art URL or '', 'header': banner URL or ''} for the platinum card."""

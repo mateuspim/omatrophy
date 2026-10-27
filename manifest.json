@@ -8,15 +8,17 @@
   "description": "Steam achievement toasts over your games, with a platinum moment at 100%.",
   "kinds": [
     "service",
-    "bar-widget"
+    "bar-widget",
+    "overlay"
   ],
   "entryPoints": {
     "service": "Service.qml",
-    "barWidget": "Panel.qml"
+    "barWidget": "Panel.qml",
+    "overlay": "Tracker.qml"
   },
   "barWidget": {
     "displayName": "OmaTrophy",
-    "description": "Trophy style, previews and toast settings",
+    "description": "Your trophies, the game you're playing, and toast settings",
     "category": "Gaming",
     "allowMultiple": false,
     "defaultSection": "right",

@@ -188,6 +188,140 @@ class Cabinet(unittest.TestCase):
         self.assertEqual(omatrophy.totals(self.ROWS), {'games': 6, 'trophies': 158, 'platinums': 1})
 
 
+LOCALCONFIG = """"UserLocalConfigStore"
+{
+	"Software"
+	{
+		"Valve"
+		{
+			"Steam"
+			{
+				"apps"
+				{
+					"10"
+					{
+						"LastPlayed"		"1700000000"
+					}
+					"20"
+					{
+						"LastPlayed"		"1800000000"
+						"Playtime"		"5"
+					}
+					"30"
+					{
+						"LastPlayed"		"0"
+					}
+				}
+			}
+		}
+	}
+}
+"""
+
+
+class Played(unittest.TestCase):
+    def test_text_vdf_nests_and_unescapes_nothing(self):
+        self.assertEqual(steam.parse_text_vdf('"a" { "b" "1" "c" { "d" "x \\"y\\"" } }'),
+                         {'a': {'b': '1', 'c': {'d': 'x \\"y\\"'}}})
+
+    def test_last_played_newest_first_without_never_played(self):
+        self.assertEqual(steam.last_played(LOCALCONFIG), [(1800000000, '20'), (1700000000, '10')])
+
+    def test_store_reads_its_accounts_localconfig(self):
+        sd = SteamDir(['First'])
+        self.addCleanup(sd.close)
+        root = os.path.dirname(os.path.dirname(sd.stats))
+        os.makedirs(f'{root}/userdata/{UID}/config')
+        with open(f'{root}/userdata/{UID}/config/localconfig.vdf', 'w') as f:
+            f.write(LOCALCONFIG)
+        sd.unlock({})
+        with mock.patch.dict(os.environ, {'STEAM_DIR': root, 'STEAM_ACCOUNT': UID}):
+            self.assertEqual(steam.Steam().recent()[0], (1800000000, '20'))
+
+    def test_launch_line_names_the_app(self):
+        line = b'/Steam/ubuntu12_32/reaper\0SteamLaunch\0AppId=1774580\0--\0/proton\0waitforexitandrun\0'
+        self.assertEqual(steam.launched_app(line), '1774580')
+
+    def test_a_shell_mentioning_steamlaunch_is_not_a_game(self):
+        self.assertIsNone(steam.launched_app(b'bash\0-c\0pgrep -f "SteamLaunch AppId=12"\0'))
+
+    def test_start_time_survives_odd_process_names(self):
+        stat = '42 (we (ird) name) S ' + ' '.join(['0'] * 18) + ' 500 0'
+        self.assertEqual(steam.started_at(stat, 1000, 100), 1005)
+
+    def test_running_game_from_a_fake_proc(self):
+        with tempfile.TemporaryDirectory() as proc:
+            with open(f'{proc}/stat', 'w') as f:
+                f.write('cpu 1 2 3\nbtime 1000\n')
+            for pid, cmd in (('7', b'bash\0'), ('9', b'reaper\0SteamLaunch\0AppId=55\0')):
+                os.makedirs(f'{proc}/{pid}')
+                with open(f'{proc}/{pid}/cmdline', 'wb') as f:
+                    f.write(cmd)
+                with open(f'{proc}/{pid}/stat', 'w') as f:
+                    f.write(f'{pid} (x) S ' + ' '.join(['0'] * 18) + f' {os.sysconf("SC_CLK_TCK") * 30} 0')
+            self.assertEqual(steam.running_game(proc), {'game': '55', 'since': 1030})
+
+
+class Rarity(unittest.TestCase):
+    def test_cached_a_day_and_kept_when_offline(self):
+        body = {'achievementpercentages': {'achievements': [{'name': 'ACH_0', 'percent': '12.5'}]}}
+        with tempfile.TemporaryDirectory() as cache, mock.patch.object(steam, 'CACHE', cache):
+            with mock.patch.object(steam, 'http_json', return_value=body) as http:
+                self.assertEqual(steam.Steam.percents(None, APP), {'ACH_0': 12.5})
+                self.assertEqual(steam.Steam.percent(steam.Steam.__new__(steam.Steam), APP, 'ACH_0'), 12.5)
+                self.assertEqual(http.call_count, 1)
+            with open(f'{cache}/rarity/{APP}.json') as f:
+                stale = json.load(f)
+            stale['time'] = 0
+            with open(f'{cache}/rarity/{APP}.json', 'w') as f:
+                json.dump(stale, f)
+            with mock.patch.object(steam, 'http_json', side_effect=OSError('offline')):
+                self.assertEqual(steam.Steam.percents(None, APP), {'ACH_0': 12.5})
+
+
+def ach(api, unlocked=False, t=0, **kw):
+    return dict({'api': api, 'name': api.title(), 'desc': f'Do {api}', 'icon': f'{api}.jpg',
+                 'unlocked': unlocked, 'time': t}, **kw)
+
+
+class NowTab(unittest.TestCase):
+    def test_platinum_time_is_the_last_unlock_of_a_complete_game(self):
+        self.assertEqual(omatrophy.platinum_time([ach('a', True, 5), ach('b', True, 9)]), 9)
+        self.assertEqual(omatrophy.platinum_time([ach('a', True, 5), ach('b')]), 0)
+        self.assertEqual(omatrophy.platinum_time([]), 0)
+
+    def test_latest_unlocks_newest_first_since_a_time(self):
+        achs = [ach('a', True, 5), ach('b', True, 9), ach('c'), ach('d', True, 7), ach('e', True, 0)]
+        self.assertEqual([a['api'] for a in omatrophy.latest_unlocks(achs, 2)], ['b', 'd'])
+        self.assertEqual([a['api'] for a in omatrophy.latest_unlocks(achs, 5, since=7)], ['b', 'd'])
+
+    def test_next_up_is_the_most_common_locked(self):
+        achs = [ach('a', True, 5), ach('b'), ach('c'), ach('d')]
+        pcts = {'a': 90.0, 'b': 10.0, 'c': 60.0}
+        self.assertEqual([a['api'] for a in omatrophy.next_up(achs, pcts, 2)], ['c', 'b'])
+
+    def test_recent_games_skip_the_running_one_and_unknown_games(self):
+        played = [(9, ('steam', '1')), (8, ('steam', 'x')), (7, ('steam', '2')), (6, ('steam', '3'))]
+        owned = {('steam', '1'), ('steam', '2'), ('steam', '3')}
+        self.assertEqual(omatrophy.recent_games(played, owned, ('steam', '1'), 2),
+                         [(7, ('steam', '2')), (6, ('steam', '3'))])
+
+    def test_hidden_and_locked_icon_come_from_the_schema(self):
+        sd = SteamDir(['First'])
+        self.addCleanup(sd.close)
+        sch = schema(['First'])
+        sch[APP]['stats']['1']['bits']['0']['display'].update(hidden='1', icon_gray='0g.jpg')
+        sd.write(f'UserGameStatsSchema_{APP}.bin', kv(sch))
+        sd.unlock({})
+        [a] = steam.read_achievements(sd.stats, UID, APP)
+        self.assertEqual((a['hidden'], a['icon_locked']), (True, '0g.jpg'))
+
+    def test_tracker_detail_carries_rarity_and_tier(self):
+        d = omatrophy.detail(ach('a', hidden=True, icon_locked='g.jpg'), {'a': 4.0})
+        self.assertEqual((d['percent'], d['tier'], d['hidden'], d['icon_locked']), (4.0, 'gold', True, 'g.jpg'))
+        self.assertEqual(omatrophy.detail(ach('b'), {})['tier'], 'bronze')
+
+
 class Stores(unittest.TestCase):
     def test_missing_steam_is_unavailable(self):
         with tempfile.TemporaryDirectory() as home, \
@@ -262,9 +396,10 @@ class Qml(unittest.TestCase):
                 self.assertIsNone(re.search(r'(?<![\w.])Color\.', code), f'{name}:{n}: use Commons.Color')
 
     def test_cards_load_standalone(self):
-        # Cards load by fresh URL, where sibling QML types don't resolve.
+        # Cards are built from their text (FreshObject.qml, ADR 10) and stay
+        # standalone so each reads on its own.
         siblings = {n[:-4] for n, _ in self.qml()}
-        for name in ('TrophyToast.qml', 'PlatinumCard.qml'):
+        for name in ('TrophyToast.qml', 'PlatinumCard.qml', 'StylePicker.qml', 'TrackerView.qml'):
             text = dict(self.qml())[name]
             for other in siblings - {name[:-4]}:
                 self.assertNotRegex(text, rf'\b{other}\s*\{{', f'{name} uses {other}')

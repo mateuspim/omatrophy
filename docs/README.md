@@ -3,8 +3,8 @@
 ## Use OmaTrophy
 
 - [README](../README.md): install, features, settings and requirements.
-- [Command line](specs/cli.md): `test`, `status`, `set` and environment
-  variables.
+- [Command line](specs/cli.md): `test`, `status`, `now`, `game`, `set`, the
+  tracker overlay and environment variables.
 - [Settings file](specs/settings.md).
 - [Troubleshooting](runbooks/troubleshooting.md).
 - [Security and privileges](../SECURITY.md).
@@ -17,5 +17,5 @@
 - [Specs](specs/): [event lines](specs/events.md),
   [command line](specs/cli.md), [settings and manifest](specs/settings.md).
 - [Development runbook](runbooks/development.md): setup, tests, previews,
-  releases.
+  offscreen renders, releases.
 - [Contributing](../CONTRIBUTING.md) and [agent instructions](../AGENTS.md).

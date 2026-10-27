@@ -32,10 +32,11 @@ quickshell log -p /usr/share/omarchy/shell -t 200 | grep -i omatrophy
 
 | You changed | It shows |
 | --- | --- |
-| `TrophyToast.qml`, `PlatinumCard.qml` | On the next card (loaded by fresh URL). |
+| `TrophyToast.qml`, `PlatinumCard.qml` | On the next card (built from the file's text). |
 | `StylePicker.qml` | The next time the bar panel opens. |
+| `TrackerView.qml` | The next time the tracker opens. |
 | `omatrophy.py`, `stores/` | When the watcher restarts: after `omarchy restart shell`, or kill it (`pkill -f 'omatrophy.py watch'`) and the service starts it again in 10 s. |
-| `Service.qml`, `Panel.qml`, `manifest.json` | After `omarchy restart shell`. |
+| `Service.qml`, `Panel.qml`, `Tracker.qml`, `FreshObject.qml`, `manifest.json` | After `omarchy restart shell`. |
 
 Don't restart the shell while a game runs (`pgrep -f SteamLaunch`): games
 don't always survive it.
@@ -64,6 +65,22 @@ dev/preview.sh                   # unlock, rare, then platinum
 dev/preview.sh -t 30 platinum    # stop after 30 s (default 25)
 dev/preview.sh --picker          # the bar panel in a window
 ```
+
+## Render to a PNG
+
+`dev/render.sh` draws one view offscreen and saves it: no window, no live
+shell. It uses the fake games in `dev/samples/`, so its output is safe for
+the README; `--live` reads your own stores instead and stays out of git.
+
+```sh
+dev/render.sh now /tmp/now.png          # the panel mid-game; also idle, games, settings, loading
+dev/render.sh tracker /tmp/tracker.png  # the achievement tracker; tracker-loading for its skeleton
+dev/render.sh gold /tmp/gold.png        # a toast: bronze, silver, gold, platinum
+dev/render.sh --live tracker /tmp/t.png # your running or last game
+```
+
+The software renderer drops `MultiEffect` layers (the omarchy set's accent
+inlay, card masks and shadows); check those with `dev/preview.sh`.
 
 ## Refresh the preview
 
