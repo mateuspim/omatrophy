@@ -46,6 +46,14 @@ Column {
   property var hiddenKeys: ({})
   readonly property var sortedGames: games ? games.filter(showGame).sort(gameOrder) : []
   readonly property int hiddenCount: games ? games.filter(function(g) { return isHidden(g) }).length : 0
+  // With the community backfill a library runs to hundreds of games, and a
+  // row each made the panel slow to open: the list shows a page at a time
+  // and "Show more" adds the next. Filter and sort see every game first.
+  readonly property int gamesPage: 25
+  property int gamesShown: gamesPage
+  readonly property var shownGames: sortedGames.slice(0, gamesShown)
+  onSortChanged: gamesShown = gamesPage
+  onGameFilterChanged: gamesShown = gamesPage
   // True while the filter field has the keyboard; Panel.qml then lets keys
   // through to it instead of its own shortcuts.
   readonly property bool typing: filterField.activeFocus
@@ -873,7 +881,7 @@ Column {
     }
 
     Repeater {
-      model: root.sortedGames
+      model: root.shownGames
       // One game: art, name, count and a thin bar; a finished game carries
       // the platinum rail and date instead.
       delegate: Item {
@@ -974,6 +982,31 @@ Column {
             fill: gameRow.platinum ? root.metalColors.platinum : Commons.Color.accent
           }
         }
+      }
+    }
+
+    Item {
+      width: root.width
+      height: moreLink.height + Commons.Style.space(8)
+      visible: root.sortedGames.length > root.gamesShown
+      Accessible.role: Accessible.Button
+      Accessible.name: moreLink.text
+      Text {
+        id: moreLink
+        anchors.centerIn: parent
+        text: "Show " + Math.min(root.gamesPage, root.sortedGames.length - root.gamesShown)
+              + " more · " + (root.sortedGames.length - root.gamesShown) + " left"
+        color: Commons.Color.accent
+        opacity: moreHit.containsMouse ? 1 : 0.75
+        font.family: Commons.Style.font.family
+        font.pixelSize: Commons.Style.font.caption
+      }
+      MouseArea {
+        id: moreHit
+        anchors.fill: parent
+        hoverEnabled: true
+        cursorShape: Qt.PointingHandCursor
+        onClicked: root.gamesShown += root.gamesPage
       }
     }
 

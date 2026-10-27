@@ -29,9 +29,9 @@ achievement list.
   progress through the game, filling in as you watch.
 - A trophy cabinet in the bar: the game you're playing with this session's
   unlocks and the likeliest next ones, or the last three games you played,
-  and a shelf of your platinums; every game, filtered as you type and sorted
-  by recent, closest to platinum or name, with games you won't finish set
-  aside.
+  and a shelf of your platinums; every game, 25 at a time, filtered as you
+  type and sorted by recent, closest to platinum or name, with games you
+  won't finish set aside.
 - An achievement tracker over the screen: every achievement of a game with
   its rarity, the day you got it, and how far along a counter is ("52 /
   80"); filtered to locked, unlocked or rare, sorted, and searched as you

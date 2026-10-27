@@ -17,7 +17,8 @@
 - The bar panel in three tabs. Now: the game you're playing (hero art,
   progress, this session's unlocks, the likeliest next ones) or the last
   three you played, and a shelf of platinums. Games: every game with its
-  count, sorted by recent, closest to platinum or name. Settings: the style,
+  count, 25 at a time with "Show more", sorted by recent, closest to
+  platinum or name. Settings: the style,
   previews, position and sound. Shimmering placeholders while data loads,
   in the panel and the tracker.
 - An achievement tracker overlay: every achievement of a game with rarity
