@@ -21,6 +21,15 @@ Item {
 
   property string filter: "all"
   property string search: ""
+  // Remembered in config.json as `tracker-sort`, written only when the
+  // viewer changes it.
+  property string sortBy: "recent"
+  readonly property var sorts: [
+    { value: "recent", label: "Recent" },
+    { value: "rarity", label: "Rarest" },
+    { value: "name", label: "A–Z" },
+    { value: "game", label: "Game order" }
+  ]
   property string iconSet: "omarchy"
   property var rows: []
   // Hidden achievements revealed with Enter, by api name; hover reveals too.
@@ -49,13 +58,39 @@ Item {
   onGameChanged: rebuild()
   onFilterChanged: rebuild()
   onSearchChanged: rebuild()
+  onSortByChanged: rebuild()
 
-  // Unlocked newest first, then locked with the most common first: what you
-  // did lately, then what you're likeliest to do next.
+  // Recent: unlocked newest first, then locked with the most common first:
+  // what you did lately, then what you're likeliest to do next. Rarest:
+  // fewest players first, unknown rarity last. A–Z by name. Game order:
+  // as the store lists them, often the story's order.
   function order(a, b) {
+    if (sortBy === "rarity") {
+      if ((a.percent === null) !== (b.percent === null)) return a.percent === null ? 1 : -1
+      return (a.percent || 0) - (b.percent || 0)
+    }
+    if (sortBy === "name") return a.name.localeCompare(b.name)
     if (a.unlocked !== b.unlocked) return a.unlocked ? -1 : 1
     if (a.unlocked) return b.time - a.time
     return (b.percent || 0) - (a.percent || 0)
+  }
+
+  function sorted(achs) {
+    // filter() already copied the list, so sorting in place is safe; the
+    // store's order is the copy as it came.
+    return sortBy === "game" ? achs : achs.sort(order)
+  }
+
+  function cycleSort(step) {
+    var i = 0
+    while (i < sorts.length && sorts[i].value !== sortBy) i++
+    sortBy = sorts[(i + step + sorts.length) % sorts.length].value
+    saver.exec(["python3", helperPath, "set", "tracker-sort", sortBy])
+  }
+
+  function sortLabel() {
+    for (var i = 0; i < sorts.length; i++) if (sorts[i].value === sortBy) return sorts[i].label
+    return sortBy
   }
 
   function keep(a) {
@@ -70,7 +105,7 @@ Item {
 
   function rebuild() {
     if (!game) { rows = []; return }
-    rows = game.achievements.filter(keep).sort(order)
+    rows = sorted(game.achievements.filter(keep))
     list.currentIndex = -1
     list.positionViewAtBeginning()
   }
@@ -130,8 +165,11 @@ Item {
       var c = {}
       try { c = JSON.parse(text()) } catch (e) { return }
       if (c.icons) root.iconSet = c.icons
+      if (c["tracker-sort"]) root.sortBy = c["tracker-sort"]
     }
   }
+
+  Process { id: saver }
 
   Process {
     id: loader
@@ -234,6 +272,10 @@ Item {
           root.cycleFilter(1)
         } else if (event.key === Qt.Key_Backtab) {
           root.cycleFilter(-1)
+        } else if (event.key === Qt.Key_Right) {
+          root.cycleSort(1)
+        } else if (event.key === Qt.Key_Left) {
+          root.cycleSort(-1)
         } else if (event.key === Qt.Key_Backspace) {
           root.search = root.search.slice(0, -1)
         } else if (event.key === Qt.Key_Down) {
@@ -405,9 +447,39 @@ Item {
         onChanged: value => root.filter = value
       }
 
+      // One button that cycles the sort; Left and Right do the same.
+      Rectangle {
+        id: sortButton
+        anchors.left: filters.right
+        anchors.leftMargin: Commons.Style.space(12)
+        anchors.verticalCenter: parent.verticalCenter
+        width: sortText.width + Commons.Style.space(16)
+        height: filters.height
+        radius: Commons.Style.cornerRadius
+        color: sortHit.containsMouse ? Commons.Style.hoverFill : "transparent"
+        border.width: 1
+        border.color: Qt.alpha(root.foreground, 0.25)
+        Text {
+          id: sortText
+          anchors.centerIn: parent
+          text: "Sort: " + root.sortLabel()
+          color: root.foreground
+          font.family: Commons.Style.font.family
+          font.pixelSize: Commons.Style.font.bodySmall
+        }
+        MouseArea {
+          id: sortHit
+          anchors.fill: parent
+          hoverEnabled: true
+          cursorShape: Qt.PointingHandCursor
+          acceptedButtons: Qt.LeftButton | Qt.RightButton
+          onClicked: function(mouse) { root.cycleSort(mouse.button === Qt.RightButton ? -1 : 1) }
+        }
+      }
+
       Text {
         anchors.right: parent.right
-        anchors.left: filters.right
+        anchors.left: sortButton.right
         anchors.leftMargin: Commons.Style.space(16)
         anchors.verticalCenter: parent.verticalCenter
         horizontalAlignment: Text.AlignRight
@@ -635,7 +707,8 @@ Item {
       anchors.bottom: parent.bottom
       anchors.bottomMargin: card.contentBottomInset + Commons.Style.space(8)
       anchors.horizontalCenter: parent.horizontalCenter
-      text: "↑↓ move · Enter reveals · Tab filters · type to search · Esc closes · rarity is the share of all players"
+      width: Math.min(implicitWidth, parent.width - Commons.Style.space(32))
+      text: "↑↓ move · Enter reveals · Tab filters · ←→ sort · type to search · Esc closes · rarity is the share of all players"
       opacity: 0.4
     }
   }

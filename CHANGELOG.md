@@ -24,7 +24,8 @@
   and unlock date, filters (all, locked, unlocked, rare) and type-to-search;
   opened from any game in the panel or with `omarchy-shell shell summon`.
   Arrow keys, Page Up/Down, Home and End move a highlighted row; Enter
-  reveals a hidden achievement.
+  reveals a hidden achievement. A sort (recent, rarest, A–Z, game order)
+  that the tracker remembers in config.json.
 - Locked counter achievements show their progress ("52 / 80" and a thin
   bar) in the tracker and under Up next, from the stat Steam's schema ties
   them to.

@@ -13,6 +13,7 @@ Usage:
   omatrophy.py set position <where>   top-center, top-left or top-right (applies live)
   omatrophy.py set sound on|off|omatrophy|classic
   omatrophy.py set icons omarchy|vector|painted
+  omatrophy.py set tracker-sort recent|rarity|name|game
   omatrophy.py hide <store> <game>    keep a game you won't finish out of "closest to platinum"
   omatrophy.py unhide <store> <game>  bring it back
 
@@ -383,7 +384,8 @@ def config_path():
 
 SETTINGS = {'position': ('top-center', 'top-left', 'top-right'),
             'sound': ('on', 'off', 'omatrophy', 'classic'),
-            'icons': ('omarchy', 'vector', 'painted')}
+            'icons': ('omarchy', 'vector', 'painted'),
+            'tracker-sort': ('recent', 'rarity', 'name', 'game')}
 
 
 def set_option(key, value):
@@ -392,7 +394,8 @@ def set_option(key, value):
     if value not in SETTINGS.get(key, ()):
         raise SystemExit(f'usage: omatrophy.py set position {"|".join(SETTINGS["position"])}\n'
                          f'       omatrophy.py set sound {"|".join(SETTINGS["sound"])}\n'
-                         f'       omatrophy.py set icons {"|".join(SETTINGS["icons"])}')
+                         f'       omatrophy.py set icons {"|".join(SETTINGS["icons"])}\n'
+                         f'       omatrophy.py set tracker-sort {"|".join(SETTINGS["tracker-sort"])}')
     path = config_path()
     cfg = read_json(path, {})
     if key == 'sound':

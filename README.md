@@ -86,8 +86,10 @@ Locked counter achievements show how far along you are ("52 / 80") when
 the game tracks the count.
 Up and Down (Page Up/Down, Home, End) move the highlight; Enter, or Space
 when you aren't searching, reveals a hidden achievement. Tab cycles All,
-Locked, Unlocked and Rare; typing searches; Escape clears the search, then
-closes. From a script:
+Locked, Unlocked and Rare; Left and Right (or the Sort button) switch
+between recent, rarest, A–Z and the game's own order, remembered for next
+time; typing searches; Escape clears the search, then closes. From a
+script:
 
 ```bash
 omarchy-shell shell summon pym.omatrophy '{}'   # the running or last game

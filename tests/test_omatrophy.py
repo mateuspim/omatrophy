@@ -415,6 +415,12 @@ class Settings(unittest.TestCase):
                 self.assertEqual(json.load(f), {'position': 'top-left', 'sound': True, 'chimes': 'classic'})
             with self.assertRaises(SystemExit):
                 omatrophy.set_option('icons', 'neon')
+            with redirect_stdout(io.StringIO()):
+                omatrophy.set_option('tracker-sort', 'rarity')
+            with open(f'{home}/.config/omatrophy/config.json') as f:
+                self.assertEqual(json.load(f)['tracker-sort'], 'rarity')
+            with self.assertRaises(SystemExit):
+                omatrophy.set_option('tracker-sort', 'random')
 
 
 class WarmNames(unittest.TestCase):
