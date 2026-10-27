@@ -9,6 +9,7 @@ installed.
 | `watch` | The default. Prints [event lines](events.md) until killed. `Service.qml` runs this. |
 | `test [kind]` | Queues one sample event for a running watcher, built from your most recently played game. `kind`: `bronze`, `silver`, `gold` (or `rare`), `platinum`; `unlock` (the default) keeps the achievement's real rarity. |
 | `status` | Prints `[{store, app, unlocked, total}]` for every game with achievements, most complete first. |
+| `cabinet` | Prints `{games, trophies, platinums, nearest}` for the bar panel: totals across every game, and `nearest`, the four started, unfinished games closest to 100%, each a `status` row plus `game` (name) and `header` (art URL). |
 | `set position top-center\|top-left\|top-right` | Where cards appear. |
 | `set sound on\|off\|omatrophy\|classic` | The chime: on, off, or which set (which also turns it on). |
 | `set icons omarchy\|vector\|painted` | Trophy art set. |

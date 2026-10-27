@@ -56,13 +56,14 @@ rm -rf ~/.config/omatrophy ~/.local/state/omatrophy ~/.cache/omatrophy
 OmaTrophy runs inside `omarchy-shell` as your user. It reads Steam's local
 achievement cache, keeps its settings and a small cache in its own folders,
 and calls Steam's public endpoints for rarity, game names and art when a
-toast shows. No root, no API key, no login. Details in
+toast shows or the bar panel opens. No root, no API key, no login. Details in
 [SECURITY.md](SECURITY.md).
 
 ## Settings
 
-Click the trophy in the bar for the style picker, previews, position and
-sound. Each choice applies to the next toast. From a terminal:
+Click the trophy in the bar for your trophy cabinet: totals across every
+game, the games closest to platinum, then the trophy style, previews,
+position and sound. Each choice applies to the next toast. From a terminal:
 
 ```bash
 omatrophy.py set position top-right     # top-center, top-left, top-right
@@ -70,6 +71,7 @@ omatrophy.py set sound off              # on, off, omatrophy, classic
 omatrophy.py set icons vector           # omarchy, vector, painted
 omatrophy.py test platinum              # bronze, silver, gold, platinum
 omatrophy.py status                     # progress of every game
+omatrophy.py cabinet                    # totals and the games nearest platinum
 ```
 
 The full command list is in [docs/specs/cli.md](docs/specs/cli.md), the

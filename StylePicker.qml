@@ -5,10 +5,10 @@ import Quickshell.Io
 import qs.Ui
 import qs.Commons as Commons
 
-// The bar panel's content: every trophy style side by side with its four
-// metals, preview buttons that fire real toasts through the running
-// service, and the position and sound settings. Reads and writes the same
-// ~/.config/omatrophy/config.json the service watches, through
+// The bar panel's content, a trophy cabinet: your totals, the games nearest
+// platinum, then the settings (trophy style, preview tiles that fire real
+// toasts through the running service, position and sound). Reads and writes
+// the same ~/.config/omatrophy/config.json the service watches, through
 // `omatrophy.py set`, so a choice applies to the next toast.
 Column {
   id: root
@@ -16,16 +16,20 @@ Column {
 
   readonly property string helperPath: decodeURIComponent(String(Qt.resolvedUrl("omatrophy.py")).replace(/^file:\/\//, ""))
   readonly property var styles: [
-    { id: "omarchy", name: "Omarchy", about: "Pixel grid, flat metal, inlay in your theme accent" },
-    { id: "vector", name: "Faceted", about: "Clean vector metal with soft highlights" },
-    { id: "painted", name: "Painted", about: "Rendered metal, closest to a console trophy" }
+    { id: "omarchy", name: "Omarchy" },
+    { id: "vector", name: "Faceted" },
+    { id: "painted", name: "Painted" }
   ]
   readonly property var metals: ["bronze", "silver", "gold", "platinum"]
+  readonly property var metalColors: ({ bronze: "#e9a46b", silver: "#dfe6ee", gold: "#f3cf4a", platinum: "#e2eaff" })
 
   property string iconSet: "omarchy"
   property string position: "top-center"
   property bool sound: true
   property string chimes: "omatrophy"
+
+  // From `omatrophy.py cabinet`; null until it answers.
+  property var cabinet: null
 
   function set(key, value) {
     if (key === "icons") iconSet = value
@@ -41,7 +45,7 @@ Column {
     runner.exec(["python3", helperPath, "test", kind])
   }
 
-  spacing: Commons.Style.space(10)
+  spacing: Commons.Style.space(8)
 
   FileView {
     path: Quickshell.env("HOME") + "/.config/omatrophy/config.json"
@@ -60,14 +64,24 @@ Column {
 
   Process { id: runner }
 
+  Process {
+    running: true
+    command: ["python3", root.helperPath, "cabinet"]
+    stdout: StdioCollector {
+      onStreamFinished: {
+        try { root.cabinet = JSON.parse(text) } catch (e) {}
+      }
+    }
+  }
+
   // One trophy, drawn the way the cards draw it (the omarchy set's inlay
   // painted in the theme accent).
   component Thumb: Item {
     id: thumb
     property string style: "omarchy"
     property string metal: "bronze"
-    width: 40
-    height: 40
+    width: 28
+    height: 28
     Image {
       anchors.fill: parent
       source: Qt.resolvedUrl("assets/" + thumb.style + "/trophy-" + thumb.metal + (thumb.style === "painted" ? ".png" : ".svg"))
@@ -90,135 +104,294 @@ Column {
     }
   }
 
-  Text {
-    text: "OmaTrophy"
-    color: root.foreground
-    font.family: Commons.Style.font.family
-    font.pixelSize: Commons.Style.font.title
-  }
-  Text {
-    width: parent.width
-    wrapMode: Text.Wrap
-    text: "Steam achievements as toasts over your games. Pick a trophy style, then preview it."
-    color: root.foreground
-    opacity: 0.7
-    font.family: Commons.Style.font.family
-    font.pixelSize: Commons.Style.font.body
+  // A big number over its label.
+  component Stat: Column {
+    property string value: ""
+    property string label: ""
+    property color tint: root.foreground
+    spacing: Commons.Style.space(1)
+    Text {
+      text: parent.value
+      color: parent.tint
+      font.family: Commons.Style.font.family
+      font.pixelSize: Commons.Style.font.display
+      font.bold: true
+    }
+    Text {
+      text: parent.label
+      color: root.foreground
+      opacity: 0.55
+      font.family: Commons.Style.font.family
+      font.pixelSize: Commons.Style.font.caption
+      font.letterSpacing: 1.5
+    }
   }
 
-  PanelSectionHeader { text: "TROPHY STYLE"; foreground: root.foreground }
+  // The totals, led by a platinum trophy in your style.
+  Item {
+    width: root.width
+    height: Commons.Style.space(60)
+
+    Thumb {
+      id: heroTrophy
+      anchors.verticalCenter: parent.verticalCenter
+      style: root.iconSet
+      metal: "platinum"
+      width: 52
+      height: 52
+    }
+    Row {
+      anchors.left: heroTrophy.right
+      anchors.leftMargin: Commons.Style.space(18)
+      anchors.verticalCenter: parent.verticalCenter
+      spacing: Commons.Style.space(22)
+      Stat {
+        value: root.cabinet ? root.cabinet.trophies.toLocaleString(Qt.locale(), "f", 0) : "–"
+        label: "TROPHIES"
+      }
+      Stat {
+        value: root.cabinet ? root.cabinet.platinums : "–"
+        label: "PLATINUM"
+        tint: root.metalColors.platinum
+      }
+      Stat {
+        value: root.cabinet ? root.cabinet.games : "–"
+        label: "GAMES"
+      }
+    }
+  }
+
+  PanelSectionHeader {
+    visible: nearest.count > 0
+    text: "CLOSEST TO PLATINUM"
+    foreground: root.foreground
+  }
 
   Repeater {
-    model: root.styles
-    // Rows hold thumbnails, so they are plain surfaces styled like the
-    // kit's selectable rows (see the HDR panel) rather than Buttons.
-    delegate: Rectangle {
-      id: styleRow
+    id: nearest
+    model: root.cabinet ? root.cabinet.nearest : []
+    delegate: Item {
+      id: game
       required property var modelData
-      readonly property bool chosen: root.iconSet === modelData.id
+      readonly property int remaining: modelData.total - modelData.unlocked
       width: root.width
-      height: styleBody.implicitHeight + Commons.Style.space(16)
-      radius: Commons.Style.cornerRadius
-      color: chosen ? Commons.Style.selectedFill : (pick.containsMouse ? Commons.Style.hoverFill : "transparent")
-      border.color: chosen ? Commons.Color.accent : "transparent"
-      border.width: 1
-      Accessible.role: Accessible.Button
-      Accessible.name: modelData.name + " trophies" + (chosen ? ", in use" : "")
+      height: Commons.Style.space(46)
 
-      MouseArea {
-        id: pick
-        anchors.fill: parent
-        hoverEnabled: true
-        cursorShape: Qt.PointingHandCursor
-        onClicked: root.set("icons", styleRow.modelData.id)
+      Rectangle {
+        id: art
+        anchors.verticalCenter: parent.verticalCenter
+        // Steam's header art is 460 × 215.
+        width: Math.round(height * 460 / 215)
+        height: parent.height
+        color: Qt.alpha(root.foreground, 0.06)
+        radius: Commons.Style.cornerRadius
+        clip: true
+        Image {
+          anchors.fill: parent
+          source: game.modelData.header || ""
+          fillMode: Image.PreserveAspectCrop
+          asynchronous: true
+          sourceSize.width: 200
+        }
       }
 
       Column {
-        id: styleBody
-        anchors.left: parent.left
+        anchors.left: art.right
+        anchors.leftMargin: Commons.Style.space(12)
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
-        anchors.margins: Commons.Style.space(10)
-        spacing: Commons.Style.space(6)
+        spacing: Commons.Style.space(4)
 
-        Row {
-          spacing: Commons.Style.space(8)
+        Text {
+          width: parent.width
+          text: game.modelData.game
+          color: root.foreground
+          font.family: Commons.Style.font.family
+          font.pixelSize: Commons.Style.font.body
+          font.bold: true
+          elide: Text.ElideRight
+        }
+        Rectangle {
+          width: parent.width
+          height: 4
+          color: Qt.alpha(root.foreground, 0.1)
+          Rectangle {
+            width: parent.width * game.modelData.unlocked / game.modelData.total
+            height: parent.height
+            color: Commons.Color.accent
+          }
+        }
+        Item {
+          width: parent.width
+          height: count.height
           Text {
-            text: styleRow.modelData.name
+            id: count
+            text: game.modelData.unlocked + " / " + game.modelData.total
             color: root.foreground
+            opacity: 0.6
             font.family: Commons.Style.font.family
-            font.pixelSize: Commons.Style.font.subtitle
-            font.bold: true
+            font.pixelSize: Commons.Style.font.caption
           }
           Text {
-            visible: styleRow.chosen
-            text: "in use"
-            color: Commons.Color.accent
+            anchors.right: parent.right
+            text: game.remaining + " to go"
+            color: root.foreground
+            opacity: 0.6
             font.family: Commons.Style.font.family
             font.pixelSize: Commons.Style.font.caption
           }
         }
-        Text {
-          width: parent.width
-          wrapMode: Text.Wrap
-          text: styleRow.modelData.about
-          color: root.foreground
-          opacity: 0.65
-          font.family: Commons.Style.font.family
-          font.pixelSize: Commons.Style.font.bodySmall
+      }
+    }
+  }
+
+  Item { width: 1; height: Commons.Style.space(2) }
+  PanelSectionHeader { text: "TROPHY STYLE"; foreground: root.foreground }
+
+  Row {
+    id: styleCards
+    spacing: Commons.Style.space(6)
+    readonly property real cardWidth: (root.width - spacing * (root.styles.length - 1)) / root.styles.length
+    Repeater {
+      model: root.styles
+      // A card per style: its gold trophy and name. The chosen one carries
+      // the accent edge.
+      delegate: Rectangle {
+        id: styleCard
+        required property var modelData
+        readonly property bool chosen: root.iconSet === modelData.id
+        width: styleCards.cardWidth
+        height: Commons.Style.space(70)
+        radius: Commons.Style.cornerRadius
+        color: chosen ? Commons.Style.selectedFill : (pick.containsMouse ? Commons.Style.hoverFill : Qt.alpha(root.foreground, 0.04))
+        border.width: 1
+        border.color: chosen ? Commons.Color.accent : Qt.alpha(root.foreground, 0.12)
+        Accessible.role: Accessible.Button
+        Accessible.name: modelData.name + " trophies" + (chosen ? ", in use" : "")
+
+        MouseArea {
+          id: pick
+          anchors.fill: parent
+          hoverEnabled: true
+          cursorShape: Qt.PointingHandCursor
+          onClicked: root.set("icons", styleCard.modelData.id)
         }
-        Row {
-          spacing: Commons.Style.space(10)
-          Repeater {
-            model: root.metals
-            Thumb {
-              required property string modelData
-              style: styleRow.modelData.id
-              metal: modelData
-            }
+        Column {
+          anchors.centerIn: parent
+          spacing: Commons.Style.space(5)
+          Thumb {
+            anchors.horizontalCenter: parent.horizontalCenter
+            style: styleCard.modelData.id
+            metal: "gold"
+            width: 34
+            height: 34
+          }
+          Text {
+            anchors.horizontalCenter: parent.horizontalCenter
+            text: styleCard.modelData.name
+            color: root.foreground
+            font.family: Commons.Style.font.family
+            font.pixelSize: Commons.Style.font.caption
+            font.bold: styleCard.chosen
           }
         }
       }
     }
   }
 
-  PanelSectionHeader { text: "PREVIEW"; foreground: root.foreground }
-  Row {
-    spacing: Commons.Style.space(6)
-    Repeater {
-      model: root.metals
-      Button {
-        required property string modelData
-        text: modelData.charAt(0).toUpperCase() + modelData.slice(1)
-        bordered: true
-        foreground: root.foreground
-        tooltipText: "Show a " + modelData + " toast now"
-        onClicked: root.preview(modelData)
+  // Settings as label + control rows, so they read as one compact block.
+  component SettingRow: Item {
+    property string label: ""
+    default property alias control: slot.data
+    width: root.width
+    height: Math.max(labelText.height, slot.childrenRect.height)
+    Text {
+      id: labelText
+      anchors.verticalCenter: parent.verticalCenter
+      text: parent.label
+      color: root.foreground
+      opacity: 0.6
+      font.family: Commons.Style.font.family
+      font.pixelSize: Commons.Style.font.caption
+      font.letterSpacing: 1.5
+    }
+    Item {
+      id: slot
+      anchors.right: parent.right
+      anchors.verticalCenter: parent.verticalCenter
+      width: childrenRect.width
+      height: childrenRect.height
+    }
+  }
+
+  Item { width: 1; height: Commons.Style.space(2) }
+
+  SettingRow {
+    label: "PREVIEW"
+    Row {
+      spacing: Commons.Style.space(6)
+      Repeater {
+        model: root.metals
+        // A tile per metal that fires a real toast; its edge is the metal.
+        delegate: Rectangle {
+          id: tile
+          required property string modelData
+          width: Commons.Style.space(40)
+          height: Commons.Style.space(34)
+          radius: Commons.Style.cornerRadius
+          color: fire.pressed ? Qt.alpha(root.metalColors[modelData], 0.22)
+                 : (fire.containsMouse ? Qt.alpha(root.metalColors[modelData], 0.12) : Qt.alpha(root.foreground, 0.04))
+          border.width: 1
+          border.color: Qt.alpha(root.metalColors[modelData], fire.containsMouse ? 0.8 : 0.35)
+          Accessible.role: Accessible.Button
+          Accessible.name: "Show a " + modelData + " toast now"
+
+          MouseArea {
+            id: fire
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.preview(tile.modelData)
+          }
+          Thumb {
+            anchors.centerIn: parent
+            style: root.iconSet
+            metal: tile.modelData
+            width: 22
+            height: 22
+          }
+        }
       }
     }
   }
 
-  PanelSectionHeader { text: "POSITION"; foreground: root.foreground }
-  ButtonGroup {
-    options: [
-      { value: "top-left", label: "Top left" },
-      { value: "top-center", label: "Top center" },
-      { value: "top-right", label: "Top right" }
-    ]
-    value: root.position
-    foreground: root.foreground
-    onChanged: value => root.set("position", value)
+  SettingRow {
+    label: "POSITION"
+    ButtonGroup {
+      options: [
+        { value: "top-left", label: "Left" },
+        { value: "top-center", label: "Center" },
+        { value: "top-right", label: "Right" }
+      ]
+      value: root.position
+      foreground: root.foreground
+      fontSize: Commons.Style.font.bodySmall
+      onChanged: value => root.set("position", value)
+    }
   }
 
-  PanelSectionHeader { text: "SOUND"; foreground: root.foreground }
-  ButtonGroup {
-    options: [
-      { value: "omatrophy", label: "OmaTrophy" },
-      { value: "classic", label: "Classic" },
-      { value: "off", label: "Silent" }
-    ]
-    value: root.sound ? root.chimes : "off"
-    foreground: root.foreground
-    onChanged: value => root.set("sound", value)
+  SettingRow {
+    label: "SOUND"
+    ButtonGroup {
+      options: [
+        { value: "omatrophy", label: "OmaTrophy" },
+        { value: "classic", label: "Classic" },
+        { value: "off", label: "Silent" }
+      ]
+      value: root.sound ? root.chimes : "off"
+      foreground: root.foreground
+      fontSize: Commons.Style.font.bodySmall
+      onChanged: value => root.set("sound", value)
+    }
   }
 }

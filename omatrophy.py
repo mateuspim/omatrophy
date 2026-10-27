@@ -5,6 +5,7 @@ Usage:
   omatrophy.py watch                  print one JSON event per new unlock (the shell service runs this)
   omatrophy.py test [kind]            queue a fake event for a running watcher: bronze, silver, gold, platinum
   omatrophy.py status                 progress of every game with achievements, as JSON
+  omatrophy.py cabinet                trophy totals and the games nearest platinum, as JSON (the bar panel)
   omatrophy.py set position <where>   top-center, top-left or top-right (applies live)
   omatrophy.py set sound on|off|omatrophy|classic
   omatrophy.py set icons omarchy|vector|painted
@@ -166,14 +167,42 @@ def demo(kinds):
         time.sleep(3600)
 
 
-def status():
+def progress():
+    """(store, {store, app, unlocked, total}) for every game with achievements, most complete first."""
     out = []
     for s in found_stores():
         for game in s.games():
             achs = s.achievements(game)
             if achs:
-                out.append({'store': s.id, 'app': game, 'unlocked': sum(a['unlocked'] for a in achs), 'total': len(achs)})
-    print(json.dumps(sorted(out, key=lambda g: -g['unlocked'] / g['total'])))
+                out.append((s, {'store': s.id, 'app': game, 'unlocked': sum(a['unlocked'] for a in achs), 'total': len(achs)}))
+    return sorted(out, key=lambda r: -r[1]['unlocked'] / r[1]['total'])
+
+
+def status():
+    print(json.dumps([row for _, row in progress()]))
+
+
+def nearest_platinum(rows, n):
+    """The n started, unfinished games closest to 100%, ties to the one with fewer left."""
+    open_rows = [r for r in rows if 0 < r['unlocked'] < r['total']]
+    return sorted(open_rows, key=lambda r: (-r['unlocked'] / r['total'], r['total'] - r['unlocked']))[:n]
+
+
+def totals(rows):
+    return {'games': len(rows), 'trophies': sum(r['unlocked'] for r in rows),
+            'platinums': sum(r['unlocked'] == r['total'] for r in rows)}
+
+
+def cabinet(n=4):
+    """Totals plus the games nearest platinum, named and with art, for the bar panel.
+    Names only the few games it shows, since a name can cost a request."""
+    found = progress()
+    stores = {(r['store'], r['app']): s for s, r in found}
+    nearest = []
+    for r in nearest_platinum([r for _, r in found], n):
+        s = stores[(r['store'], r['app'])]
+        nearest.append(dict(r, game=s.game_name(r['app']), header=s.art(r['app'])['header']))
+    print(json.dumps(dict(totals([r for _, r in found]), nearest=nearest)))
 
 
 SETTINGS = {'position': ('top-center', 'top-left', 'top-right'),
@@ -208,6 +237,8 @@ def main(argv):
         test(argv[2] if len(argv) > 2 else 'unlock')
     elif cmd == 'status':
         status()
+    elif cmd == 'cabinet':
+        cabinet()
     elif cmd == 'demo':
         demo(argv[2:] or ['unlock', 'rare', 'platinum'])
     elif cmd == 'set' and len(argv) == 4:

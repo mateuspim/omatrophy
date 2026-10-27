@@ -28,8 +28,8 @@ what OmaTrophy does with that access:
   `~/.cache/omatrophy/` (achievement icons and art).
 - Root: never.
 - Network: HTTPS to Steam's public, keyless endpoints only, when an unlock is
-  shown: the store's app details (game name, cached), global achievement
-  percentages, and Steam's CDN for icons and art. Your account id is not
+  shown or the bar panel opens: the store's app details (game name, cached),
+  global achievement percentages, and Steam's CDN for icons and art. Your account id is not
   sent.
 - Secrets: none. No API key, no login; a private Steam profile works.
 

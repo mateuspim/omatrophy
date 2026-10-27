@@ -165,4 +165,4 @@ class Steam(Store):
     def art(self, app):
         return {'hero': self.library_art(app, 'library_hero.jpg')
                 or cached(f'{ART_BASE}/{app}/library_hero.jpg', f'art/{app}_hero.jpg'),
-                'header': f'{ART_BASE}/{app}/header.jpg'}
+                'header': self.library_art(app, 'library_header.jpg') or f'{ART_BASE}/{app}/header.jpg'}

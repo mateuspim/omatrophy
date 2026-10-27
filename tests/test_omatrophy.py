@@ -173,6 +173,21 @@ class CheckApp(unittest.TestCase):
         self.assertEqual(self.events({}), [])
 
 
+class Cabinet(unittest.TestCase):
+    ROWS = [{'app': 'done', 'unlocked': 10, 'total': 10}, {'app': 'untouched', 'unlocked': 0, 'total': 5},
+            {'app': 'half', 'unlocked': 5, 'total': 10}, {'app': 'close', 'unlocked': 44, 'total': 46},
+            {'app': 'small', 'unlocked': 9, 'total': 10}, {'app': 'big', 'unlocked': 90, 'total': 100}]
+
+    def test_nearest_skips_finished_and_untouched_games(self):
+        self.assertEqual([r['app'] for r in omatrophy.nearest_platinum(self.ROWS, 3)], ['close', 'small', 'big'])
+
+    def test_nearest_ties_go_to_fewer_left(self):
+        self.assertEqual(omatrophy.nearest_platinum(self.ROWS, 2)[1]['app'], 'small')
+
+    def test_totals_count_trophies_and_platinums(self):
+        self.assertEqual(omatrophy.totals(self.ROWS), {'games': 6, 'trophies': 158, 'platinums': 1})
+
+
 class Stores(unittest.TestCase):
     def test_missing_steam_is_unavailable(self):
         with tempfile.TemporaryDirectory() as home, \
