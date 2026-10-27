@@ -63,6 +63,21 @@ Panel {
         boundsBehavior: Flickable.StopAtBounds
         interactive: contentHeight > height
 
+        // Qt's Flickable turns a wheel notch into a short flick that barely moves
+        // a long list (dragging was far faster). A mouse notch now moves a fixed
+        // distance; touchpads keep Qt's own smooth path.
+        WheelHandler {
+          target: null
+          acceptedDevices: PointerDevice.Mouse
+          onWheel: function(event) {
+            var notch = Math.max(-120, Math.min(120, event.angleDelta.y)) / 120
+            var top = scroller.originY
+            var bottom = top + Math.max(0, scroller.contentHeight - scroller.height)
+            scroller.contentY = Math.max(top, Math.min(bottom, scroller.contentY - notch * Style.space(120)))
+          }
+        }
+
+
         // Built from the file's current text on each open (FreshObject.qml),
         // so edits to the picker show without restarting the shell. Text uses
         // the popup colours: the bar's own foreground is meant for the bar's

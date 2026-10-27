@@ -509,6 +509,21 @@ Item {
       currentIndex: -1
       highlightFollowsCurrentItem: false
 
+      // Qt's Flickable turns a wheel notch into a short flick that barely moves
+      // a long list (dragging was far faster). A mouse notch now moves a fixed
+      // distance; touchpads keep Qt's own smooth path.
+      WheelHandler {
+        target: null
+        acceptedDevices: PointerDevice.Mouse
+        onWheel: function(event) {
+          var notch = Math.max(-120, Math.min(120, event.angleDelta.y)) / 120
+          var top = list.originY
+          var bottom = top + Math.max(0, list.contentHeight - list.height)
+          list.contentY = Math.max(top, Math.min(bottom, list.contentY - notch * Commons.Style.space(120)))
+        }
+      }
+
+
       delegate: Rectangle {
         id: row
         required property var modelData
