@@ -138,7 +138,8 @@ def background(found, pairs):
     warm_names(pairs)
     for s in found:
         try:
-            s.backfill()
+            # Progress goes to the shell log; stdout is for events only.
+            s.backfill(say=lambda line, s=s: print(f'omatrophy: {s.id} backfill: {line}', file=sys.stderr, flush=True))
         except Exception as e:
             print(f'omatrophy: {s.name} backfill failed: {e}', file=sys.stderr, flush=True)
 

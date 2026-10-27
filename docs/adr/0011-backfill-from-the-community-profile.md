@@ -30,7 +30,8 @@ profile page.
   most; Steam limited the first test run after about 20 pages); any other
   error ends the run and the next one resumes. Pages
   are cached in `~/.cache/omatrophy/community/games/<app>.json`, refetched
-  after a week or when the game was played since; "no achievements" is
+  when the game was played since, else after a week for games played in
+  the last 60 days and after 60 days for the rest; "no achievements" is
   kept for a month in one index, `community/none.json`, so `games()` stays
   a folder listing. `omatrophy.py sync` runs the same backfill in the
   foreground.

@@ -580,6 +580,21 @@ class CommunityBackfill(unittest.TestCase):
                                           fetch_page=lambda a, g: (_ for _ in ()).throw(limit), sleep=waits.append)
         self.assertEqual(always, (0, True))
 
+    def test_dormant_games_refresh_less_often(self):
+        day = 86400
+        now = 10_000_000_000
+        page = f'{steam_community.cache_dir()}/games/5.json'
+        active, dormant = now - 50 * day, now - 400 * day
+        steam_community.write_atomic(page, {'time': now - 3 * day})
+        self.assertFalse(steam_community.due('5', active, now, {}))
+        self.assertTrue(steam_community.due('5', now - day, now, {}))  # played since the fetch
+        steam_community.write_atomic(page, {'time': now - 10 * day})
+        self.assertTrue(steam_community.due('5', active, now, {}))
+        self.assertFalse(steam_community.due('5', dormant, now, {}))
+        steam_community.write_atomic(page, {'time': now - 61 * day})
+        self.assertTrue(steam_community.due('5', dormant, now, {}))
+        self.assertTrue(steam_community.due('6', dormant, now, {}))  # never fetched
+
     def test_first_error_stops_the_run(self):
         result = self.run_backfill([(30, '1'), (20, '2')], pages={'1': OSError('429'), '2': None})
         self.assertEqual(result, (0, True))

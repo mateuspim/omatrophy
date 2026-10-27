@@ -37,7 +37,8 @@
 - Global rarity is cached a day per game and kept when offline.
 - An opt-in backfill (`set community on`, `sync`) fills in games that
   never ran on this machine from the public Steam profile's achievement
-  pages, cached and refetched weekly; their unlocks never toast (ADR 11).
+  pages, cached, refreshed on a schedule that waits out Steam's rate
+  limit; their unlocks never toast (ADR 11).
 - The watcher fills the game-name cache in the background after it starts,
   so the Games tab's first open doesn't wait on the network.
 - `omatrophy.py` CLI: `watch`, `test`, `status`, `cabinet`, `now`, `games`,

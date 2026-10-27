@@ -37,8 +37,11 @@ community on`, then `omatrophy.py sync` to watch it work.
 - **Every game says "none".** Your profile or its game details are private:
   Steam > Profile > Edit Profile > Privacy Settings, set *My profile* and
   *Game details* to Public.
-- **A game still shows old progress.** Pages are refetched after a week, or
-  when you have played the game since; delete
+- **Where is it?** The watcher logs each page and wait:
+  `quickshell log -p /usr/share/omarchy/shell -t 200 | grep 'omatrophy: steam backfill'`.
+- **A game still shows old progress.** Pages are refetched when you have
+  played the game since, else weekly (played in the last 60 days) or every
+  60 days; delete
   `~/.cache/omatrophy/community/games/<app>.json` to fetch it on the next
   run.
 

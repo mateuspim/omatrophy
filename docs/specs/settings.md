@@ -29,7 +29,7 @@ bar panel).
 | `~/.config/omatrophy/config.json` | The settings above. |
 | `~/.local/state/omatrophy/names.json` | Steam game names, so offline toasts keep them. |
 | `~/.local/state/omatrophy/inbox.jsonl` | Events queued by `omatrophy.py test`. |
-| `~/.cache/omatrophy/` | Achievement icons (`icons/<store>/<game>/`), art, global rarity (`rarity/<game>.json`, refreshed daily) and, with `community` on, profile pages (`community/games/<app>.json`, refetched weekly or after you play; `community/none.json` for games without achievements). Safe to delete. |
+| `~/.cache/omatrophy/` | Achievement icons (`icons/<store>/<game>/`), art, global rarity (`rarity/<game>.json`, refreshed daily) and, with `community` on, profile pages (`community/games/<app>.json`, refetched after you play, else weekly for games played in the last 60 days and every 60 days for the rest; `community/none.json` for games without achievements). Safe to delete. |
 
 ## `manifest.json`
 

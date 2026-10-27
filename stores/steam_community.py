@@ -14,9 +14,13 @@ from .base import CACHE, read_json, write_json
 STEAMID64_BASE = 76561197960265728
 PAGE = 'https://steamcommunity.com/profiles/{id64}/stats/{app}/achievements/'
 SSR = re.compile(r'<script[^>]*id="valve-ssr-data"[^>]*>(.*?)</script>', re.S)
-# A page is refetched after a week (or when the game was played since);
-# "no achievements" holds for a month.
+# A page is refetched when the game was played since; otherwise after a
+# week for games played in the last 60 days and after 60 days for the rest,
+# whose unlocks rarely move: a full refresh of a few hundred pages takes
+# hours under Steam's rate limit. "No achievements" holds for a month.
 FRESH_SECONDS = 7 * 86400
+ACTIVE_SECONDS = 60 * 86400
+DORMANT_SECONDS = 60 * 86400
 NONE_SECONDS = 30 * 86400
 # Valve doesn't publish a rate. On 2026-10-27 it answered 429 after about
 # 20 pages in two and a half minutes and served again within a minute, so
@@ -114,14 +118,18 @@ def none_index():
 
 
 def due(app, played, now, nones):
-    """True when a game's page should be fetched: never fetched, stale, or
-    played since the last fetch."""
+    """True when a game's page should be fetched: never fetched, played
+    since the last fetch, or stale for how recently it was played."""
     if app in nones:
         return now - nones[app] > NONE_SECONDS
     c = cached(app)
     if not c:
         return True
-    return now - c.get('time', 0) > FRESH_SECONDS or played > c.get('time', 0)
+    fetched = c.get('time', 0)
+    if played > fetched:
+        return True
+    limit = FRESH_SECONDS if now - played < ACTIVE_SECONDS else DORMANT_SECONDS
+    return now - fetched > limit
 
 
 def write_atomic(path, value):
