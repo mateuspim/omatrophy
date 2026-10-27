@@ -40,7 +40,7 @@ what OmaTrophy does with that access:
   sent, unless you turn on the community backfill (`omatrophy.py set
   community on`, off by default): then the watcher fetches your public
   profile's achievement page for each played game with no local data, one
-  about every 1.5 s, and your SteamID64 is in those URLs (ADR 11).
+  about every 3 s, and your SteamID64 is in those URLs (ADR 11).
 - Secrets: none. No API key, no login; a private Steam profile works (the
   optional backfill needs a public one).
 

@@ -30,8 +30,10 @@ status` shows what is on disk). Launching a game adds it within a second.
 For the rest, turn on the community backfill (ADR 11): `omatrophy.py set
 community on`, then `omatrophy.py sync` to watch it work.
 
-- **"stopped at <app>: HTTP Error 429" or a timeout.** Steam is rate
-  limiting or slow; run `sync` again later, it resumes where it stopped.
+- **"rate limited ... waiting N min".** Normal: Steam limits how fast a
+  profile is read, and the backfill waits and carries on. If it stops
+  after five limits in a row, or on a timeout, run `sync` again later; it
+  resumes where it stopped.
 - **Every game says "none".** Your profile or its game details are private:
   Steam > Profile > Edit Profile > Privacy Settings, set *My profile* and
   *Game details* to Public.

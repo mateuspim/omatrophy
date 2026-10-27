@@ -567,6 +567,19 @@ class CommunityBackfill(unittest.TestCase):
         self.run_backfill([(30, '2'), (time.time() + 60, '1')])
         self.assertEqual(self.asked, ['1'])
 
+    def test_rate_limits_are_waited_out_then_give_up(self):
+        import urllib.error
+        limit = urllib.error.HTTPError('u', 429, 'Too Many Requests', {}, None)
+        calls = iter([limit, limit, None])
+        waits = []
+        result = steam_community.backfill('42', [(1, '9')], set(), fetch_page=lambda a, g: (
+            (_ for _ in ()).throw(e) if isinstance(e := next(calls), Exception) else e), sleep=waits.append)
+        self.assertEqual(result, (1, False))
+        self.assertEqual(waits, [60, 120])
+        always = steam_community.backfill('42', [(1, '8')], set(),
+                                          fetch_page=lambda a, g: (_ for _ in ()).throw(limit), sleep=waits.append)
+        self.assertEqual(always, (0, True))
+
     def test_first_error_stops_the_run(self):
         result = self.run_backfill([(30, '1'), (20, '2')], pages={'1': OSError('429'), '2': None})
         self.assertEqual(result, (0, True))
