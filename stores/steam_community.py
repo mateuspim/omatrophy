@@ -27,7 +27,7 @@ UNTOUCHED_SECONDS = 180 * 86400
 NONE_SECONDS = 30 * 86400
 # Valve doesn't publish a rate. On 2026-10-27 it answered 429 after about
 # 20 pages in two and a half minutes, and once limited it kept answering
-# 429 for over two hours. So a run fetches at most PAGES_PER_RUN pages,
+# 429 for close to three hours (probed every 15 min until it served). So a run fetches at most PAGES_PER_RUN pages,
 # gently paced, and a 429 ends it; the watcher runs it again later
 # (omatrophy.py's background loop) instead of waiting minutes in a run.
 PAUSE_SECONDS = 3

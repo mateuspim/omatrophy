@@ -33,7 +33,7 @@ community on`, then `omatrophy.py sync` to watch it work.
 - **"paused: N fetched, M left" or "stopped at <app>: HTTP Error 429".**
   Normal: Steam limits how fast a profile is read, for hours once you hit
   it, so the backfill reads 15 pages a run and the watcher runs it every
-  hour (every 2 to 8 h after a failed run). A big library fills in over a
+  hour (4 to 8 h after a failed run). A big library fills in over a
   day or two. Running `sync` over and over only keeps the limit going.
 - **Every game says "none".** Your profile or its game details are private:
   Steam > Profile > Edit Profile > Privacy Settings, set *My profile* and

@@ -132,16 +132,20 @@ def warm_names(pairs, threads=8):
         list(pool.map(lookup, pairs))
 
 
-# The backfill runs hourly, each run a small budget of pages; after a
-# failed run (most often Steam's 429, which lasts hours) the wait doubles up
-# to BACKFILL_MAX_WAIT so a limited profile isn't asked again every hour.
+# The backfill runs hourly, each run a small budget of pages. After a
+# failed run (most often Steam's 429) it waits BACKFILL_LIMITED_WAIT, then
+# doubles up to BACKFILL_MAX_WAIT: on 2026-10-27 a 429 lasted close to three
+# hours, and asking sooner may only keep it going.
 BACKFILL_WAIT = 3600
+BACKFILL_LIMITED_WAIT = 4 * 3600
 BACKFILL_MAX_WAIT = 8 * 3600
 
 
 def next_backfill_wait(failed, previous):
     """Seconds until the next backfill run."""
-    return min(previous * 2, BACKFILL_MAX_WAIT) if failed else BACKFILL_WAIT
+    if not failed:
+        return BACKFILL_WAIT
+    return min(max(previous * 2, BACKFILL_LIMITED_WAIT), BACKFILL_MAX_WAIT)
 
 
 def backfill_once(found):

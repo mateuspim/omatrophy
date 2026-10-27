@@ -782,7 +782,7 @@ class BackfillLoop(unittest.TestCase):
         for failed in (True, True, True, True, True, False):
             wait = omatrophy.next_backfill_wait(failed, wait)
             waits.append(wait // 3600)
-        self.assertEqual(waits, [2, 4, 8, 8, 8, 1])
+        self.assertEqual(waits, [4, 8, 8, 8, 8, 1])
 
     def test_watcher_runs_the_backfill_again_and_backs_off(self):
         class Store:
@@ -804,7 +804,7 @@ class BackfillLoop(unittest.TestCase):
 
         with mock.patch.object(omatrophy, 'warm_names'), self.assertRaises(Stop):
             omatrophy.background([Store()], [], sleep=sleep)
-        self.assertEqual(waits, [2, 4, 1])
+        self.assertEqual(waits, [4, 8, 1])
 
     def test_a_store_that_raises_counts_as_failed(self):
         class Broken:
