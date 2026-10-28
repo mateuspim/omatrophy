@@ -21,6 +21,10 @@ Item {
 
   property string filter: "all"
   property string search: ""
+  // The search the list is filtered by: `search` once typing pauses, so a
+  // long list isn't filtered and rebuilt on every key. Clearing applies at
+  // once.
+  property string appliedSearch: ""
   // Remembered in config.json as `tracker-sort`, written only when the
   // viewer changes it.
   property string sortBy: "recent"
@@ -57,7 +61,11 @@ Item {
 
   onGameChanged: rebuild()
   onFilterChanged: rebuild()
-  onSearchChanged: rebuild()
+  onSearchChanged: {
+    if (search === "") { searchPause.stop(); appliedSearch = "" }
+    else searchPause.restart()
+  }
+  onAppliedSearchChanged: rebuild()
   onSortByChanged: rebuild()
 
   // Recent: unlocked newest first, then locked with the most common first:
@@ -97,8 +105,8 @@ Item {
     if (filter === "locked" && a.unlocked) return false
     if (filter === "unlocked" && !a.unlocked) return false
     if (filter === "rare" && !(a.percent !== null && a.percent <= rarePercent)) return false
-    if (!search) return true
-    var q = search.toLowerCase()
+    if (!appliedSearch) return true
+    var q = appliedSearch.toLowerCase()
     var desc = a.hidden && !a.unlocked ? "" : a.desc
     return a.name.toLowerCase().indexOf(q) >= 0 || desc.toLowerCase().indexOf(q) >= 0
   }
@@ -173,6 +181,12 @@ Item {
       if (c.icons) root.iconSet = c.icons
       if (c["tracker-sort"]) root.sortBy = c["tracker-sort"]
     }
+  }
+
+  Timer {
+    id: searchPause
+    interval: 180
+    onTriggered: root.appliedSearch = root.search
   }
 
   Process { id: saver }
@@ -837,7 +851,7 @@ Item {
       Caption {
         anchors.centerIn: parent
         visible: root.game !== null && list.count === 0
-        text: root.search ? "Nothing matches “" + root.search + "”" : "Nothing here"
+        text: root.appliedSearch ? "Nothing matches “" + root.appliedSearch + "”" : "Nothing here"
         font.pixelSize: Commons.Style.font.title
       }
     }

@@ -16,6 +16,9 @@
 - The panel opens filled: `now` and `games` keep their last answer in
   `~/.cache/omatrophy/panel/`, the panel shows it at once and a fresh
   read replaces it a moment later, instead of bones on every open.
+- The tracker's search waits for a pause in typing (180 ms) before it
+  filters, so long lists don't rebuild on every key; the box shows each
+  key at once.
 - Settings redesigned: each trophy style card shows its whole set, preview
   tiles name their metal, the toast position is picked on a small drawing
   of the screen, and the sound is a row of chips.
