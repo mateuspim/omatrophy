@@ -4,10 +4,16 @@ A store reads achievements from the launcher's local files (or an API) and
 answers in plain dicts; omatrophy.py does the diffing, events and toasts.
 To add one, subclass Store in stores/<id>.py and list it in stores/__init__.py.
 """
-import json, os, urllib.request
+import json, os, tempfile, urllib.error, urllib.parse, urllib.request
 
 STATE = os.path.expanduser('~/.local/state/omatrophy')
 CACHE = os.path.expanduser('~/.cache/omatrophy')
+# A store page or a rarity list is well under a megabyte; a cap keeps a
+# hostile or broken server from filling memory.
+MAX_RESPONSE = 8 * 1024 * 1024
+# Every network call goes to the store's own HTTPS hosts; a redirect
+# elsewhere (or down to http) is refused.
+TRUSTED_HOSTS = ('steamcommunity.com', 'steampowered.com', 'steamstatic.com')
 
 
 def config():
@@ -80,15 +86,56 @@ def read_json(path, default):
 
 
 def write_json(path, value, **kw):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, 'w') as f:
-        json.dump(value, f, **kw)
+    """Write to a fresh temporary file beside `path`, then rename it over:
+    a crash leaves the old file whole, and a symlink at `path` is replaced,
+    not followed."""
+    folder = os.path.dirname(path)
+    os.makedirs(folder, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=folder, prefix='.' + os.path.basename(path), suffix='.tmp')
+    try:
+        with os.fdopen(fd, 'w') as f:
+            json.dump(value, f, **kw)
+        os.replace(tmp, path)
+    except BaseException:
+        os.unlink(tmp)
+        raise
+
+
+def trusted_url(url):
+    """True for an https URL on one of the stores' own hosts."""
+    try:
+        u = urllib.parse.urlsplit(str(url))
+    except ValueError:
+        return False
+    host = (u.hostname or '').lower()
+    return u.scheme == 'https' and any(host == h or host.endswith('.' + h) for h in TRUSTED_HOSTS)
+
+
+class TrustedRedirects(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if not trusted_url(newurl):
+            raise urllib.error.HTTPError(newurl, code, f'refused redirect to {newurl}', headers, fp)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+OPENER = urllib.request.build_opener(TrustedRedirects)
+
+
+def fetch_bytes(url):
+    """The body at a trusted URL, at most MAX_RESPONSE bytes, with a 4 s
+    socket timeout; raises on anything else. Returns (body, final URL)."""
+    if not trusted_url(url):
+        raise ValueError(f'refused untrusted URL {url}')
+    req = urllib.request.Request(url, headers={'User-Agent': 'omatrophy'})
+    with OPENER.open(req, timeout=4) as r:
+        body = r.read(MAX_RESPONSE + 1)
+        if len(body) > MAX_RESPONSE:
+            raise ValueError(f'response from {url} is over {MAX_RESPONSE} bytes')
+        return body, r.geturl()
 
 
 def http_json(url):
-    req = urllib.request.Request(url, headers={'User-Agent': 'omatrophy'})
-    with urllib.request.urlopen(req, timeout=4) as r:
-        return json.load(r)
+    return json.loads(fetch_bytes(url)[0])
 
 
 def cached(url, name):
@@ -96,12 +143,12 @@ def cached(url, name):
     path = f'{CACHE}/{name}'
     if not os.path.exists(path):
         try:
-            req = urllib.request.Request(url, headers={'User-Agent': 'omatrophy'})
-            with urllib.request.urlopen(req, timeout=4) as r:
-                body = r.read()
+            body = fetch_bytes(url)[0]
             os.makedirs(os.path.dirname(path), exist_ok=True)
-            with open(path, 'wb') as f:
+            fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), suffix='.tmp')
+            with os.fdopen(fd, 'wb') as f:
                 f.write(body)
+            os.replace(tmp, path)
         except Exception:
             return url
     return 'file://' + path

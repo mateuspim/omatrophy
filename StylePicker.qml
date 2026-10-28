@@ -216,6 +216,7 @@ Column {
     property color tint: root.foreground
     spacing: Commons.Style.space(1)
     Text {
+      textFormat: Text.PlainText
       text: parent.value
       color: parent.tint
       font.family: Commons.Style.font.family
@@ -235,6 +236,7 @@ Column {
     radius: Commons.Style.cornerRadius
     clip: true
     Text {
+      textFormat: Text.PlainText
       anchors.fill: parent
       anchors.margins: 4
       visible: artImage.status !== Image.Ready
@@ -479,6 +481,7 @@ Column {
                 }
               }
               Text {
+                textFormat: Text.PlainText
                 text: playing.game ? "PLAYING · " + root.duration(playing.game.since) : ""
                 color: root.foreground
                 font.family: Commons.Style.font.family
@@ -496,6 +499,7 @@ Column {
             anchors.margins: Commons.Style.space(10)
             height: playName.height
             Text {
+              textFormat: Text.PlainText
               id: playName
               width: parent.width - playPct.width - Commons.Style.space(10)
               anchors.bottom: parent.bottom
@@ -507,6 +511,7 @@ Column {
               elide: Text.ElideRight
             }
             Text {
+              textFormat: Text.PlainText
               id: playPct
               anchors.right: parent.right
               anchors.baseline: playName.baseline
@@ -582,6 +587,7 @@ Column {
                 anchors.rightMargin: Commons.Style.space(10)
                 anchors.verticalCenter: parent.verticalCenter
                 Text {
+                  textFormat: Text.PlainText
                   width: parent.width
                   text: nextRow.modelData.name
                   color: root.foreground
@@ -702,6 +708,7 @@ Column {
           spacing: Commons.Style.space(4)
 
           Text {
+            textFormat: Text.PlainText
             width: parent.width
             text: recentCard.modelData.game
             color: root.foreground
@@ -930,6 +937,7 @@ Column {
             width: parent.width
             height: gameName.height
             Text {
+              textFormat: Text.PlainText
               id: gameName
               width: parent.width - gameCount.width - Commons.Style.space(8)
                      - (hideToggle.visible ? hideToggle.width + Commons.Style.space(8) : 0)
@@ -944,6 +952,7 @@ Column {
             // Hide or show this game; only on hover, or always for a
             // hidden one so it can come back.
             Text {
+              textFormat: Text.PlainText
               id: hideToggle
               anchors.right: gameCount.left
               anchors.rightMargin: Commons.Style.space(8)
@@ -992,6 +1001,7 @@ Column {
       Accessible.role: Accessible.Button
       Accessible.name: moreLink.text
       Text {
+        textFormat: Text.PlainText
         id: moreLink
         anchors.centerIn: parent
         text: "Show " + Math.min(root.gamesPage, root.sortedGames.length - root.gamesShown)
@@ -1091,6 +1101,7 @@ Column {
               height: 34
             }
             Text {
+              textFormat: Text.PlainText
               anchors.horizontalCenter: parent.horizontalCenter
               text: styleCard.modelData.name
               color: root.foreground

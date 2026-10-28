@@ -31,8 +31,15 @@ Scope {
   property string chimes: "omatrophy"
   property string iconSet: "omarchy"
 
+  readonly property var tiers: ["bronze", "silver", "gold", "platinum"]
+
   function enqueue(ev) {
     if (ev.type !== "unlock" && ev.type !== "platinum") return
+    // `tier` names the chime file; anything else falls back to bronze.
+    if (tiers.indexOf(ev.tier) < 0) ev.tier = "bronze"
+    // A burst (a backfilled library, a flood in the inbox) shows the first
+    // few cards, not a queue that runs for an hour.
+    if (queue.length >= 20) return
     queue = queue.concat([ev])
     if (!current) next()
   }
@@ -100,6 +107,7 @@ Scope {
     // One sound per tier: assets/sounds/<tier>.wav, or the classic set.
     function play(tier) {
       if (!root.sound) return
+      if (root.tiers.indexOf(tier) < 0) tier = "bronze"
       var file = root.chimes === "classic" ? root.sounds + (root.classic[tier] || root.classic.bronze)
                  : decodeURIComponent(String(Qt.resolvedUrl("assets/sounds/" + tier + ".wav")).replace(/^file:\/\//, ""))
       command = ["pw-play", "--volume", "0.6", file]

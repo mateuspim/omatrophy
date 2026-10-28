@@ -91,6 +91,7 @@ Item {
     }
     // Engraved into the plate (omarchy set: centred at 64,52 of 128).
     Text {
+      textFormat: Text.PlainText
       visible: trophy.engraving !== "" && trophy.set === "omarchy"
       x: trophy.width * 0.5 - width / 2
       y: trophy.height * (52 / 128) - height / 2
@@ -345,6 +346,7 @@ Item {
         Row {
           spacing: 8
           Text {
+            textFormat: Text.PlainText
             text: root.tier.toUpperCase() + " TROPHY"
             color: root.tierColor
             font.family: Commons.Style.font.family
@@ -353,6 +355,7 @@ Item {
             font.letterSpacing: 2
           }
           Text {
+            textFormat: Text.PlainText
             text: root.event && root.event.percent !== null && root.event.percent !== undefined
                   ? root.event.percent.toFixed(1) + "% of players" : ""
             color: Qt.alpha(root.fg, 0.5)
@@ -362,6 +365,7 @@ Item {
         }
         // The name and description stop short of the art in the corner.
         Text {
+          textFormat: Text.PlainText
           width: parent.width - iconBox.width - 12
           text: root.event ? root.event.name : ""
           color: root.fg
@@ -371,6 +375,7 @@ Item {
           elide: Text.ElideRight
         }
         Text {
+          textFormat: Text.PlainText
           width: parent.width - iconBox.width - 12
           text: root.event ? root.event.desc : ""
           color: Qt.alpha(root.fg, 0.7)
@@ -385,6 +390,7 @@ Item {
           width: parent.width
           height: gameName.height
           Text {
+            textFormat: Text.PlainText
             id: gameName
             width: parent.width - roll.width - 12
             text: root.event ? root.event.game : ""
@@ -402,6 +408,7 @@ Item {
             height: newCount.height
             clip: true
             Text {
+              textFormat: Text.PlainText
               y: -roll.offset * parent.height
               anchors.right: parent.right
               text: root.event ? Math.max(0, root.event.unlocked - 1) + " / " + root.event.total : ""
@@ -410,6 +417,7 @@ Item {
               font.pixelSize: Commons.Style.font.bodySmall
             }
             Text {
+              textFormat: Text.PlainText
               id: newCount
               y: (1 - roll.offset) * parent.height
               anchors.right: parent.right

@@ -7,9 +7,9 @@ page has the rest without a key: it embeds its data as JSON in
 react-query cache (schema, the user's unlocks, the store item). Only that
 JSON is read, never the markup (ADR 11). Opt-in with `set community on`.
 """
-import json, os, re, time, urllib.request
+import json, os, re, time
 
-from .base import CACHE, read_json, write_json
+from .base import CACHE, fetch_bytes, read_json, trusted_url, write_json
 
 STEAMID64_BASE = 76561197960265728
 PAGE = 'https://steamcommunity.com/profiles/{id64}/stats/{app}/achievements/'
@@ -81,7 +81,8 @@ def parse_page(html, app):
             unlocked = bool(mine.get('unlocked'))
             out.append({'api': str(a.get('api_name', '')), 'name': str(a.get('name', '')),
                         'desc': str(a.get('description') or ''),
-                        'icon': a.get('icon_achieved', ''), 'icon_locked': a.get('icon_unachieved', ''),
+                        'icon': steam_image(a.get('icon_achieved')),
+                        'icon_locked': steam_image(a.get('icon_unachieved')),
                         'hidden': bool(a.get('hidden')), 'unlocked': unlocked,
                         'time': int(mine.get('unlock_time') or 0) if unlocked else 0})
     if not out:
@@ -90,13 +91,27 @@ def parse_page(html, app):
     return {'name': name, 'achievements': out}
 
 
+def steam_image(url):
+    """An icon URL from the page, kept only when it is https on Steam's own
+    hosts: the shell loads it as an image, so a crafted page must not point
+    it at another server or a local file."""
+    return str(url) if url and trusted_url(url) else ''
+
+
+def app_id(app):
+    """True for a Steam app id: ASCII digits only. App ids come from
+    localconfig.vdf and IPC payloads and end up in cache paths and URLs."""
+    app = str(app)
+    return app.isascii() and app.isdigit() and len(app) <= 10
+
+
 def fetch(account, app):
     """The parsed page for one game, None for a game without achievements.
     Raises on network errors so the caller can stop the run."""
-    url = PAGE.format(id64=steamid64(account), app=app)
-    req = urllib.request.Request(url, headers={'User-Agent': 'omatrophy'})
-    with urllib.request.urlopen(req, timeout=4) as r:
-        return page_or_none(r.read().decode('utf8', 'replace'), app, r.geturl())
+    if not app_id(app) or not app_id(account):
+        raise ValueError(f'not a Steam id: {account} / {app}')
+    body, final_url = fetch_bytes(PAGE.format(id64=steamid64(account), app=app))
+    return page_or_none(body.decode('utf8', 'replace'), app, final_url)
 
 
 def page_or_none(html, app, final_url):
@@ -112,6 +127,8 @@ def page_or_none(html, app, final_url):
 
 def cached(app):
     """The cached page for one game, {'time', 'name', 'achievements'}; {} when none."""
+    if not app_id(app):
+        return {}
     return read_json(f'{cache_dir()}/games/{app}.json', {})
 
 
@@ -152,9 +169,9 @@ def due(app, played, now, nones):
     return now - fetched > limit
 
 def write_atomic(path, value):
-    """Write then rename, so the watcher never reads half a file."""
-    write_json(path + '.tmp', value)
-    os.replace(path + '.tmp', path)
+    """Write then rename, so the watcher never reads half a file
+    (write_json does both)."""
+    write_json(path, value)
 
 
 def status():
@@ -171,7 +188,7 @@ def backfill(account, played, local, fetch_page=fetch, pause=PAUSE_SECONDS, say=
     Returns (fetched, failed: bool)."""
     now = time.time()
     nones = none_index()
-    todo = [(t, app) for t, app in played if app not in local and due(app, t, now, nones)]
+    todo = [(t, app) for t, app in played if app_id(app) and app not in local and due(app, t, now, nones)]
     fetched = 0
     shout = say
 

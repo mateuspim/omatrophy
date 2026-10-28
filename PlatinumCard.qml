@@ -120,6 +120,7 @@ Item {
     }
     // Engraved into the plate (omarchy set: centred at 64,52 of 128).
     Text {
+      textFormat: Text.PlainText
       visible: trophy.engraving !== "" && trophy.set === "omarchy"
       x: trophy.width * 0.5 - width / 2
       y: trophy.height * (52 / 128) - height / 2
@@ -606,6 +607,7 @@ Item {
         Repeater {
           model: "PLATINUM TROPHY".split("")
           Text {
+            textFormat: Text.PlainText
             required property string modelData
             required property int index
             readonly property real shown: Math.max(0, Math.min(1, root.reveal - index))
@@ -623,6 +625,7 @@ Item {
         width: parent.width
         height: title.height + 2
         Text {
+          textFormat: Text.PlainText
           id: title
           width: parent.width
           horizontalAlignment: root.mirror ? Text.AlignRight : Text.AlignLeft
@@ -641,6 +644,7 @@ Item {
         spacing: 2
         opacity: 0
         Text {
+          textFormat: Text.PlainText
           width: parent.width
           horizontalAlignment: root.mirror ? Text.AlignRight : Text.AlignLeft
           text: root.span(root.event) ? "Every achievement, in " + root.span(root.event) : "Every achievement"
@@ -654,12 +658,14 @@ Item {
           height: count.height
           // A clean exit: the game has nothing left to give.
           Text {
+            textFormat: Text.PlainText
             text: "exit 0"
             color: Qt.alpha(root.fg, 0.5)
             font.family: Commons.Style.font.family
             font.pixelSize: Commons.Style.font.bodySmall
           }
           Text {
+            textFormat: Text.PlainText
             id: count
             anchors.right: parent.right
             text: root.event ? Math.round(root.counted) + " / " + root.event.total : ""

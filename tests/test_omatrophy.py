@@ -146,6 +146,75 @@ class ParseKV(unittest.TestCase):
         with self.assertRaises(ValueError):
             steam.parse_kv(b'\x09k\0')
 
+    def test_truncated_wide_string_raises_instead_of_spinning(self):
+        for blob in (b'\x05w\0' + 'abc'.encode('utf-16le'), b'\x05w\0a'):
+            with self.assertRaises(ValueError):
+                steam.parse_kv(blob)
+
+    def test_nesting_is_bounded(self):
+        with self.assertRaises(ValueError):
+            steam.parse_kv(b'\x00k\0' * (steam.MAX_KV_DEPTH + 2))
+
+    def test_a_broken_stats_file_means_no_achievements(self):
+        with SteamDir(['Spark']) as fake:
+            fake.unlock({0: 1700000000})
+            fake.write(f'UserGameStatsSchema_{APP}.bin', b'\x00' + APP.encode() + b'\0\x05w\0ab')
+            self.assertEqual(steam.read_achievements(fake.stats, UID, APP), [])
+
+
+class Boundaries(unittest.TestCase):
+    """Data from Steam files, pages and IPC is untrusted (SECURITY.md)."""
+
+    def test_app_ids_are_ascii_digits(self):
+        for good in ('20920', '7'):
+            self.assertTrue(steam_community.app_id(good))
+        for bad in ('', '../etc', '12/34', '١٢', '1' * 11, '12 ', '-1'):
+            self.assertFalse(steam_community.app_id(bad), bad)
+
+    def test_only_https_store_hosts_are_trusted(self):
+        from stores import base
+        for good in ('https://steamcommunity.com/profiles/1/', 'https://cdn.fastly.steamstatic.com/a.jpg',
+                     'https://store.steampowered.com/api/'):
+            self.assertTrue(base.trusted_url(good), good)
+        for bad in ('http://steamcommunity.com/', 'https://steamcommunity.com.evil.example/',
+                    'https://evilsteamstatic.com/a.jpg', 'file:///etc/passwd', 'javascript:x', ''):
+            self.assertFalse(base.trusted_url(bad), bad)
+
+    def test_page_icons_from_other_hosts_are_dropped(self):
+        self.assertEqual(steam_community.steam_image('https://example.com/a.jpg'), '')
+        self.assertEqual(steam_community.steam_image('file:///home/a.png'), '')
+        self.assertEqual(steam_community.steam_image(None), '')
+
+    def test_untrusted_urls_are_never_fetched(self):
+        from stores import base
+        with mock.patch.object(base.OPENER, 'open') as opened:
+            with self.assertRaises(ValueError):
+                base.fetch_bytes('http://example.com/')
+            self.assertEqual(base.cached('https://example.com/a.png', 'x/a.png'), 'https://example.com/a.png')
+        opened.assert_not_called()
+
+    def test_store_methods_refuse_bad_app_ids(self):
+        with SteamDir(['Spark']) as fake:
+            store = steam.Steam.__new__(steam.Steam)
+            store.root, store.stats, store.uid = os.path.dirname(os.path.dirname(fake.stats)), fake.stats, UID
+            self.assertEqual(store.achievements('../x'), [])
+            self.assertEqual(store.percents('../x'), {})
+            self.assertEqual(store.art('../x'), {'hero': '', 'header': ''})
+
+    def test_write_json_replaces_a_symlink_instead_of_following_it(self):
+        from stores import base
+        with tempfile.TemporaryDirectory() as d:
+            outside, link = os.path.join(d, 'outside.txt'), os.path.join(d, 'state', 'x.json')
+            with open(outside, 'w') as f:
+                f.write('keep')
+            os.makedirs(os.path.dirname(link))
+            os.symlink(outside, link)
+            base.write_json(link, {'a': 1})
+            self.assertFalse(os.path.islink(link))
+            self.assertEqual(open(outside).read(), 'keep')
+            self.assertEqual(base.read_json(link, None), {'a': 1})
+            self.assertEqual([n for n in os.listdir(os.path.dirname(link)) if n.endswith('.tmp')], [])
+
 
 class Cache(unittest.TestCase):
     def setUp(self):
@@ -280,6 +349,10 @@ class Played(unittest.TestCase):
     def test_text_vdf_nests_and_unescapes_nothing(self):
         self.assertEqual(steam.parse_text_vdf('"a" { "b" "1" "c" { "d" "x \\"y\\"" } }'),
                          {'a': {'b': '1', 'c': {'d': 'x \\"y\\"'}}})
+
+    def test_last_played_skips_keys_that_are_not_app_ids(self):
+        text = '"apps" { "../../x" { "LastPlayed" "1900000000" } "30" { "LastPlayed" "1600000000" } }'
+        self.assertEqual(steam.last_played(text), [(1600000000, '30')])
 
     def test_last_played_newest_first_without_never_played(self):
         self.assertEqual(steam.last_played(LOCALCONFIG), [(1800000000, '20'), (1700000000, '10')])
@@ -523,9 +596,9 @@ def community_page(app, unlocked, name='Remote Game', extra=()):
     JSON script whose renderContext.queryData is itself JSON (ADR 11)."""
     schema = {'appid': int(app), 'groups': [{'id': 0, 'achievements': [
         {'internal_key': 256, 'api_name': 'ACH_A', 'name': 'Alpha', 'description': 'Do alpha', 'hidden': False,
-         'archived': False, 'icon_achieved': 'https://x/a.jpg', 'icon_unachieved': 'https://x/a_g.jpg'},
+         'archived': False, 'icon_achieved': 'https://cdn.fastly.steamstatic.com/x/a.jpg', 'icon_unachieved': 'https://cdn.fastly.steamstatic.com/x/a_g.jpg'},
         {'internal_key': 257, 'api_name': 'ACH_B', 'name': 'Beta', 'description': 'Secret', 'hidden': True,
-         'archived': False, 'icon_achieved': 'https://x/b.jpg', 'icon_unachieved': 'https://x/b_g.jpg'},
+         'archived': False, 'icon_achieved': 'https://cdn.fastly.steamstatic.com/x/b.jpg', 'icon_unachieved': 'https://cdn.fastly.steamstatic.com/x/b_g.jpg'},
         {'internal_key': 258, 'api_name': 'ACH_OLD', 'name': 'Gone', 'archived': True}]}]}
     user = {'appid': int(app), 'achievements': {str(k): {'internal_key': k, 'unlocked': True, 'unlock_time': t}
                                                 for k, t in unlocked.items()}}
@@ -545,7 +618,7 @@ class CommunityPage(unittest.TestCase):
         a, b = page['achievements']
         self.assertEqual((a['api'], a['name'], a['desc'], a['unlocked'], a['time']),
                          ('ACH_A', 'Alpha', 'Do alpha', True, 1700000000))
-        self.assertEqual((a['icon'], a['icon_locked']), ('https://x/a.jpg', 'https://x/a_g.jpg'))
+        self.assertEqual((a['icon'], a['icon_locked']), ('https://cdn.fastly.steamstatic.com/x/a.jpg', 'https://cdn.fastly.steamstatic.com/x/a_g.jpg'))
         self.assertEqual((b['unlocked'], b['time'], b['hidden']), (False, 0, True))
 
     def test_archived_achievements_are_left_out(self):
@@ -777,6 +850,12 @@ class Stores(unittest.TestCase):
 
 
 class Inbox(unittest.TestCase):
+    def test_only_toast_events_pass(self):
+        self.assertEqual(omatrophy.inbox_event('{"type": "unlock", "tier": "gold"}\n'),
+                         '{"type": "unlock", "tier": "gold"}')
+        for bad in ('not json', '[1]', '{"type": "ready"}', '{"type": "unlock", "x": "' + 'a' * 70000 + '"}', '  '):
+            self.assertIsNone(omatrophy.inbox_event(bad), bad[:30])
+
     def test_forwards_only_new_lines(self):
         with tempfile.TemporaryDirectory() as tmp, mock.patch.object(omatrophy, 'INBOX', f'{tmp}/inbox.jsonl'):
             self.assertEqual(omatrophy.drain_inbox(0), 0)
@@ -924,6 +1003,15 @@ class Qml(unittest.TestCase):
             for n, line in enumerate(text.splitlines(), 1):
                 code = line.split('//')[0]
                 self.assertIsNone(re.search(r'(?<![\w.])Color\.', code), f'{name}:{n}: use Commons.Color')
+
+    def test_text_is_plain(self):
+        # Game names and achievement text come from Steam files and pages;
+        # Qt's default AutoText would render markup in them as rich text.
+        import re
+        for name, text in self.qml():
+            for m in re.finditer(r'^(\s*)Text\s*\{\s*\n(\s*)(.*)$', text, re.M):
+                self.assertEqual(m.group(3), 'textFormat: Text.PlainText',
+                                 f'{name}:{text[:m.start()].count(chr(10)) + 1}: Text without textFormat: Text.PlainText')
 
     def test_cards_load_standalone(self):
         # Cards are built from their text (FreshObject.qml, ADR 10) and stay

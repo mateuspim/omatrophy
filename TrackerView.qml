@@ -353,6 +353,7 @@ Item {
             border.width: 1
             border.color: Commons.Color.accent
             Text {
+              textFormat: Text.PlainText
               id: playingText
               anchors.centerIn: parent
               text: "PLAYING NOW"
@@ -368,6 +369,7 @@ Item {
             spacing: Commons.Style.space(6)
             Trophy { style: root.iconSet; metal: "platinum"; width: 20; height: 20 }
             Text {
+              textFormat: Text.PlainText
               anchors.verticalCenter: parent.verticalCenter
               text: root.game ? "Platinum · " + root.day(root.game.platinum) : ""
               color: root.metalColors.platinum
@@ -378,6 +380,7 @@ Item {
           }
         }
         Text {
+          textFormat: Text.PlainText
           width: parent.width
           text: root.game ? root.game.game : ""
           color: root.foreground
@@ -398,6 +401,7 @@ Item {
         width: Commons.Style.space(150)
         spacing: Commons.Style.space(4)
         Text {
+          textFormat: Text.PlainText
           anchors.right: parent.right
           text: root.game ? Math.floor(100 * root.game.unlocked / root.game.total) + "%" : ""
           color: root.foreground
@@ -460,6 +464,7 @@ Item {
         border.width: 1
         border.color: Qt.alpha(root.foreground, 0.25)
         Text {
+          textFormat: Text.PlainText
           id: sortText
           anchors.centerIn: parent
           text: "Sort: " + root.sortLabel()
@@ -478,6 +483,7 @@ Item {
       }
 
       Text {
+        textFormat: Text.PlainText
         anchors.right: parent.right
         anchors.left: sortButton.right
         anchors.leftMargin: Commons.Style.space(16)
@@ -574,6 +580,7 @@ Item {
           anchors.verticalCenter: parent.verticalCenter
           spacing: Commons.Style.space(3)
           Text {
+            textFormat: Text.PlainText
             width: parent.width
             text: row.secret ? "Hidden achievement" : row.ach.name
             color: root.foreground
@@ -602,6 +609,7 @@ Item {
             anchors.right: parent.right
             spacing: Commons.Style.space(6)
             Text {
+              textFormat: Text.PlainText
               anchors.verticalCenter: parent.verticalCenter
               text: row.ach.percent !== null ? row.ach.percent.toFixed(1) + "%" : "–"
               color: row.ach.percent !== null && row.ach.percent <= root.rarePercent ? root.metalColors.gold : root.foreground
@@ -706,6 +714,7 @@ Item {
     }
 
     Text {
+      textFormat: Text.PlainText
       anchors.centerIn: parent
       width: parent.width * 0.7
       visible: root.error !== "" && root.game === null

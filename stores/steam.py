@@ -10,6 +10,7 @@ import os, re, struct, threading, time
 
 from . import steam_community
 from .base import CACHE, STATE, Store, cached, config, http_json, read_json, write_json
+from .steam_community import app_id
 
 ICON_BASE = 'https://cdn.fastly.steamstatic.com/steamcommunity/public/images/apps'
 ART_BASE = 'https://cdn.fastly.steamstatic.com/steam/apps'
@@ -23,10 +24,19 @@ NAME_MISS_SECONDS = 24 * 3600
 # `omatrophy.py games` looks names up from several threads; the cache file is
 # read and rewritten whole, so one writer at a time.
 NAMES_LOCK = threading.Lock()
+# The largest schema seen is a few megabytes; anything far past that is a
+# broken or planted file, not stats.
+MAX_KV_BYTES = 64 * 1024 * 1024
+# Binary KeyValues nest a handful of levels; a deeper file is corrupt and
+# would otherwise end in a RecursionError deep inside the parser.
+MAX_KV_DEPTH = 32
 
 
-def parse_kv(b, pos=0):
-    """Parse Steam's binary KeyValues format."""
+def parse_kv(b, pos=0, depth=0):
+    """Parse Steam's binary KeyValues format. A truncated or malformed file
+    raises ValueError (or struct.error), never loops."""
+    if depth > MAX_KV_DEPTH:
+        raise ValueError('KeyValues nested too deep')
     d = {}
     while pos < len(b):
         t = b[pos]; pos += 1
@@ -34,7 +44,7 @@ def parse_kv(b, pos=0):
             return d, pos
         e = b.index(b'\0', pos); k = b[pos:e].decode('utf8', 'replace'); pos = e + 1
         if t == 0:
-            v, pos = parse_kv(b, pos)
+            v, pos = parse_kv(b, pos, depth + 1)
         elif t == 1:
             e = b.index(b'\0', pos); v = b[pos:e].decode('utf8', 'replace'); pos = e + 1
         elif t in (2, 4, 6):
@@ -44,10 +54,14 @@ def parse_kv(b, pos=0):
         elif t == 7:
             v = struct.unpack_from('<Q', b, pos)[0]; pos += 8
         elif t == 5:
+            # UTF-16 runs to a two-byte NUL on an even offset; stop at the
+            # end of the buffer, or a truncated file spins forever.
             e = pos
-            while b[e:e + 2] != b'\0\0':
+            while e + 1 < len(b) and b[e:e + 2] != b'\0\0':
                 e += 2
-            v = b[pos:e].decode('utf-16le'); pos = e + 2
+            if e + 1 >= len(b):
+                raise ValueError('unterminated UTF-16 value')
+            v = b[pos:e].decode('utf-16le', 'replace'); pos = e + 2
         else:
             raise ValueError(f'unknown type {t}')
         d[k] = v
@@ -93,7 +107,7 @@ def last_played(text):
     """[(unix seconds, appid)] newest first, from localconfig.vdf's text."""
     apps = find_apps(parse_text_vdf(text)) or {}
     rows = [(int(v['LastPlayed']), k) for k, v in apps.items()
-            if isinstance(v, dict) and str(v.get('LastPlayed', '')).isdigit() and int(v['LastPlayed']) > 0]
+            if app_id(k) and isinstance(v, dict) and str(v.get('LastPlayed', '')).isdigit() and int(v['LastPlayed']) > 0]
     return sorted(rows, reverse=True)
 
 
@@ -146,7 +160,10 @@ def running_game(proc='/proc'):
 
 def read_kv(path):
     with open(path, 'rb') as f:
-        return parse_kv(f.read())[0]
+        body = f.read(MAX_KV_BYTES + 1)
+    if len(body) > MAX_KV_BYTES:
+        raise ValueError(f'{path} is over {MAX_KV_BYTES} bytes')
+    return parse_kv(body)[0]
 
 
 def find_steam():
@@ -165,11 +182,11 @@ def find_steam():
 def account_id(stats):
     """Steam account whose stats are cached (env STEAM_ACCOUNT overrides), or None."""
     if os.environ.get('STEAM_ACCOUNT'):
-        return os.environ['STEAM_ACCOUNT']
+        return os.environ['STEAM_ACCOUNT'] if app_id(os.environ['STEAM_ACCOUNT']) else None
     counts = {}
     for f in os.listdir(stats):
         p = f.split('_')
-        if f.startswith('UserGameStats_') and len(p) == 3:
+        if f.startswith('UserGameStats_') and len(p) == 3 and app_id(p[1]):
             counts[p[1]] = counts.get(p[1], 0) + 1
     return max(counts, key=counts.get) if counts else None
 
@@ -226,7 +243,11 @@ def read_achievements(stats, uid, app):
     uf = f'{stats}/UserGameStats_{uid}_{app}.bin'
     if not (os.path.exists(sf) and os.path.exists(uf)):
         return []
-    sch, us = read_kv(sf), read_kv(uf)
+    try:
+        sch, us = read_kv(sf), read_kv(uf)
+    except (OSError, ValueError, struct.error, IndexError):
+        # One broken cache file must not stop the watcher before `ready`.
+        return []
     cache = us.get('cache', {})
     stats_schema = sch.get(app, {}).get('stats', {})
     values = stat_values(stats_schema, cache)
@@ -274,7 +295,7 @@ class Steam(Store):
         """{appid: mtime} of the account's stats files."""
         pre, out = f'UserGameStats_{self.uid}_', {}
         for e in os.scandir(self.stats):
-            if e.name.startswith(pre) and e.name.endswith('.bin'):
+            if e.name.startswith(pre) and e.name.endswith('.bin') and app_id(e.name[len(pre):-4]):
                 out[e.name[len(pre):-4]] = e.stat().st_mtime
         return out
 
@@ -289,6 +310,8 @@ class Steam(Store):
         return dict(remote, **local)
 
     def achievements(self, app):
+        if not app_id(app):
+            return []
         achs = read_achievements(self.stats, self.uid, app)
         if not achs and not os.path.exists(f'{self.stats}/UserGameStats_{self.uid}_{app}.bin') \
                 and config().get('community'):
@@ -333,6 +356,8 @@ class Steam(Store):
 
     def game_name(self, app):
         """Store name, cached in the state folder; the appid when offline."""
+        if not app_id(app):
+            return f'App {app}'
         with NAMES_LOCK:
             names = read_json(NAMES, {})
         if app in names:
@@ -360,6 +385,8 @@ class Steam(Store):
 
     def percents(self, app):
         """Global rarity for every achievement, cached a day; a stale copy when offline."""
+        if not app_id(app):
+            return {}
         path = f'{CACHE}/rarity/{app}.json'
         old = read_json(path, {})
         if old.get('time', 0) > time.time() - RARITY_SECONDS:
@@ -385,6 +412,8 @@ class Steam(Store):
         return None
 
     def art(self, app):
+        if not app_id(app):
+            return {'hero': '', 'header': ''}
         return {'hero': self.library_art(app, 'library_hero.jpg')
                 or cached(f'{ART_BASE}/{app}/library_hero.jpg', f'art/{app}_hero.jpg'),
                 'header': self.library_art(app, 'library_header.jpg') or f'{ART_BASE}/{app}/header.jpg'}

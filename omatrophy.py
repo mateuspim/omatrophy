@@ -108,9 +108,29 @@ def drain_inbox(offset):
     with open(INBOX) as f:
         f.seek(offset)
         for line in f:
-            if line.strip():
-                print(line.strip(), flush=True)
+            event = inbox_event(line)
+            if event:
+                print(event, flush=True)
         return f.tell()
+
+
+# A real event line is a few hundred bytes; the shell parses every line.
+MAX_INBOX_LINE = 64 * 1024
+
+
+def inbox_event(line):
+    """The line itself when it is one toast event (`unlock` or `platinum`),
+    else None: the inbox is a file any of the user's processes can append to."""
+    line = line.strip()
+    if not line or len(line) > MAX_INBOX_LINE:
+        return None
+    try:
+        event = json.loads(line)
+    except ValueError:
+        return None
+    if not isinstance(event, dict) or event.get('type') not in ('unlock', 'platinum'):
+        return None
+    return line
 
 
 def found_stores():
