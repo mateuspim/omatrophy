@@ -23,11 +23,11 @@ Usage:
 Each store (stores/) reads its launcher's own files; this file diffs them and
 turns new unlocks into events. Steam is the only store so far.
 """
-import json, os, sys, threading, time
+import hashlib, json, os, sys, threading, time, urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 
 import stores
-from stores.base import CACHE, STATE, cached, read_json, write_json
+from stores.base import CACHE, STATE, cached, read_json, trusted_url, write_json
 
 INBOX = f'{STATE}/inbox.jsonl'
 # An unlock older than this when its file changes is a cache sync of past
@@ -413,15 +413,85 @@ def games():
             for (s, g, achs), name in zip(lib, names)]
 
 
+# Fields of a panel or tracker answer that hold an image URL.
+IMAGE_KEYS = ('header', 'hero', 'icon', 'icon_locked')
+IMAGE_EXTS = ('.jpg', '.jpeg', '.png', '.gif', '.webp')
+# Images fetched after one answer; the rest wait for the next read.
+IMAGE_BATCH = 600
+
+
+def image_name(url):
+    """Where an image's local copy lives under the cache, named by a hash of
+    its URL so any store's art and icons share one folder."""
+    ext = os.path.splitext(urllib.parse.urlsplit(url).path)[1].lower()
+    return f'images/{hashlib.sha1(url.encode()).hexdigest()}{ext if ext in IMAGE_EXTS else ""}'
+
+
+def local_images(value, missing):
+    """`value` with every store image URL in it swapped for its local copy
+    when there is one; URLs without a copy yet are added to `missing`. The
+    panel is rebuilt on every open and Quickshell keeps no disk cache, so a
+    URL is a fresh download each time."""
+    if isinstance(value, list):
+        return [local_images(v, missing) for v in value]
+    if not isinstance(value, dict):
+        return value
+    out = {}
+    for key, v in value.items():
+        if key in IMAGE_KEYS and isinstance(v, str) and trusted_url(v):
+            path = f'{CACHE}/{image_name(v)}'
+            if os.path.exists(path):
+                v = 'file://' + path
+            elif v not in missing:
+                missing.append(v)
+        out[key] = local_images(v, missing)
+    return out
+
+
+def save_images(urls, threads=8):
+    """Fetch images into the cache, eight at a time; a failed one is retried
+    by the next read that names it."""
+    with ThreadPoolExecutor(threads) as pool:
+        list(pool.map(lambda url: cached(url, image_name(url)), urls[:IMAGE_BATCH]))
+
+
+def save_images_later(urls):
+    """Fetch the missing images after the answer is out, in a detached child:
+    the panel reads until this process exits, and shouldn't wait on the CDN."""
+    if not urls:
+        return
+    sys.stdout.flush()
+    if os.fork():
+        return
+    try:
+        os.setsid()
+        quiet = os.open(os.devnull, os.O_RDWR)
+        for fd in (0, 1, 2):
+            os.dup2(quiet, fd)
+        save_images(urls)
+    finally:
+        os._exit(0)
+
+
+def print_with_images(value):
+    """Print an answer with local images where cached, then fetch the rest."""
+    missing = []
+    print(json.dumps(local_images(value, missing)))
+    save_images_later(missing)
+
+
 def panel_answer(name, value):
     """Print a read for the bar panel and keep a copy: the panel is rebuilt on
     every open, and shows the copy at once while this fresh read runs. A copy
     that can't be written only costs the next open its head start."""
+    missing = []
+    value = local_images(value, missing)
     try:
         write_json(f'{CACHE}/panel/{name}.json', value)
     except OSError:
         pass
     print(json.dumps(value))
+    save_images_later(missing)
 
 
 def detail(a, pcts):
@@ -465,7 +535,7 @@ def game(args):
         store, app = next(s for s in found if s.id == args[0]), args[1]
     else:
         raise SystemExit(f'usage: omatrophy.py game [{"|".join(s.id for s in found)} <game id>]')
-    print(json.dumps(game_detail(store, app)))
+    print_with_images(game_detail(store, app))
 
 
 def config_path():

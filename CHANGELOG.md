@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- The panel and tracker keep their images: art and achievement icons are
+  saved to `~/.cache/omatrophy/images/` after the first time they show,
+  so later opens load them from disk instead of downloading every one
+  again (80 of 127 Games headers did, on every open).
 - Settings has a Steam popups row: a button that opens Steam's settings,
   where you can turn off Steam's own achievement popup so only
   OmaTrophy's shows. OmaTrophy doesn't change Steam's settings itself.

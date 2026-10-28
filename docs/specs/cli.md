@@ -28,7 +28,10 @@ installed.
 next card.
 
 Times are unix seconds; `0` means unknown or not yet. Art and icon fields
-are URLs (`https://` or `file://`) or `""`.
+are URLs (`https://` or `file://`) or `""`. `now`, `games` and `game` give
+the local copy (`file://`) of any image already in the cache; for the rest
+they answer with the URL, then a detached child fetches those images, so
+the next read names them locally. The command itself exits at once.
 
 ## now
 

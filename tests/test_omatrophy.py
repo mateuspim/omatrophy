@@ -1062,3 +1062,28 @@ class Qml(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class LocalImages(unittest.TestCase):
+    def test_image_name_is_stable_and_keeps_known_extensions(self):
+        a = omatrophy.image_name('https://cdn.steamstatic.com/steam/apps/400/header.jpg?t=1')
+        self.assertEqual(a, omatrophy.image_name('https://cdn.steamstatic.com/steam/apps/400/header.jpg?t=1'))
+        self.assertTrue(a.startswith('images/') and a.endswith('.jpg'))
+        self.assertFalse(omatrophy.image_name('https://cdn.steamstatic.com/x/icon.exe').endswith('.exe'))
+
+    def test_cached_urls_become_files_and_the_rest_are_listed_once(self):
+        have = 'https://cdn.steamstatic.com/steam/apps/400/header.jpg'
+        lack = 'https://cdn.steamstatic.com/steamcommunity/public/images/apps/400/a.jpg'
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(omatrophy, 'CACHE', tmp):
+            os.makedirs(f'{tmp}/images')
+            open(f'{tmp}/{omatrophy.image_name(have)}', 'w').close()
+            missing = []
+            out = omatrophy.local_images(
+                {'header': have, 'game': have,
+                 'next': [{'icon': lack, 'icon_locked': 'https://evil.example/x.jpg'}, {'icon': lack}],
+                 'hero': 'file:///already/local.jpg'}, missing)
+        self.assertEqual(out['header'], f'file://{tmp}/{omatrophy.image_name(have)}')
+        self.assertEqual(out['game'], have)  # not an image field
+        self.assertEqual(out['next'][0], {'icon': lack, 'icon_locked': 'https://evil.example/x.jpg'})
+        self.assertEqual(out['hero'], 'file:///already/local.jpg')
+        self.assertEqual(missing, [lack])
