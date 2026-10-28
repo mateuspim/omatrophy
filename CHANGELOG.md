@@ -10,6 +10,10 @@
 - Settings redesigned: each trophy style card shows its whole set, preview
   tiles name their metal, the toast position is picked on a small drawing
   of the screen, and the sound is a row of chips.
+- A redesigned tracker: a completion ring and your unlocks by metal in the
+  header, filters and sort as chips, a search box with a caret, unlocked
+  rows marked with their metal and every rarity in its metal's colour,
+  rows that cascade in, and a key-cap legend.
 
 ## 0.1.0 - 2026-10-27
 

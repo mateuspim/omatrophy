@@ -147,6 +147,12 @@ Item {
     return n
   }
 
+  // Unlocked achievements per metal, for the header's tally.
+  function tierCount(metal) {
+    if (!game) return 0
+    return game.achievements.filter(function(a) { return a.unlocked && a.tier === metal }).length
+  }
+
   function day(t) {
     return t ? Qt.formatDate(new Date(t * 1000), "d MMM yyyy") : ""
   }
@@ -240,6 +246,107 @@ Item {
     }
   }
 
+  // A filter or the sort as a soft pill; the chosen one takes the accent.
+  component Chip: Rectangle {
+    id: chip
+    property string text: ""
+    property bool chosen: false
+    signal clicked(var mouse)
+    width: chipText.implicitWidth + Commons.Style.space(18)
+    height: chipText.implicitHeight + Commons.Style.space(10)
+    radius: height / 2
+    color: chosen ? Qt.alpha(Commons.Color.accent, 0.18) : (chipHit.containsMouse ? Commons.Style.hoverFill : Qt.alpha(root.foreground, 0.04))
+    border.width: 1
+    border.color: chosen ? Qt.alpha(Commons.Color.accent, 0.6) : Qt.alpha(root.foreground, 0.1)
+    Accessible.role: Accessible.Button
+    Accessible.name: text
+    Behavior on color { ColorAnimation { duration: 120 } }
+    Text {
+      textFormat: Text.PlainText
+      id: chipText
+      anchors.centerIn: parent
+      text: chip.text
+      color: chip.chosen ? Commons.Color.accent : root.foreground
+      opacity: chip.chosen ? 1 : 0.75
+      font.family: Commons.Style.font.family
+      font.pixelSize: Commons.Style.font.bodySmall
+      font.bold: chip.chosen
+    }
+    MouseArea {
+      id: chipHit
+      anchors.fill: parent
+      hoverEnabled: true
+      cursorShape: Qt.PointingHandCursor
+      acceptedButtons: Qt.LeftButton | Qt.RightButton
+      onClicked: function(mouse) { chip.clicked(mouse) }
+    }
+  }
+
+  // The game's completion as a ring that winds up when the game loads.
+  component Ring: Canvas {
+    id: ring
+    property real fraction: 0
+    property color fill: Commons.Color.accent
+    property real shown: 0
+    width: 76
+    height: 76
+    onFractionChanged: shown = fraction
+    onShownChanged: requestPaint()
+    onFillChanged: requestPaint()
+    Behavior on shown { NumberAnimation { duration: 800; easing.type: Easing.OutCubic } }
+    onPaint: {
+      var c = getContext("2d")
+      var r = width / 2 - 4
+      c.reset()
+      c.lineWidth = 5
+      c.lineCap = "round"
+      c.strokeStyle = Qt.alpha(root.foreground, 0.12)
+      c.beginPath()
+      c.arc(width / 2, height / 2, r, 0, 2 * Math.PI)
+      c.stroke()
+      if (shown <= 0) return
+      c.strokeStyle = fill
+      c.beginPath()
+      c.arc(width / 2, height / 2, r, -Math.PI / 2, -Math.PI / 2 + 2 * Math.PI * Math.min(1, shown))
+      c.stroke()
+    }
+  }
+
+  // A key cap and what it does, for the footer's legend.
+  component Key: Row {
+    property string cap: ""
+    property string action: ""
+    spacing: Commons.Style.space(5)
+    Rectangle {
+      anchors.verticalCenter: parent.verticalCenter
+      width: Math.max(height, capText.implicitWidth + Commons.Style.space(8))
+      height: capText.implicitHeight + Commons.Style.space(4)
+      radius: 3
+      color: Qt.alpha(root.foreground, 0.06)
+      border.width: 1
+      border.color: Qt.alpha(root.foreground, 0.16)
+      Text {
+        textFormat: Text.PlainText
+        id: capText
+        anchors.centerIn: parent
+        text: parent.parent.cap
+        color: root.foreground
+        opacity: 0.75
+        font.family: Commons.Style.font.family
+        font.pixelSize: Commons.Style.font.caption
+      }
+    }
+    Text {
+      textFormat: Text.PlainText
+      anchors.verticalCenter: parent.verticalCenter
+      text: parent.action
+      color: root.foreground
+      opacity: 0.45
+      font.family: Commons.Style.font.family
+      font.pixelSize: Commons.Style.font.caption
+    }
+  }
+
   component Caption: Text {
     color: root.foreground
     opacity: 0.6
@@ -311,7 +418,7 @@ Item {
       x: card.contentLeftInset
       y: card.contentTopInset
       width: parent.width - card.contentLeftInset - card.contentRightInset
-      height: Commons.Style.space(150)
+      height: Commons.Style.space(176)
 
       Image {
         id: hero
@@ -320,15 +427,15 @@ Item {
         fillMode: Image.PreserveAspectCrop
         asynchronous: true
         sourceSize.width: 1600
-        opacity: status === Image.Ready ? 0.8 : 0
+        opacity: status === Image.Ready ? 0.9 : 0
         Behavior on opacity { NumberAnimation { duration: 250 } }
       }
       // Fade the art into the card so the title reads on any image.
       Rectangle {
         anchors.fill: parent
         gradient: Gradient {
-          GradientStop { position: 0.0; color: Qt.alpha(root.background, 0.1) }
-          GradientStop { position: 0.6; color: Qt.alpha(root.background, 0.7) }
+          GradientStop { position: 0.0; color: Qt.alpha(root.background, 0.05) }
+          GradientStop { position: 0.55; color: Qt.alpha(root.background, 0.6) }
           GradientStop { position: 1.0; color: root.background }
         }
       }
@@ -389,39 +496,72 @@ Item {
           font.bold: true
           elide: Text.ElideRight
         }
+        // What you've earned, by metal, in your trophy style.
+        Row {
+          visible: root.game !== null
+          spacing: Commons.Style.space(14)
+          Repeater {
+            model: ["gold", "silver", "bronze"]
+            delegate: Row {
+              required property string modelData
+              spacing: Commons.Style.space(5)
+              Trophy { anchors.verticalCenter: parent.verticalCenter; style: root.iconSet; metal: parent.modelData; width: 16; height: 16 }
+              Text {
+                textFormat: Text.PlainText
+                anchors.verticalCenter: parent.verticalCenter
+                text: root.tierCount(parent.modelData)
+                color: root.metalColors[parent.modelData]
+                font.family: Commons.Style.font.family
+                font.pixelSize: Commons.Style.font.bodySmall
+                font.bold: true
+              }
+            }
+          }
+        }
       }
 
-      Column {
+      Row {
         id: progress
         visible: root.game !== null
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         anchors.margins: Commons.Style.space(16)
-        anchors.bottomMargin: Commons.Style.space(12)
-        width: Commons.Style.space(150)
-        spacing: Commons.Style.space(4)
-        Text {
-          textFormat: Text.PlainText
-          anchors.right: parent.right
-          text: root.game ? Math.floor(100 * root.game.unlocked / root.game.total) + "%" : ""
-          color: root.foreground
-          font.family: Commons.Style.font.family
-          font.pixelSize: Commons.Style.font.display
-          font.bold: true
-        }
-        Rectangle {
-          width: parent.width
-          height: 4
-          color: Qt.alpha(root.foreground, 0.15)
-          Rectangle {
-            width: root.game ? parent.width * root.game.unlocked / root.game.total : 0
-            height: parent.height
-            color: root.game && root.game.platinum ? root.metalColors.platinum : Commons.Color.accent
+        anchors.bottomMargin: Commons.Style.space(10)
+        spacing: Commons.Style.space(12)
+        Column {
+          anchors.verticalCenter: parent.verticalCenter
+          spacing: Commons.Style.space(1)
+          Text {
+            textFormat: Text.PlainText
+            anchors.right: parent.right
+            text: root.game ? root.game.unlocked + " / " + root.game.total : ""
+            color: root.foreground
+            font.family: Commons.Style.font.family
+            font.pixelSize: Commons.Style.font.title
+            font.bold: true
+          }
+          Caption {
+            anchors.right: parent.right
+            text: "unlocked"
           }
         }
-        Caption {
-          anchors.right: parent.right
-          text: root.game ? root.game.unlocked + " of " + root.game.total + " unlocked" : ""
+        Item {
+          width: ring.width
+          height: ring.height
+          Ring {
+            id: ring
+            fraction: root.game ? root.game.unlocked / root.game.total : 0
+            fill: root.game && root.game.platinum ? root.metalColors.platinum : Commons.Color.accent
+          }
+          Text {
+            textFormat: Text.PlainText
+            anchors.centerIn: parent
+            text: root.game ? Math.floor(100 * root.game.unlocked / root.game.total) + "%" : ""
+            color: root.foreground
+            font.family: Commons.Style.font.family
+            font.pixelSize: Commons.Style.font.title
+            font.bold: true
+          }
         }
       }
     }
@@ -436,65 +576,86 @@ Item {
       width: header.width - Commons.Style.space(24)
       height: filters.height
 
-      ButtonGroup {
+      Row {
         id: filters
-        options: [
-          { value: "all", label: root.label("All", "all") },
-          { value: "locked", label: root.label("Locked", "locked") },
-          { value: "unlocked", label: root.label("Unlocked", "unlocked") },
-          { value: "rare", label: root.label("Rare", "rare") }
-        ]
-        value: root.filter
-        focusable: false
-        foreground: root.foreground
-        fontSize: Commons.Style.font.bodySmall
-        onChanged: value => root.filter = value
+        spacing: Commons.Style.space(6)
+        Repeater {
+          model: [
+            { value: "all", label: "All", kind: "all" },
+            { value: "locked", label: "Locked", kind: "locked" },
+            { value: "unlocked", label: "Unlocked", kind: "unlocked" },
+            { value: "rare", label: "Rare", kind: "rare" }
+          ]
+          delegate: Chip {
+            required property var modelData
+            text: root.label(modelData.label, modelData.kind)
+            chosen: root.filter === modelData.value
+            onClicked: root.filter = modelData.value
+          }
+        }
       }
 
-      // One button that cycles the sort; Left and Right do the same.
-      Rectangle {
+      // One chip that cycles the sort; Left and Right do the same.
+      Chip {
         id: sortButton
         anchors.left: filters.right
-        anchors.leftMargin: Commons.Style.space(12)
+        anchors.leftMargin: Commons.Style.space(14)
         anchors.verticalCenter: parent.verticalCenter
-        width: sortText.width + Commons.Style.space(16)
-        height: filters.height
-        radius: Commons.Style.cornerRadius
-        color: sortHit.containsMouse ? Commons.Style.hoverFill : "transparent"
-        border.width: 1
-        border.color: Qt.alpha(root.foreground, 0.25)
-        Text {
-          textFormat: Text.PlainText
-          id: sortText
-          anchors.centerIn: parent
-          text: "Sort: " + root.sortLabel()
-          color: root.foreground
-          font.family: Commons.Style.font.family
-          font.pixelSize: Commons.Style.font.bodySmall
-        }
-        MouseArea {
-          id: sortHit
-          anchors.fill: parent
-          hoverEnabled: true
-          cursorShape: Qt.PointingHandCursor
-          acceptedButtons: Qt.LeftButton | Qt.RightButton
-          onClicked: function(mouse) { root.cycleSort(mouse.button === Qt.RightButton ? -1 : 1) }
-        }
+        text: "⇅ " + root.sortLabel()
+        onClicked: function(mouse) { root.cycleSort(mouse.button === Qt.RightButton ? -1 : 1) }
       }
 
-      Text {
-        textFormat: Text.PlainText
+      // Typing anywhere searches; this box shows what's typed, with a caret.
+      Rectangle {
         anchors.right: parent.right
         anchors.left: sortButton.right
         anchors.leftMargin: Commons.Style.space(16)
         anchors.verticalCenter: parent.verticalCenter
-        horizontalAlignment: Text.AlignRight
-        text: root.search ? "“" + root.search + "”" : "Type to search"
-        color: root.foreground
-        opacity: root.search ? 1 : 0.45
-        font.family: Commons.Style.font.family
-        font.pixelSize: Commons.Style.font.body
-        elide: Text.ElideLeft
+        height: filters.height
+        radius: height / 2
+        color: Qt.alpha(root.foreground, root.search ? 0.07 : 0.03)
+        border.width: 1
+        border.color: root.search ? Qt.alpha(Commons.Color.accent, 0.6) : Qt.alpha(root.foreground, 0.1)
+        Text {
+          textFormat: Text.PlainText
+          id: searchGlyph
+          anchors.left: parent.left
+          anchors.leftMargin: Commons.Style.space(10)
+          anchors.verticalCenter: parent.verticalCenter
+          text: "⌕"
+          color: root.foreground
+          opacity: 0.5
+          font.pixelSize: Commons.Style.font.body
+        }
+        Text {
+          textFormat: Text.PlainText
+          id: searchText
+          anchors.left: searchGlyph.right
+          anchors.leftMargin: Commons.Style.space(6)
+          anchors.right: parent.right
+          anchors.rightMargin: Commons.Style.space(12)
+          anchors.verticalCenter: parent.verticalCenter
+          text: root.search || "Type to search"
+          color: root.foreground
+          opacity: root.search ? 1 : 0.4
+          font.family: Commons.Style.font.family
+          font.pixelSize: Commons.Style.font.bodySmall
+          elide: Text.ElideLeft
+        }
+        Rectangle {
+          visible: root.search !== ""
+          x: searchText.x + Math.min(searchText.contentWidth, searchText.width) + 1
+          anchors.verticalCenter: parent.verticalCenter
+          width: 1
+          height: searchText.font.pixelSize + 2
+          color: Commons.Color.accent
+          SequentialAnimation on opacity {
+            loops: Animation.Infinite
+            running: root.search !== ""
+            NumberAnimation { to: 0; duration: 530 }
+            NumberAnimation { to: 1; duration: 530 }
+          }
+        }
       }
     }
 
@@ -541,7 +702,27 @@ Item {
         width: list.width
         height: Commons.Style.space(56)
         radius: Commons.Style.cornerRadius
-        color: ListView.isCurrentItem || rowHover.containsMouse ? Commons.Style.hoverFill : "transparent"
+        color: ListView.isCurrentItem || rowHover.containsMouse ? Commons.Style.hoverFill
+               : (ach.unlocked ? Qt.alpha(root.metalColors[ach.tier] || root.metalColors.bronze, 0.035) : "transparent")
+        // The first screenful arrives in a short cascade; rows scrolled to
+        // later just appear.
+        opacity: 0
+        Component.onCompleted: entry.start()
+        SequentialAnimation {
+          id: entry
+          PauseAnimation { duration: Math.min(row.index, 12) * 22 }
+          NumberAnimation { target: row; property: "opacity"; to: 1; duration: 180; easing.type: Easing.OutCubic }
+        }
+
+        // An unlocked row carries its metal as a rail, like the toast.
+        Rectangle {
+          visible: row.ach.unlocked
+          anchors.verticalCenter: parent.verticalCenter
+          width: 3
+          height: parent.height - Commons.Style.space(16)
+          radius: 1.5
+          color: root.metalColors[row.ach.tier] || root.metalColors.bronze
+        }
 
         // Hover moves the highlight too, so mouse and keys share one row.
         MouseArea {
@@ -553,7 +734,7 @@ Item {
 
         Rectangle {
           id: iconFrame
-          x: Commons.Style.space(6)
+          x: Commons.Style.space(12)
           anchors.verticalCenter: parent.verticalCenter
           width: Commons.Style.space(42)
           height: width
@@ -612,7 +793,9 @@ Item {
               textFormat: Text.PlainText
               anchors.verticalCenter: parent.verticalCenter
               text: row.ach.percent !== null ? row.ach.percent.toFixed(1) + "%" : "–"
-              color: row.ach.percent !== null && row.ach.percent <= root.rarePercent ? root.metalColors.gold : root.foreground
+              // In the metal it earns, dimmed while still locked.
+              color: row.ach.percent !== null ? root.metalColors[row.ach.tier] || root.foreground : root.foreground
+              opacity: row.ach.unlocked ? 1 : 0.7
               font.family: Commons.Style.font.family
               font.pixelSize: Commons.Style.font.bodySmall
               font.bold: true
@@ -671,9 +854,10 @@ Item {
       }
       Bone {
         x: header.x + header.width - width - Commons.Style.space(16)
-        y: header.y + header.height - Commons.Style.space(20)
-        width: Commons.Style.space(150)
-        height: 4
+        y: header.y + header.height - height - Commons.Style.space(10)
+        width: 76
+        height: 76
+        radius: 38
       }
       Column {
         x: list.x
@@ -687,7 +871,7 @@ Item {
             height: Commons.Style.space(56)
             Bone {
               id: boneIcon
-              x: Commons.Style.space(6)
+              x: Commons.Style.space(12)
               anchors.verticalCenter: parent.verticalCenter
               width: Commons.Style.space(42)
               height: width
@@ -726,14 +910,26 @@ Item {
       font.pixelSize: Commons.Style.font.title
     }
 
-    Caption {
+    Column {
       id: footer
       anchors.bottom: parent.bottom
       anchors.bottomMargin: card.contentBottomInset + Commons.Style.space(8)
       anchors.horizontalCenter: parent.horizontalCenter
-      width: Math.min(implicitWidth, parent.width - Commons.Style.space(32))
-      text: "↑↓ move · Enter reveals · Tab filters · ←→ sort · type to search · Esc closes · rarity is the share of all players"
-      opacity: 0.4
+      spacing: Commons.Style.space(4)
+      Row {
+        anchors.horizontalCenter: parent.horizontalCenter
+        spacing: Commons.Style.space(14)
+        Key { cap: "↑↓"; action: "move" }
+        Key { cap: "Enter"; action: "reveal" }
+        Key { cap: "Tab"; action: "filter" }
+        Key { cap: "←→"; action: "sort" }
+        Key { cap: "Esc"; action: "close" }
+      }
+      Caption {
+        anchors.horizontalCenter: parent.horizontalCenter
+        text: "Type to search · rarity is the share of all players"
+        opacity: 0.35
+      }
     }
   }
 }
