@@ -36,6 +36,11 @@ Column {
   // `live` off and sets `cabinet` to sample data.
   property var cabinet: null
   property bool live: true
+  // The JSON text behind `cabinet` and `games`: a fresh read that matches
+  // the cached copy is dropped, so the rows don't rebuild and animate in a
+  // second time a moment after the panel opens.
+  property string cabinetText: ""
+  property string gamesText: ""
   // From `omatrophy.py games`, read the first time the Games tab opens.
   property var games: null
   property string sort: "recent"
@@ -195,7 +200,7 @@ Column {
     printErrors: false
     onLoaded: {
       if (root.cabinet !== null) return
-      try { root.cabinet = JSON.parse(text()) } catch (e) {}
+      try { root.cabinet = JSON.parse(text()); root.cabinetText = text().trim() } catch (e) {}
     }
   }
   FileView {
@@ -204,7 +209,7 @@ Column {
     printErrors: false
     onLoaded: {
       if (root.games !== null) return
-      try { root.games = JSON.parse(text()) } catch (e) {}
+      try { root.games = JSON.parse(text()); root.gamesText = text().trim() } catch (e) {}
     }
   }
 
@@ -216,7 +221,8 @@ Column {
     stdout: StdioCollector {
       onStreamFinished: {
         // A failed read keeps the last copy rather than emptying the list.
-        try { root.games = JSON.parse(text) } catch (e) { if (root.games === null) root.games = [] }
+        if (text.trim() === root.gamesText) return
+        try { root.games = JSON.parse(text); root.gamesText = text.trim() } catch (e) { if (root.games === null) root.games = [] }
       }
     }
   }
@@ -226,7 +232,8 @@ Column {
     command: ["python3", root.helperPath, "now"]
     stdout: StdioCollector {
       onStreamFinished: {
-        try { root.cabinet = JSON.parse(text) } catch (e) {}
+        if (text.trim() === root.cabinetText) return
+        try { root.cabinet = JSON.parse(text); root.cabinetText = text.trim() } catch (e) {}
       }
     }
   }
@@ -262,14 +269,21 @@ Column {
   }
 
   // A big number over its label.
+  // A big number over its label; it counts up to a new value, so totals
+  // arriving read as a tally rather than a jump. -1 shows a dash.
   component Stat: Column {
-    property string value: ""
+    id: stat
+    property real value: -1
     property string label: ""
     property color tint: root.foreground
+    property real shown: 0
+    onValueChanged: if (value >= 0) shown = value
+    Component.onCompleted: if (value >= 0) shown = value
+    Behavior on shown { NumberAnimation { duration: 700; easing.type: Easing.OutCubic } }
     spacing: Commons.Style.space(1)
     Text {
       textFormat: Text.PlainText
-      text: parent.value
+      text: stat.value < 0 ? "–" : Math.round(stat.shown).toLocaleString(Qt.locale(), "f", 0)
       color: parent.tint
       font.family: Commons.Style.font.family
       font.pixelSize: Commons.Style.font.display
@@ -302,6 +316,9 @@ Column {
       wrapMode: Text.Wrap
       elide: Text.ElideRight
     }
+    // `zoom` scales the art inside its frame (a hover), so it can never
+    // grow past the panel's edge the way scaling the whole tile did.
+    property real zoom: 1
     Image {
       id: artImage
       anchors.fill: parent
@@ -309,6 +326,10 @@ Column {
       fillMode: Image.PreserveAspectCrop
       asynchronous: true
       sourceSize.width: 460
+      opacity: status === Image.Ready ? 1 : 0
+      scale: art.zoom
+      Behavior on opacity { NumberAnimation { duration: 260 } }
+      Behavior on scale { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
     }
   }
 
@@ -326,7 +347,8 @@ Column {
       source: parent.source
       asynchronous: true
       sourceSize: Qt.size(64, 64)
-      opacity: parent.locked ? 0.45 : 1
+      opacity: status !== Image.Ready ? 0 : (parent.locked ? 0.45 : 1)
+      Behavior on opacity { NumberAnimation { duration: 220 } }
     }
   }
 
@@ -347,6 +369,21 @@ Column {
       radius: parent.radius
       color: bar.fill
       Behavior on width { NumberAnimation { duration: 650; easing.type: Easing.OutCubic } }
+    }
+  }
+
+  // Brings a freshly built row or card in: a short wait by its place in
+  // the list (capped, so long lists don't drag), then a fade and a small
+  // rise. The item starts at opacity 0.
+  component FadeIn: SequentialAnimation {
+    id: fade
+    property Item item
+    property int order: 0
+    running: true
+    PauseAnimation { duration: Math.min(fade.order, 10) * 35 }
+    ParallelAnimation {
+      NumberAnimation { target: fade.item; property: "opacity"; to: 1; duration: 240; easing.type: Easing.OutCubic }
+      NumberAnimation { target: fade.item; property: "rise"; from: 6; to: 0; duration: 280; easing.type: Easing.OutCubic }
     }
   }
 
@@ -588,18 +625,18 @@ Column {
         anchors.verticalCenter: parent.verticalCenter
         spacing: Commons.Style.space(16)
         Stat {
-          value: root.cabinet ? root.cabinet.trophies.toLocaleString(Qt.locale(), "f", 0) : "–"
+          value: root.cabinet ? root.cabinet.trophies : -1
           label: "TROPHIES"
         }
         Rectangle { width: 1; height: Commons.Style.space(34); anchors.verticalCenter: parent.verticalCenter; color: Qt.alpha(root.foreground, 0.12) }
         Stat {
-          value: root.cabinet ? root.cabinet.platinums : "–"
+          value: root.cabinet ? root.cabinet.platinums : -1
           label: "PLATINUM"
           tint: root.metalColors.platinum
         }
         Rectangle { width: 1; height: Commons.Style.space(34); anchors.verticalCenter: parent.verticalCenter; color: Qt.alpha(root.foreground, 0.12) }
         Stat {
-          value: root.cabinet ? root.cabinet.games : "–"
+          value: root.cabinet ? root.cabinet.games : -1
           label: "GAMES"
         }
       }
@@ -643,6 +680,8 @@ Column {
             fillMode: Image.PreserveAspectCrop
             asynchronous: true
             sourceSize.width: 900
+            opacity: status === Image.Ready ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: 350 } }
             onStatusChanged: if (status === Image.Error && playing.game && source !== playing.game.header) source = playing.game.header
           }
           Rectangle {
@@ -764,11 +803,20 @@ Column {
             Repeater {
               // As many as fit beside the label, newest first.
               model: playing.game ? playing.game.session.slice(0, 9) : []
+              // Each unlock pops in, newest first.
               delegate: AchIcon {
+                id: sessionIcon
                 required property var modelData
+                required property int index
                 source: modelData.icon
                 width: 26
                 height: 26
+                scale: 0
+                SequentialAnimation {
+                  running: true
+                  PauseAnimation { duration: 120 + Math.min(sessionIcon.index, 8) * 50 }
+                  NumberAnimation { target: sessionIcon; property: "scale"; to: 1; duration: 320; easing.type: Easing.OutBack }
+                }
               }
             }
           }
@@ -788,6 +836,11 @@ Column {
             delegate: Item {
               id: nextRow
               required property var modelData
+              required property int index
+              property real rise: 0
+              opacity: 0
+              transform: Translate { y: nextRow.rise }
+              FadeIn { item: nextRow; order: nextRow.index + 1 }
               width: parent.width
               height: Math.max(32, nextText.height)
               AchIcon { id: nextIcon; anchors.verticalCenter: parent.verticalCenter; source: nextRow.modelData.icon; locked: true; width: 32; height: 32 }
@@ -876,7 +929,12 @@ Column {
       delegate: Rectangle {
         id: recentCard
         required property var modelData
+        required property int index
         readonly property bool platinum: modelData.platinum > 0
+        property real rise: 0
+        opacity: 0
+        transform: Translate { y: recentCard.rise }
+        FadeIn { item: recentCard; order: recentCard.index }
         width: root.width
         height: Commons.Style.space(64)
         radius: Commons.Style.cornerRadius
@@ -903,6 +961,7 @@ Column {
           width: Math.round(height * 460 / 215)
           source: recentCard.modelData.header || ""
           label: recentCard.modelData.game
+          zoom: recentHit.containsMouse ? 1.06 : 1
         }
         Thumb {
           visible: recentCard.platinum
@@ -994,15 +1053,17 @@ Column {
         delegate: Rectangle {
           id: shelfCard
           required property var modelData
+          required property int index
           width: shelfGrid.tileWidth
           height: Math.round(width * 215 / 460)
           radius: Commons.Style.cornerRadius
           color: "transparent"
           border.width: 1
           border.color: Qt.alpha(root.metalColors.platinum, shelfHit.containsMouse ? 1 : 0.45)
-          z: shelfHit.containsMouse ? 1 : 0
-          scale: shelfHit.containsMouse ? 1.06 : 1
-          Behavior on scale { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+          property real rise: 0
+          opacity: 0
+          transform: Translate { y: shelfCard.rise }
+          FadeIn { item: shelfCard; order: shelfCard.index }
           Accessible.role: Accessible.Button
           Accessible.name: modelData.game + ", platinum " + root.day(modelData.platinum)
 
@@ -1011,6 +1072,7 @@ Column {
             anchors.margins: 1
             source: shelfCard.modelData.header || ""
             label: shelfCard.modelData.game
+            zoom: shelfHit.containsMouse || removeHit.containsMouse ? 1.08 : 1
           }
           Thumb {
             anchors.right: parent.right
@@ -1147,7 +1209,12 @@ Column {
       delegate: Item {
         id: gameRow
         required property var modelData
+        required property int index
         readonly property bool platinum: modelData.platinum > 0
+        property real rise: 0
+        opacity: 0
+        transform: Translate { y: gameRow.rise }
+        FadeIn { item: gameRow; order: gameRow.index }
         readonly property bool hiddenGame: root.isHidden(modelData)
         width: root.width
         height: Commons.Style.space(46)
@@ -1178,6 +1245,7 @@ Column {
           width: Math.round(height * 460 / 215)
           source: gameRow.modelData.header || ""
           opacity: gameRow.dim
+          zoom: gameHit.containsMouse ? 1.06 : 1
         }
         Thumb {
           visible: gameRow.platinum

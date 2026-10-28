@@ -763,7 +763,8 @@ Item {
             source: row.ach.unlocked ? row.ach.icon : (row.ach.icon_locked || row.ach.icon)
             asynchronous: true
             sourceSize: Qt.size(96, 96)
-            opacity: row.ach.unlocked ? 1 : 0.55
+            opacity: status !== Image.Ready ? 0 : (row.ach.unlocked ? 1 : 0.55)
+            Behavior on opacity { NumberAnimation { duration: 220 } }
           }
         }
 

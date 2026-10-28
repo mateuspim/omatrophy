@@ -19,6 +19,11 @@
 - The tracker's search waits for a pause in typing (180 ms) before it
   filters, so long lists don't rebuild on every key; the box shows each
   key at once.
+- More motion while things load: art and icons fade in as they arrive,
+  recent cards, shelf tiles, Up next and Games rows come in one after
+  another (Games again on each page), this session's unlocks pop in and
+  the totals count up. Hovered art zooms inside its frame, so shelf tiles
+  at the panel's edge no longer get cut off.
 - Settings redesigned: each trophy style card shows its whole set, preview
   tiles name their metal, the toast position is picked on a small drawing
   of the screen, and the sound is a row of chips.
