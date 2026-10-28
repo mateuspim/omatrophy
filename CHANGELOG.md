@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.0 - 2026-10-27
 
 - First version: Steam achievement unlocks as toasts on the Overlay layer,
   over fullscreen games, with no API key and private profiles supported.
