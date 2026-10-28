@@ -6,7 +6,7 @@
   "game": "Starfall Odyssey",
   "name": "Long Way Home",
   "desc": "Cross the Veil",
-  "icon": "",
+  "icon": "dev/samples/art/icon-long-way-home.svg",
   "unlocked": 31,
   "total": 52,
   "time": 1793000000,
@@ -21,7 +21,7 @@
   "game": "Starfall Odyssey",
   "name": "Long Way Home",
   "desc": "Cross the Veil",
-  "icon": "",
+  "icon": "dev/samples/art/icon-long-way-home.svg",
   "unlocked": 31,
   "total": 52,
   "time": 1793000000,
@@ -36,7 +36,7 @@
   "game": "Starfall Odyssey",
   "name": "Long Way Home",
   "desc": "Cross the Veil",
-  "icon": "",
+  "icon": "dev/samples/art/icon-long-way-home.svg",
   "unlocked": 31,
   "total": 52,
   "time": 1793000000,
@@ -52,7 +52,7 @@
   "total": 52,
   "first": 1791963200,
   "last": 1793000000,
-  "hero": "",
-  "header": ""
+  "hero": "dev/samples/art/starfall-odyssey-hero.svg",
+  "header": "dev/samples/art/starfall-odyssey-header.svg"
  }
 }

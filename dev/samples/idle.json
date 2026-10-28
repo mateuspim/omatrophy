@@ -10,18 +10,18 @@
    "unlocked": 40,
    "total": 40,
    "game": "Lanterns of Aster",
-   "header": "",
+   "header": "dev/samples/art/lanterns-of-aster-header.svg",
    "played": 1792827200,
    "platinum": 1792827200,
    "latest": [
     {
      "name": "All Lit",
-     "icon": "",
+     "icon": "dev/samples/art/icon-all-lit.svg",
      "time": 1792827200
     },
     {
      "name": "Keeper",
-     "icon": "",
+     "icon": "dev/samples/art/icon-keeper.svg",
      "time": 1792740800
     }
    ]
@@ -32,13 +32,13 @@
    "unlocked": 12,
    "total": 61,
    "game": "Tidebreaker",
-   "header": "",
+   "header": "dev/samples/art/tidebreaker-header.svg",
    "played": 1792481600,
    "platinum": 0,
    "latest": [
     {
      "name": "Shoreline",
-     "icon": "",
+     "icon": "dev/samples/art/icon-shoreline.svg",
      "time": 1792481600
     }
    ]
@@ -49,13 +49,13 @@
    "unlocked": 3,
    "total": 25,
    "game": "Paper Kingdoms",
-   "header": "",
+   "header": "dev/samples/art/paper-kingdoms-header.svg",
    "played": 1791272000,
    "platinum": 0,
    "latest": [
     {
      "name": "Fold",
-     "icon": "",
+     "icon": "dev/samples/art/icon-fold.svg",
      "time": 1791272000
     }
    ]
@@ -68,7 +68,7 @@
    "unlocked": 30,
    "total": 30,
    "game": "Lanterns of Aster",
-   "header": "",
+   "header": "dev/samples/art/lanterns-of-aster-header.svg",
    "played": 0,
    "platinum": 1790408000,
    "latest": []
@@ -79,7 +79,7 @@
    "unlocked": 30,
    "total": 30,
    "game": "Moss & Iron",
-   "header": "",
+   "header": "dev/samples/art/moss-iron-header.svg",
    "played": 0,
    "platinum": 1787816000,
    "latest": []
@@ -90,7 +90,7 @@
    "unlocked": 30,
    "total": 30,
    "game": "Glasswing",
-   "header": "",
+   "header": "dev/samples/art/glasswing-header.svg",
    "played": 0,
    "platinum": 1785224000,
    "latest": []
@@ -101,7 +101,7 @@
    "unlocked": 30,
    "total": 30,
    "game": "Orbit Bakery",
-   "header": "",
+   "header": "dev/samples/art/orbit-bakery-header.svg",
    "played": 0,
    "platinum": 1782632000,
    "latest": []
@@ -112,7 +112,7 @@
    "unlocked": 30,
    "total": 30,
    "game": "Hollow Choir",
-   "header": "",
+   "header": "dev/samples/art/hollow-choir-header.svg",
    "played": 0,
    "platinum": 1780040000,
    "latest": []

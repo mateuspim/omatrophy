@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="460" height="215" viewBox="0 0 460 215">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#140a1f"/><stop offset="1" stop-color="#7a1f3d"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ff6b6b" stop-opacity="0.55"/><stop offset="1" stop-color="#ff6b6b" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="shade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0.55" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.55"/>
+    </linearGradient>
+  </defs>
+  <rect width="460" height="215" fill="url(#sky)"/>
+  <circle cx="343" cy="97" r="142" fill="url(#glow)"/>
+  <circle cx="343" cy="97" r="47" fill="#ff6b6b"/>
+  <polygon points="0,215 0,118 51,146 102,109 153,146 204,118 256,109 307,146 358,118 409,136 460,109 460,215" fill="#4a1230"/>
+  <polygon points="0,215 0,166 77,160 153,146 230,160 307,153 383,160 460,173 460,215" fill="#1c0814"/>
+  <rect width="460" height="215" fill="url(#shade)"/>
+  <text x="22" y="189" font-family="sans-serif" font-weight="800" font-size="34" letter-spacing="1" fill="#ffffff" fill-opacity="0.94">STARFALL ODYSSEY</text>
+</svg>

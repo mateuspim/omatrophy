@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="460" height="215" viewBox="0 0 460 215">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0d1a10"/><stop offset="1" stop-color="#3f6b3a"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#e8ffb0" stop-opacity="0.55"/><stop offset="1" stop-color="#e8ffb0" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="shade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0.55" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.55"/>
+    </linearGradient>
+  </defs>
+  <rect width="460" height="215" fill="url(#sky)"/>
+  <circle cx="269" cy="97" r="142" fill="url(#glow)"/>
+  <circle cx="269" cy="97" r="47" fill="#e8ffb0"/>
+  <polygon points="0,215 0,100 51,90 102,90 153,90 204,118 256,155 307,109 358,136 409,127 460,109 460,215" fill="#244a24"/>
+  <polygon points="0,215 0,194 77,160 153,146 230,194 307,146 383,187 460,187 460,215" fill="#0e1f0e"/>
+  <rect width="460" height="215" fill="url(#shade)"/>
+  <text x="22" y="189" font-family="sans-serif" font-weight="800" font-size="34" letter-spacing="1" fill="#ffffff" fill-opacity="0.94">MOSS &amp; IRON</text>
+</svg>

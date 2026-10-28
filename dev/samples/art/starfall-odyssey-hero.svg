@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="620" viewBox="0 0 1920 620">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#140a1f"/><stop offset="1" stop-color="#7a1f3d"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ff6b6b" stop-opacity="0.55"/><stop offset="1" stop-color="#ff6b6b" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="shade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0.55" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.55"/>
+    </linearGradient>
+  </defs>
+  <rect width="1920" height="620" fill="url(#sky)"/>
+  <circle cx="1430" cy="279" r="409" fill="url(#glow)"/>
+  <circle cx="1430" cy="279" r="136" fill="#ff6b6b"/>
+  <polygon points="0,620 0,340 213,420 427,314 640,420 853,340 1067,314 1280,420 1493,340 1707,393 1920,314 1920,620" fill="#4a1230"/>
+  <polygon points="0,620 0,480 320,461 640,422 960,461 1280,441 1600,461 1920,500 1920,620" fill="#1c0814"/>
+  <rect width="1920" height="620" fill="url(#shade)"/>
+  
+</svg>

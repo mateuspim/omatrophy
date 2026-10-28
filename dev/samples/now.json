@@ -8,43 +8,43 @@
   "unlocked": 31,
   "total": 52,
   "game": "Starfall Odyssey",
-  "header": "",
+  "header": "dev/samples/art/starfall-odyssey-header.svg",
   "played": 1792994600,
   "since": 1792994600,
   "platinum": 0,
   "latest": [
    {
     "name": "Long Way Home",
-    "icon": "",
+    "icon": "dev/samples/art/icon-long-way-home.svg",
     "time": 1792999400
    },
    {
     "name": "First Light",
-    "icon": "",
+    "icon": "dev/samples/art/icon-first-light.svg",
     "time": 1792997600
    }
   ],
   "session": [
    {
     "name": "Long Way Home",
-    "icon": "",
+    "icon": "dev/samples/art/icon-long-way-home.svg",
     "time": 1792999400
    },
    {
     "name": "First Light",
-    "icon": "",
+    "icon": "dev/samples/art/icon-first-light.svg",
     "time": 1792997600
    },
    {
     "name": "Spark",
-    "icon": "",
+    "icon": "dev/samples/art/icon-spark.svg",
     "time": 1792996000
    }
   ],
   "next": [
    {
     "name": "Cartographer",
-    "icon": "",
+    "icon": "dev/samples/art/icon-cartographer.svg",
     "time": 0,
     "desc": "Map every system in the Veil",
     "percent": 48.2,
@@ -55,7 +55,7 @@
    },
    {
     "name": "Hidden Achievement",
-    "icon": "",
+    "icon": "dev/samples/art/icon-hidden-achievement.svg",
     "time": 0,
     "desc": "",
     "percent": 41.0,
@@ -63,14 +63,14 @@
    },
    {
     "name": "Pacifist Run",
-    "icon": "",
+    "icon": "dev/samples/art/icon-pacifist-run.svg",
     "time": 0,
     "desc": "Finish a chapter without a kill",
     "percent": 22.7,
     "progress": null
    }
   ],
-  "hero": ""
+  "hero": "dev/samples/art/starfall-odyssey-hero.svg"
  },
  "recent": [
   {
@@ -79,18 +79,18 @@
    "unlocked": 40,
    "total": 40,
    "game": "Lanterns of Aster",
-   "header": "",
+   "header": "dev/samples/art/lanterns-of-aster-header.svg",
    "played": 1792827200,
    "platinum": 1792827200,
    "latest": [
     {
      "name": "All Lit",
-     "icon": "",
+     "icon": "dev/samples/art/icon-all-lit.svg",
      "time": 1792827200
     },
     {
      "name": "Keeper",
-     "icon": "",
+     "icon": "dev/samples/art/icon-keeper.svg",
      "time": 1792740800
     }
    ]
@@ -101,13 +101,13 @@
    "unlocked": 12,
    "total": 61,
    "game": "Tidebreaker",
-   "header": "",
+   "header": "dev/samples/art/tidebreaker-header.svg",
    "played": 1792481600,
    "platinum": 0,
    "latest": [
     {
      "name": "Shoreline",
-     "icon": "",
+     "icon": "dev/samples/art/icon-shoreline.svg",
      "time": 1792481600
     }
    ]
@@ -118,13 +118,13 @@
    "unlocked": 3,
    "total": 25,
    "game": "Paper Kingdoms",
-   "header": "",
+   "header": "dev/samples/art/paper-kingdoms-header.svg",
    "played": 1791272000,
    "platinum": 0,
    "latest": [
     {
      "name": "Fold",
-     "icon": "",
+     "icon": "dev/samples/art/icon-fold.svg",
      "time": 1791272000
     }
    ]
@@ -137,7 +137,7 @@
    "unlocked": 30,
    "total": 30,
    "game": "Lanterns of Aster",
-   "header": "",
+   "header": "dev/samples/art/lanterns-of-aster-header.svg",
    "played": 0,
    "platinum": 1790408000,
    "latest": []
@@ -148,7 +148,7 @@
    "unlocked": 30,
    "total": 30,
    "game": "Moss & Iron",
-   "header": "",
+   "header": "dev/samples/art/moss-iron-header.svg",
    "played": 0,
    "platinum": 1787816000,
    "latest": []
@@ -159,7 +159,7 @@
    "unlocked": 30,
    "total": 30,
    "game": "Glasswing",
-   "header": "",
+   "header": "dev/samples/art/glasswing-header.svg",
    "played": 0,
    "platinum": 1785224000,
    "latest": []
@@ -170,7 +170,7 @@
    "unlocked": 30,
    "total": 30,
    "game": "Orbit Bakery",
-   "header": "",
+   "header": "dev/samples/art/orbit-bakery-header.svg",
    "played": 0,
    "platinum": 1782632000,
    "latest": []
@@ -181,7 +181,7 @@
    "unlocked": 30,
    "total": 30,
    "game": "Hollow Choir",
-   "header": "",
+   "header": "dev/samples/art/hollow-choir-header.svg",
    "played": 0,
    "platinum": 1780040000,
    "latest": []

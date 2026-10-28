@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="460" height="215" viewBox="0 0 460 215">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#06222b"/><stop offset="1" stop-color="#1f7a7a"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#c8fff4" stop-opacity="0.55"/><stop offset="1" stop-color="#c8fff4" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="shade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0.55" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.55"/>
+    </linearGradient>
+  </defs>
+  <rect width="460" height="215" fill="url(#sky)"/>
+  <circle cx="127" cy="97" r="142" fill="url(#glow)"/>
+  <circle cx="127" cy="97" r="47" fill="#c8fff4"/>
+  <polygon points="0,215 0,136 51,127 102,118 153,100 204,155 256,155 307,90 358,90 409,90 460,90 460,215" fill="#0f4a50"/>
+  <polygon points="0,215 0,180 77,187 153,194 230,160 307,153 383,180 460,187 460,215" fill="#062429"/>
+  <rect width="460" height="215" fill="url(#shade)"/>
+  <text x="22" y="189" font-family="sans-serif" font-weight="800" font-size="34" letter-spacing="1" fill="#ffffff" fill-opacity="0.94">GLASSWING</text>
+</svg>

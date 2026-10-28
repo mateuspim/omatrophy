@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="460" height="215" viewBox="0 0 460 215">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f3e6c8"/><stop offset="1" stop-color="#d9b98a"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#fff6e0" stop-opacity="0.55"/><stop offset="1" stop-color="#fff6e0" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="shade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0.55" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.55"/>
+    </linearGradient>
+  </defs>
+  <rect width="460" height="215" fill="url(#sky)"/>
+  <circle cx="122" cy="97" r="142" fill="url(#glow)"/>
+  <circle cx="122" cy="97" r="47" fill="#fff6e0"/>
+  <polygon points="0,215 0,127 51,100 102,118 153,127 204,136 256,100 307,127 358,127 409,136 460,136 460,215" fill="#a8825a"/>
+  <polygon points="0,215 0,180 77,194 153,166 230,173 307,153 383,146 460,173 460,215" fill="#6b4e33"/>
+  <rect width="460" height="215" fill="url(#shade)"/>
+  <text x="22" y="189" font-family="sans-serif" font-weight="800" font-size="34" letter-spacing="1" fill="#ffffff" fill-opacity="0.94">LANTERNS OF ASTER</text>
+</svg>

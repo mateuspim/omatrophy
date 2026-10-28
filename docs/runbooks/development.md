@@ -71,6 +71,9 @@ dev/preview.sh --picker          # the bar panel in a window
 `dev/render.sh` draws one view offscreen and saves it: no window, no live
 shell. It uses the fake games in `dev/samples/`, so its output is safe for
 the README; `--live` reads your own stores instead and stays out of git.
+The fake games' header, hero and icon art is drawn by `dev/sample-art.py`
+into `dev/samples/art/`; rerun it after adding a game or achievement to a
+sample.
 
 ```sh
 dev/render.sh now /tmp/now.png          # the panel mid-game; also idle, games, settings, loading

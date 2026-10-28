@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="460" height="215" viewBox="0 0 460 215">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0a0f1a"/><stop offset="1" stop-color="#2b4a7a"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#9fd0ff" stop-opacity="0.55"/><stop offset="1" stop-color="#9fd0ff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="shade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0.55" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.55"/>
+    </linearGradient>
+  </defs>
+  <rect width="460" height="215" fill="url(#sky)"/>
+  <circle cx="156" cy="97" r="142" fill="url(#glow)"/>
+  <circle cx="156" cy="97" r="47" fill="#9fd0ff"/>
+  <polygon points="0,215 0,109 51,118 102,127 153,146 204,90 256,155 307,127 358,109 409,100 460,136 460,215" fill="#1a2e4f"/>
+  <polygon points="0,215 0,146 77,146 153,160 230,166 307,146 383,166 460,194 460,215" fill="#0a1222"/>
+  <rect width="460" height="215" fill="url(#shade)"/>
+  <text x="22" y="189" font-family="sans-serif" font-weight="800" font-size="34" letter-spacing="1" fill="#ffffff" fill-opacity="0.94">DEEP SIGNAL</text>
+</svg>
