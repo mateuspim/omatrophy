@@ -23,6 +23,8 @@
   swapping: rows that no longer match slide out, the rest close the gap,
   rows coming back fade in where they belong, and a new sort moves rows
   to their places.
+- Fixed: achievements whose stat the game never wrote showed "0 / 15"
+  (Jedi: Survivor had it on every locked one); they now show no counter.
 - More motion while things load: art and icons fade in as they arrive,
   recent cards, shelf tiles, Up next and Games rows come in one after
   another (Games again on each page), this session's unlocks pop in and

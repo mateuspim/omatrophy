@@ -102,10 +102,22 @@ class Progress(unittest.TestCase):
         spec = dict(self.SPEC, value={'operation': 'sum', 'operand1': 'relics'})
         self.assertIsNone(steam.progress(spec, {'relics': 1.0}))
 
-    def test_stat_values_fall_back_to_the_default(self):
+    def test_stat_values_leave_out_unwritten_stats(self):
+        # An unwritten stat is unknown, not its default: Jedi: Survivor
+        # showed "0 / 15" on every locked achievement this way.
         schema_stats = {'1': {'bits': {}}, '3': {'type': 'INT', 'name': 'relics', 'default': 0},
                         '4': {'type': 'FLOAT', 'name': 'miles', 'default': '2.5'}}
-        self.assertEqual(steam.stat_values(schema_stats, {'3': {'data': 7}}), {'relics': 7.0, 'miles': 2.5})
+        self.assertEqual(steam.stat_values(schema_stats, {'3': {'data': 7}}), {'relics': 7.0})
+
+    def test_locked_achievement_on_an_unwritten_stat_has_no_progress(self):
+        with SteamDir(['Collector']) as fake:
+            sch = schema(['Collector'])
+            sch[APP]['stats']['1']['bits']['0']['progress'] = self.SPEC
+            sch[APP]['stats']['3'] = {'type': 'INT', 'name': 'relics', 'default': 0}
+            fake.write(f'UserGameStatsSchema_{APP}.bin', kv(sch))
+            fake.write(f'UserGameStats_{UID}_{APP}.bin', kv(user({})))
+            achs = steam.read_achievements(fake.stats, UID, APP)
+        self.assertNotIn('progress', achs[0])
 
     def test_locked_counter_achievement_carries_progress(self):
         with SteamDir(['Collector', 'Spark']) as fake:

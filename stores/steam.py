@@ -200,15 +200,18 @@ def number(v):
 
 
 def stat_values(stats_schema, cache):
-    """{stat name: value} for every INT or FLOAT stat; a stat the game hasn't
-    written yet holds its schema default."""
+    """{stat name: value} for every INT or FLOAT stat the game has written.
+    An unwritten stat is left out, not read as its schema default: games
+    like Jedi: Survivor tie each achievement to a stat they only write on
+    unlock, so the default showed "0 / 15" on achievements with no count."""
     out = {}
     for sid, s in stats_schema.items():
         if not isinstance(s, dict) or 'name' not in s or s.get('type') not in ('INT', 'FLOAT', 'AVGRATE'):
             continue
         c = cache.get(sid)
         v = number(c.get('data')) if isinstance(c, dict) else None
-        out[s['name']] = v if v is not None else (number(s.get('default')) or 0.0)
+        if v is not None:
+            out[s['name']] = v
     return out
 
 
