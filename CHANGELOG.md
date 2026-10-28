@@ -19,6 +19,10 @@
 - The tracker's search waits for a pause in typing (180 ms) before it
   filters, so long lists don't rebuild on every key; the box shows each
   key at once.
+- The tracker's list animates a filter, search or sort instead of
+  swapping: rows that no longer match slide out, the rest close the gap,
+  rows coming back fade in where they belong, and a new sort moves rows
+  to their places.
 - More motion while things load: art and icons fade in as they arrive,
   recent cards, shelf tiles, Up next and Games rows come in one after
   another (Games again on each page), this session's unlocks pop in and

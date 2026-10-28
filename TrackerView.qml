@@ -35,7 +35,17 @@ Item {
     { value: "game", label: "Game order" }
   ]
   property string iconSet: "omarchy"
+  // The rows shown, in order. The ListView's model is `rowModel`, kept in
+  // step with this by applyRows() through inserts, removes and moves, so
+  // the list can animate a change instead of swapping wholesale.
   property var rows: []
+  // `rowModel`'s api names in order, mirrored in JS so diffing a long list
+  // doesn't call ListModel.get() for every comparison.
+  property var shownApis: []
+  property var byApi: ({})
+  // True while a game's rows first fill, so they cascade in; rows that
+  // arrive later through a filter use the list's add transition instead.
+  property bool cascading: false
   // Hidden achievements revealed with Enter, by api name; hover reveals too.
   property var revealed: ({})
 
@@ -59,7 +69,16 @@ Item {
     loader.running = true
   }
 
-  onGameChanged: rebuild()
+  onGameChanged: {
+    var index = {}
+    if (game) game.achievements.forEach(function(a) { index[a.api] = a })
+    byApi = index
+    rowModel.clear()
+    shownApis = []
+    cascading = true
+    rebuild()
+    cascadeEnd.restart()
+  }
   onFilterChanged: rebuild()
   onSearchChanged: {
     if (search === "") { searchPause.stop(); appliedSearch = "" }
@@ -112,10 +131,40 @@ Item {
   }
 
   function rebuild() {
-    if (!game) { rows = []; return }
-    rows = sorted(game.achievements.filter(keep))
+    rows = game ? sorted(game.achievements.filter(keep)) : []
+    applyRows(rows.map(function(a) { return a.api }))
     list.currentIndex = -1
     list.positionViewAtBeginning()
+  }
+
+  // Turns the shown list into `want` with the fewest visible steps: rows
+  // that no longer match leave (in runs, from the end), then each wanted
+  // row is moved into place or inserted. The list's transitions animate
+  // each step, so a search narrowing to one row shows the rest leaving.
+  function applyRows(want) {
+    var keep = {}
+    want.forEach(function(api) { keep[api] = true })
+    var order = shownApis.slice()
+    var i = order.length - 1
+    while (i >= 0) {
+      if (keep[order[i]]) { i--; continue }
+      var end = i
+      while (i >= 0 && !keep[order[i]]) i--
+      rowModel.remove(i + 1, end - i)
+      order.splice(i + 1, end - i)
+    }
+    for (var k = 0; k < want.length; k++) {
+      if (order[k] === want[k]) continue
+      var j = order.indexOf(want[k], k + 1)
+      if (j >= 0) {
+        rowModel.move(j, k, 1)
+        order.splice(j, 1)
+      } else {
+        rowModel.insert(k, { api: want[k] })
+      }
+      order.splice(k, 0, want[k])
+    }
+    shownApis = order
   }
 
   // Move the highlighted row; the first key press lands on the first row.
@@ -187,6 +236,14 @@ Item {
     id: searchPause
     interval: 180
     onTriggered: root.appliedSearch = root.search
+  }
+
+  ListModel { id: rowModel }
+
+  Timer {
+    id: cascadeEnd
+    interval: 400
+    onTriggered: root.cascading = false
   }
 
   Process { id: saver }
@@ -684,7 +741,7 @@ Item {
       x: toolbar.x
       width: toolbar.width
       clip: true
-      model: root.rows
+      model: rowModel
       spacing: Commons.Style.space(2)
       boundsBehavior: Flickable.StopAtBounds
       currentIndex: -1
@@ -705,11 +762,33 @@ Item {
       }
 
 
+      // A row leaving slides right and fades; the rows below it close the
+      // gap; rows coming back fade in where they belong.
+      add: Transition {
+        NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 220; easing.type: Easing.OutCubic }
+      }
+      remove: Transition {
+        NumberAnimation { property: "opacity"; to: 0; duration: 170; easing.type: Easing.InQuad }
+        NumberAnimation { property: "x"; to: Commons.Style.space(24); duration: 170; easing.type: Easing.InQuad }
+      }
+      displaced: Transition {
+        NumberAnimation { property: "y"; duration: 260; easing.type: Easing.OutCubic }
+        // A row displaced mid-add or mid-remove settles fully visible.
+        NumberAnimation { property: "opacity"; to: 1; duration: 120 }
+        NumberAnimation { property: "x"; to: 0; duration: 120 }
+      }
+      move: Transition {
+        NumberAnimation { property: "y"; duration: 260; easing.type: Easing.OutCubic }
+      }
+      moveDisplaced: Transition {
+        NumberAnimation { property: "y"; duration: 260; easing.type: Easing.OutCubic }
+      }
+
       delegate: Rectangle {
         id: row
-        required property var modelData
+        required property string api
         required property int index
-        readonly property var ach: modelData
+        readonly property var ach: root.byApi[api] || ({ api: api, name: "", desc: "", tier: "bronze", percent: null })
         // Hidden achievements stay a secret until unlocked, or until you
         // hover or press Enter to reveal them.
         readonly property bool secret: ach.hidden && !ach.unlocked && !rowHover.containsMouse && !root.revealed[ach.api]
@@ -718,10 +797,9 @@ Item {
         radius: Commons.Style.cornerRadius
         color: ListView.isCurrentItem || rowHover.containsMouse ? Commons.Style.hoverFill
                : (ach.unlocked ? Qt.alpha(root.metalColors[ach.tier] || root.metalColors.bronze, 0.035) : "transparent")
-        // The first screenful arrives in a short cascade; rows scrolled to
-        // later just appear.
-        opacity: 0
-        Component.onCompleted: entry.start()
+        // A game's first screenful arrives in a short cascade; rows
+        // scrolled to later, or added by a filter, don't wait on it.
+        Component.onCompleted: if (root.cascading) { opacity = 0; entry.start() }
         SequentialAnimation {
           id: entry
           PauseAnimation { duration: Math.min(row.index, 12) * 22 }
