@@ -1,5 +1,7 @@
 # <img src="icon.svg" alt="" width="32" height="32" align="top"> OmaTrophy
 
+![OmaTrophy: a gold trophy toast over the achievement tracker, beside the wordmark, its feature chips and the install command](preview.png)
+
 **Achievement unlocks as trophies over your games, on the Omarchy shell:
 bronze, silver and gold by rarity, and a platinum moment when you finish a
 game. No API key, works with a private Steam profile.**

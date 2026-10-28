@@ -8,3 +8,9 @@ HANDOFF.md
 design/**/codex.log
 design/**/last-message.md
 design/ref/*-ingame.png
+
+# Copies of the captures and sibling heroes handed to the hero design agent
+design/hero/ref/
+design/hero/captures/
+design/hero/preview.png
+design/review/

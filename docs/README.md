@@ -18,4 +18,5 @@
   [command line](specs/cli.md), [settings and manifest](specs/settings.md).
 - [Development runbook](runbooks/development.md): setup, tests, previews,
   offscreen renders, releases.
+- [Branding](branding.md): the mark, colours and the README hero.
 - [Contributing](../CONTRIBUTING.md) and [agent instructions](../AGENTS.md).

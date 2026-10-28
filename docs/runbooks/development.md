@@ -84,16 +84,29 @@ inlay, card masks and shadows); check those with `dev/preview.sh`.
 
 ## Refresh the preview
 
-The README hero is `docs/brand/preview.svg` rendered to `preview.png`
-(3840 × 2160). It isn't made yet: it waits for the default trophy style.
-Its card captures must come from offscreen renders with sample data, never a
-desktop screenshot:
+The README hero is [`preview.png`](../../preview.png) (3840 × 2160). Its
+editable source is [`docs/brand/preview.svg`](../brand/preview.svg), which
+places two offscreen captures from `docs/brand/captures/`: the tracker and
+a gold toast. The captures come from the fake games in `dev/samples/`, never
+from a desktop screenshot or `--live`. See [branding](../branding.md) for
+colours and layout; `design/hero/` holds the brief it was drawn from.
 
-```sh
-rsvg-convert -o preview.png docs/brand/preview.svg
-```
+1. Render the captures at 2×:
 
-Open the PNG and check it before committing.
+   ```sh
+   for v in now tracker gold platinum games; do
+     QT_SCALE_FACTOR=2 dev/render.sh "$v" "docs/brand/captures/$v.png"
+   done
+   ```
+
+2. Render the hero from the repository root:
+
+   ```sh
+   rsvg-convert -o preview.png docs/brand/preview.svg
+   ```
+
+3. Open the PNG and check it before committing: no text over the cards,
+   nothing clipped, the toast readable at README width.
 
 ## Release
 

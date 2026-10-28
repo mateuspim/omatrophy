@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="3840" height="2160" viewBox="0 0 3840 2160" role="img" aria-label="OmaTrophy: trophies over your games">
+<!-- OmaTrophy README hero. Render from the repository root: rsvg-convert -o preview.png docs/brand/preview.svg
+     Captures come from dev/render.sh on fake data; see docs/branding.md. -->
+<defs>
+  <linearGradient id="background" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0b1015"/><stop offset=".5" stop-color="#0a111b"/><stop offset="1" stop-color="#102236"/></linearGradient>
+  <radialGradient id="goldGlow" cx="0" cy="1" r=".65"><stop stop-color="#a5752d" stop-opacity=".23"/><stop offset="1" stop-color="#a5752d" stop-opacity="0"/></radialGradient>
+  <radialGradient id="blueGlow" cx="1" cy="0" r=".85"><stop stop-color="#1d3a5c" stop-opacity=".38"/><stop offset="1" stop-color="#1d3a5c" stop-opacity="0"/></radialGradient>
+  <pattern id="dots" width="56" height="56" patternUnits="userSpaceOnUse"><circle cx="27.5" cy="26.5" r="2.2" fill="#7a8f9d" opacity=".13"/></pattern>
+  <filter id="shadow" x="-.2" y="-.2" width="1.4" height="1.5"><feGaussianBlur stdDeviation="35"/></filter>
+  <g id="mark"><path fill="#101b22" d="M12 0H116V6H122V12H128V116H122V122H116V128H12V122H6V116H0V12H6V6H12Z"/>
+<g transform="translate(0 -2)">
+<path fill="#e9bd55" fill-rule="evenodd" d="M32 28H16V52H20V60H28V68H40V56H28V48H24V36H32Z"/>
+<path fill="#a5752d" fill-rule="evenodd" d="M96 28H112V52H108V60H100V68H88V56H100V48H104V36H96Z"/>
+<path fill="#e9bd55" fill-rule="evenodd" d="M56 76H72V100H84V104H92V112H36V104H44V100H56Z"/>
+<path fill="#a5752d" fill-rule="evenodd" d="M64 76H72V100H84V104H92V112H64Z"/>
+<path fill="#ffe297" fill-rule="evenodd" d="M44 100H64V104H44Z"/>
+<path fill="#e9bd55" fill-rule="evenodd" d="M32 20H96V60H88V72H80V80H72V84H56V80H48V72H40V60H32Z"/>
+<path fill="#a5752d" fill-rule="evenodd" d="M64 20H96V60H88V72H80V80H72V84H64Z"/>
+<path fill="#ffe297" fill-rule="evenodd" d="M32 20H96V28H40V56H32Z"/>
+<path fill="#a5752d" fill-rule="evenodd" d="M52 40H76V64H52Z"/>
+<path fill="#fff4bf" fill-rule="evenodd" d="M40 28H64V32H40Z"/>
+<path fill="#fff4bf" fill-rule="evenodd" d="M72 28H88V36H84V32H72Z"/>
+<path fill="#fff4bf" fill-rule="evenodd" d="M52 40H76V64H52Z M56 44V60H72V44Z"/>
+</g>
+</g>
+</defs>
+<rect width="3840" height="2160" fill="url(#background)"/>
+<rect width="3840" height="2160" fill="url(#goldGlow)"/><rect width="3840" height="2160" fill="url(#blueGlow)"/><rect width="3840" height="2160" fill="url(#dots)"/>
+<!-- Brand lockup and message. -->
+<g transform="translate(208 408) scale(1.8125)"><use xlink:href="#mark"/></g>
+<text x="495" y="602" font-family="JetBrains Mono,JetBrainsMono Nerd Font,DejaVu Sans Mono,monospace" font-size="205" font-weight="600" letter-spacing="-11" fill="#eff4f7">Oma<tspan fill="#e9bd55">Trophy</tspan></text>
+<g font-family="JetBrains Mono,JetBrainsMono Nerd Font,DejaVu Sans Mono,monospace">
+  <text x="208" y="805" font-size="82" font-weight="700" fill="#eff4f7">Trophies over your games.</text>
+  <g font-size="48" fill="#9ca9b4"><text x="208" y="943">Steam unlocks as toasts over fullscreen games.</text><text x="208" y="1021">Bronze to platinum, no API key.</text></g>
+  <g fill="#101b22" stroke="#35454d" stroke-width="4">
+    <rect x="208" y="1112" width="480" height="100"/><rect x="710" y="1112" width="435" height="100"/><rect x="1167" y="1112" width="470" height="100"/>
+    <rect x="208" y="1234" width="510" height="100"/><rect x="740" y="1234" width="300" height="100"/><rect x="1062" y="1234" width="485" height="100"/>
+    <rect x="208" y="1356" width="370" height="100"/>
+  </g>
+  <g font-size="43" fill="#eff4f7">
+    <g fill="#e9bd55"><circle cx="249" cy="1162" r="10"/><circle cx="751" cy="1162" r="10"/><circle cx="1208" cy="1162" r="10"/><circle cx="249" cy="1284" r="10"/><circle cx="781" cy="1284" r="10"/><circle cx="1103" cy="1284" r="10"/><circle cx="249" cy="1406" r="10"/></g>
+    <text x="280" y="1177">Overlay toasts</text><text x="782" y="1177">Rarity tiers</text><text x="1239" y="1177">Platinum card</text>
+    <text x="280" y="1299">Trophy cabinet</text><text x="812" y="1299">Tracker</text><text x="1134" y="1299">Theme colours</text><text x="280" y="1421">No API key</text>
+  </g>
+  <rect x="208" y="1534" width="1660" height="148" fill="#0e151b" stroke="#35454d" stroke-width="4"/>
+  <text x="258" y="1626" font-size="48" fill="#e9bd55">$</text><text x="317" y="1626" font-size="48" fill="#eff4f7">omarchy plugin add github.com/mateuspim/omatrophy</text>
+</g>
+<!-- Cropped real sample captures; the toast overlaps the tracker. -->
+<g transform="translate(2110 355) rotate(2 740 700)">
+  <rect x="30" y="45" width="1510" height="1460" fill="#000" opacity=".65" filter="url(#shadow)"/>
+  <rect x="-3" y="-3" width="1526" height="1486" fill="#2e3440" stroke="#657488" stroke-width="4"/>
+  <svg x="0" y="0" width="1520" height="1480" viewBox="240 240 1520 1480" preserveAspectRatio="none"><image width="2000" height="1800" xlink:href="captures/tracker.png"/></svg>
+</g>
+<g transform="translate(2040 1170) rotate(-2 760 205)">
+  <rect x="30" y="35" width="1520" height="415" fill="#000" opacity=".8" filter="url(#shadow)"/>
+  <svg width="1520" height="415" viewBox="520 80 960 262" preserveAspectRatio="none"><image width="2000" height="520" xlink:href="captures/gold.png"/></svg>
+</g>
+</svg>
