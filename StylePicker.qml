@@ -31,6 +31,7 @@ Column {
   property string position: "top-center"
   property bool sound: true
   property string chimes: "omatrophy"
+  property string glass: "frosted"
 
   // From `omatrophy.py now`; null until it answers. dev/render.sh turns
   // `live` off and sets `cabinet` to sample data.
@@ -78,6 +79,7 @@ Column {
   function set(key, value) {
     if (key === "icons") iconSet = value
     if (key === "position") position = value
+    if (key === "glass") glass = value
     if (key === "sound") {
       sound = value !== "off"
       if (value !== "on" && value !== "off") chimes = value
@@ -184,6 +186,7 @@ Column {
       if (c.position) root.position = c.position
       if (typeof c.sound === "boolean") root.sound = c.sound
       if (c.chimes) root.chimes = c.chimes
+      if (c.glass) root.glass = c.glass
       var keys = {}
       if (Array.isArray(c.hidden)) c.hidden.forEach(function(k) { keys[k] = true })
       root.hiddenKeys = keys
@@ -1643,6 +1646,104 @@ Column {
           anchors.horizontalCenter: parent.horizontalCenter
           opacity: 0.45
           text: (screen.places.find(function(p) { return p.value === root.position }) || screen.places[1]).label
+        }
+      }
+    }
+
+    // Three stops on a track, from see-through to the solid card. Dragging
+    // moves the knob between stops and writes the setting on release, so
+    // one drag is one `set`.
+    SettingRow {
+      label: "GLASS"
+      Item {
+        id: glassSlider
+        readonly property var stops: [
+          { value: "clear", label: "Clear" },
+          { value: "frosted", label: "Frosted" },
+          { value: "solid", label: "Solid" }
+        ]
+        readonly property int current: Math.max(0, stops.findIndex(function(s) { return s.value === root.glass }))
+        property int dragged: -1
+        readonly property int shown: dragged >= 0 ? dragged : current
+        readonly property real step: glassTrack.width / (stops.length - 1)
+        width: Commons.Style.space(150)
+        height: glassTrack.y + Commons.Style.space(22)
+        Accessible.role: Accessible.Slider
+        Accessible.name: "Toast glass: " + stops[shown].label
+
+        function nearest(x) {
+          return Math.max(0, Math.min(stops.length - 1, Math.round((x - glassTrack.x) / step)))
+        }
+
+        Rectangle {
+          id: glassTrack
+          x: Commons.Style.space(14)
+          y: Commons.Style.space(7)
+          width: parent.width - 2 * x
+          height: 2
+          radius: 1
+          color: Qt.alpha(root.foreground, 0.15)
+          // Filled up to the knob: more fill, more solid.
+          Rectangle {
+            width: glassSlider.shown * glassSlider.step
+            height: parent.height
+            radius: 1
+            color: Qt.alpha(Commons.Color.accent, 0.7)
+            Behavior on width { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+          }
+        }
+        Repeater {
+          model: glassSlider.stops
+          delegate: Item {
+            id: glassStop
+            required property var modelData
+            required property int index
+            x: glassTrack.x + index * glassSlider.step
+            Rectangle {
+              x: -width / 2
+              y: glassTrack.y - height / 2 + 1
+              width: 6
+              height: 6
+              radius: 3
+              color: glassStop.index <= glassSlider.shown ? Commons.Color.accent : Qt.alpha(root.foreground, 0.3)
+            }
+            Caption {
+              textFormat: Text.PlainText
+              x: -width / 2
+              y: glassTrack.y + Commons.Style.space(8)
+              text: glassStop.modelData.label
+              color: glassStop.index === glassSlider.shown ? Commons.Color.accent : root.foreground
+              opacity: glassStop.index === glassSlider.shown ? 1 : 0.5
+              font.bold: glassStop.index === glassSlider.shown
+            }
+          }
+        }
+        Rectangle {
+          x: glassTrack.x + glassSlider.shown * glassSlider.step - width / 2
+          y: glassTrack.y - height / 2 + 1
+          width: 12
+          height: 12
+          radius: 6
+          color: Commons.Color.accent
+          border.width: 2
+          border.color: Commons.Color.popups.background
+          scale: glassHit.pressed ? 1.2 : (glassHit.containsMouse ? 1.1 : 1)
+          Behavior on x { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+          Behavior on scale { NumberAnimation { duration: 120 } }
+        }
+        MouseArea {
+          id: glassHit
+          anchors.fill: parent
+          hoverEnabled: true
+          cursorShape: Qt.PointingHandCursor
+          onPressed: mouse => glassSlider.dragged = glassSlider.nearest(mouse.x)
+          onPositionChanged: mouse => { if (pressed) glassSlider.dragged = glassSlider.nearest(mouse.x) }
+          onReleased: {
+            var pick = glassSlider.stops[glassSlider.dragged].value
+            glassSlider.dragged = -1
+            if (pick !== root.glass) root.set("glass", pick)
+          }
+          onCanceled: glassSlider.dragged = -1
         }
       }
     }

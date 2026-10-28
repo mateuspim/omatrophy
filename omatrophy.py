@@ -11,6 +11,7 @@ Usage:
   omatrophy.py game [store app]       every achievement of one game with rarity, as JSON (the tracker);
                                       without arguments, the game running now or played last
   omatrophy.py set position <where>   top-center, top-left or top-right (applies live)
+  omatrophy.py set glass <look>       clear, frosted or solid toast background
   omatrophy.py set sound on|off|omatrophy|classic
   omatrophy.py set icons omarchy|vector|painted
   omatrophy.py set tracker-sort recent|rarity|name|game
@@ -475,6 +476,7 @@ def config_path():
 SETTINGS = {'position': ('top-center', 'top-left', 'top-right'),
             'sound': ('on', 'off', 'omatrophy', 'classic'),
             'icons': ('omarchy', 'vector', 'painted'),
+            'glass': ('clear', 'frosted', 'solid'),
             'tracker-sort': ('recent', 'rarity', 'name', 'game'),
             'community': ('on', 'off')}
 
@@ -486,6 +488,7 @@ def set_option(key, value):
         raise SystemExit(f'usage: omatrophy.py set position {"|".join(SETTINGS["position"])}\n'
                          f'       omatrophy.py set sound {"|".join(SETTINGS["sound"])}\n'
                          f'       omatrophy.py set icons {"|".join(SETTINGS["icons"])}\n'
+                         f'       omatrophy.py set glass {"|".join(SETTINGS["glass"])}\n'
                          f'       omatrophy.py set tracker-sort {"|".join(SETTINGS["tracker-sort"])}\n'
                          f'       omatrophy.py set community on|off')
     path = config_path()

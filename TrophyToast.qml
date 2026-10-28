@@ -11,8 +11,9 @@ import qs.Commons as Commons
 // reports finished. A rail down the left edge carries the metal too.
 //
 // The metal comes from rarity (omatrophy.py `tier`): bronze, silver, or gold
-// for 10% of players or fewer. Gold also gets the accent border, a glitter
-// burst off the trophy and a sweep of light across the card.
+// for 10% of players or fewer. The card's border and a soft halo behind the
+// trophy tile carry the metal; gold gets them brighter, plus a glitter burst
+// off the trophy and a sweep of light across the card.
 //
 // Built from its text per toast (FreshObject.qml), so it uses no other QML
 // file from this folder; the Trophy component is repeated from
@@ -24,6 +25,10 @@ Item {
   // Which trophy art: assets/omarchy (flat pixel grid, theme-tinted inlay),
   // assets/vector (SVG) or assets/painted (PNG).
   property string iconSet: "omarchy"
+  // How much of the game shows through the card (config `glass`): clear,
+  // frosted, or solid, the card before it went glass.
+  property string glass: "frosted"
+  readonly property real fillAlpha: ({ clear: 0.35, frosted: 0.8, solid: 1 })[glass] || 0.8
   signal finished()
 
   readonly property int pad: 40
@@ -136,7 +141,7 @@ Item {
     id: show
     ScriptAction { script: {
       card.slideX = root.outX; card.slideY = root.outY; card.opacity = 0
-      iconBox.scale = 0.55; medal.scale = 0; medal.spin = 540; medal.shine = -1
+      iconBox.scale = 0.55; medal.scale = 0; medal.spin = 540; medal.shine = -1; halo.opacity = 0
       bar.shown = root.before; roll.offset = 0; sweep.x = -sweep.width
     } }
     ParallelAnimation {
@@ -160,6 +165,12 @@ Item {
         NumberAnimation { target: roll; property: "offset"; to: 1; duration: 380; easing.type: Easing.OutBack }
       }
       NumberAnimation { target: bar; property: "shown"; to: root.progress; duration: 900; easing.type: Easing.InOutCubic }
+      // The halo flares as the trophy lands, then settles to a glow.
+      SequentialAnimation {
+        PauseAnimation { duration: 200 }
+        NumberAnimation { target: halo; property: "opacity"; to: root.gold ? 0.8 : 0.6; duration: 380; easing.type: Easing.OutCubic }
+        NumberAnimation { target: halo; property: "opacity"; to: root.gold ? 0.45 : 0.3; duration: 900; easing.type: Easing.InOutQuad }
+      }
     }
     ScriptAction { script: if (root.gold) glitter.burst(40) }
     ParallelAnimation {
@@ -196,8 +207,9 @@ Item {
         blurMax: 32
         shadowVerticalOffset: 6
       }
+      // Glass: the theme's background, a little see-through.
       ShapePath {
-        fillColor: Commons.Color.notifications.background
+        fillColor: Qt.alpha(Commons.Color.notifications.background, root.fillAlpha)
         strokeColor: "transparent"
         PathSvg { path: root.stepped(card.width, card.height, 6, 0) }
       }
@@ -223,6 +235,24 @@ Item {
       layer.effect: MultiEffect {
         maskEnabled: true
         maskSource: cardMask
+      }
+
+      // Glass: light catching the top of the pane, and its lit top edge.
+      Rectangle {
+        visible: root.glass !== "solid"
+        width: parent.width
+        height: parent.height * 0.55
+        gradient: Gradient {
+          GradientStop { position: 0; color: Qt.rgba(1, 1, 1, 0.09) }
+          GradientStop { position: 1; color: Qt.rgba(1, 1, 1, 0) }
+        }
+      }
+      Rectangle {
+        visible: root.glass !== "solid"
+        y: 1
+        width: parent.width
+        height: 1
+        color: Qt.rgba(1, 1, 1, 0.14)
       }
 
       // The gold sweep: a soft band of light crossing the card once.
@@ -254,7 +284,7 @@ Item {
       anchors.fill: parent
       ShapePath {
         fillColor: "transparent"
-        strokeColor: root.gold ? root.accent : Qt.alpha(root.accent, 0.45)
+        strokeColor: root.gold ? root.tierColor : Qt.alpha(root.tierColor, 0.45)
         strokeWidth: root.gold ? 2 : 1
         joinStyle: ShapePath.MiterJoin
         PathSvg { path: root.stepped(card.width, card.height, 6, root.gold ? 1 : 0.5) }
@@ -314,6 +344,19 @@ Item {
             velocity: AngleDirection { angleVariation: 180; magnitude: 130; magnitudeVariation: 60 }
             acceleration: PointDirection { y: 90 }
           }
+        }
+
+        // A soft halo in the metal behind the tile, kept square or rounded
+        // like the tile itself.
+        RectangularShadow {
+          id: halo
+          anchors.fill: parent
+          scale: medal.scale
+          radius: root.iconSet === "omarchy" ? 0 : Commons.Style.cornerRadius
+          color: root.tierColor
+          blur: 26
+          spread: 2
+          opacity: 0
         }
 
         // Square on the omarchy grid, theme-rounded for the other sets.

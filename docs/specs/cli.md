@@ -16,6 +16,7 @@ installed.
 | `set position top-center\|top-left\|top-right` | Where cards appear. |
 | `set sound on\|off\|omatrophy\|classic` | The chime: on, off, or which set (which also turns it on). |
 | `set icons omarchy\|vector\|painted` | Trophy art set. |
+| `set glass clear\|frosted\|solid` | How see-through toasts are. |
 | `set tracker-sort recent\|rarity\|name\|game` | The tracker's sort; the tracker writes it when you change it. |
 | `set community on\|off` | The opt-in backfill of games that never ran on this machine from your public Steam profile ([ADR 11](../adr/0011-backfill-from-the-community-profile.md)). With it on, the watcher fetches in the background after `ready`. |
 | `sync` | Runs that backfill now, one line per game (`steam: 3/444 1903340: 55 achievements`), at most 15 pages a run, ending `paused: N fetched, M left for later runs` when more are due, then `fetched N`; "stopped early" after any error (a 429 rate limit, offline, private profile), and the next run picks up where it stopped. The watcher runs the same backfill every hour. Exits non-zero while `community` is off. |

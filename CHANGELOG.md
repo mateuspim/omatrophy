@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Toasts are glass: the card shows a little of the game through it, with
+  light along its top. A Glass slider in Settings (and `set glass`) goes
+  from Clear through Frosted (the default) to Solid, the old card.
+- The toast's border is its metal instead of the theme accent, and a soft
+  halo in the metal flares behind the trophy as it lands.
 - A redesigned bar panel: the tabs as an underlined strip, the playing
   game's percentage and progress on its art, Up next rarities in the metal
   they'd earn, quieter sort chips, and Games rows with bigger art, the

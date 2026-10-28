@@ -109,12 +109,13 @@ omarchy-shell shell summon pym.omatrophy '{}'   # the running or last game
 ## Settings
 
 The panel's **Settings** tab holds the trophy style, previews of every tier,
-position and sound. Each choice applies to the next toast. From a terminal:
+position, glass and sound. Each choice applies to the next toast. From a terminal:
 
 ```bash
 omatrophy.py set position top-right     # top-center, top-left, top-right
 omatrophy.py set sound off              # on, off, omatrophy, classic
 omatrophy.py set icons vector           # omarchy, vector, painted
+omatrophy.py set glass clear            # clear, frosted, solid
 omatrophy.py hide steam 20920           # out of "closest to platinum" and the shelf; unhide brings it back
 omatrophy.py test platinum              # bronze, silver, gold, platinum
 omatrophy.py status                     # progress of every game

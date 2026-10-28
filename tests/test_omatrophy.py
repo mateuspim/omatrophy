@@ -898,6 +898,12 @@ class Settings(unittest.TestCase):
                 omatrophy.set_option('tracker-sort', 'rarity')
             with open(f'{home}/.config/omatrophy/config.json') as f:
                 self.assertEqual(json.load(f)['tracker-sort'], 'rarity')
+            with redirect_stdout(io.StringIO()):
+                omatrophy.set_option('glass', 'clear')
+            with open(f'{home}/.config/omatrophy/config.json') as f:
+                self.assertEqual(json.load(f)['glass'], 'clear')
+            with self.assertRaises(SystemExit):
+                omatrophy.set_option('glass', 'mirror')
             with self.assertRaises(SystemExit):
                 omatrophy.set_option('tracker-sort', 'random')
 

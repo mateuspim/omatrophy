@@ -12,7 +12,8 @@ import qs.Commons as Commons
 //
 // Settings live in ~/.config/omatrophy/config.json and apply live:
 //   {"position": "top-center" | "top-left" | "top-right", "sound": true,
-//    "chimes": "omatrophy" | "classic", "icons": "omarchy" | "vector" | "painted"}
+//    "chimes": "omatrophy" | "classic", "icons": "omarchy" | "vector" | "painted",
+//    "glass": "clear" | "frosted" | "solid"}
 Scope {
   id: root
 
@@ -30,6 +31,7 @@ Scope {
   property bool sound: true
   property string chimes: "omatrophy"
   property string iconSet: "omarchy"
+  property string glass: "frosted"
 
   readonly property var tiers: ["bronze", "silver", "gold", "platinum"]
 
@@ -73,6 +75,7 @@ Scope {
       if (typeof c.sound === "boolean") root.sound = c.sound
       if (["omatrophy", "classic"].indexOf(c.chimes) >= 0) root.chimes = c.chimes
       if (["omarchy", "vector", "painted"].indexOf(c.icons) >= 0) root.iconSet = c.icons
+      if (["clear", "frosted", "solid"].indexOf(c.glass) >= 0) root.glass = c.glass
     }
   }
 
@@ -163,6 +166,8 @@ Scope {
           if (!item) { Qt.callLater(root.next); return }
           item.edge = root.position
           item.iconSet = root.iconSet
+          // Only the toast is glass; the platinum card keeps its own look.
+          if ("glass" in item) item.glass = root.glass
           item.finished.connect(root.next)
           if (item.chime) item.chime.connect(() => chime.play("platinum"))
           item.event = root.current
