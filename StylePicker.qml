@@ -100,6 +100,13 @@ Column {
     if (t !== "/") filterField.text += t
   }
 
+  // The metal a rarity earns, as omatrophy.py's tier() picks it, so the
+  // panel colours a percentage the way its toast would.
+  function tierOf(pct) {
+    if (pct === null || pct === undefined || pct > 35) return "bronze"
+    return pct > 10 ? "silver" : "gold"
+  }
+
   function preview(kind) {
     runner.exec(["python3", helperPath, "test", kind])
   }
@@ -278,12 +285,38 @@ Column {
     }
   }
 
+  // A progress bar that fills from empty when it first shows, so a tab's
+  // bars read as progress rather than as static rules.
   component Bar: Rectangle {
+    id: bar
     property real fraction: 0
     property color fill: Commons.Color.accent
+    property bool grown: false
     height: 4
+    radius: height / 2
     color: Qt.alpha(root.foreground, 0.1)
-    Rectangle { width: parent.width * Math.min(1, parent.fraction); height: parent.height; color: parent.fill }
+    Component.onCompleted: grown = true
+    Rectangle {
+      width: bar.grown ? bar.width * Math.max(0, Math.min(1, bar.fraction)) : 0
+      height: parent.height
+      radius: parent.radius
+      color: bar.fill
+      Behavior on width { NumberAnimation { duration: 650; easing.type: Easing.OutCubic } }
+    }
+  }
+
+  // A tab's content, faded in and risen a few pixels each time it shows.
+  component TabPage: Column {
+    id: page
+    property real rise: 0
+    width: root.width
+    transform: Translate { y: page.rise }
+    onVisibleChanged: if (visible) enter.restart()
+    ParallelAnimation {
+      id: enter
+      NumberAnimation { target: page; property: "opacity"; from: 0; to: 1; duration: 220; easing.type: Easing.OutCubic }
+      NumberAnimation { target: page; property: "rise"; from: 8; to: 0; duration: 260; easing.type: Easing.OutCubic }
+    }
   }
 
   // A loading placeholder, like a web skeleton: a dim block with a band of
@@ -339,6 +372,51 @@ Column {
     onClicked: if (game) root.track(game.store, game.app)
   }
 
+  // A quiet choice of a few options (the Games sort): plain words, the
+  // chosen one on a soft accent pill. Lighter than ButtonGroup, so it
+  // doesn't compete with the tabs above it.
+  component Chips: Row {
+    id: chips
+    property var options: []
+    property string value: ""
+    signal picked(string value)
+    spacing: Commons.Style.space(2)
+    Repeater {
+      model: chips.options
+      delegate: Rectangle {
+        id: chip
+        required property var modelData
+        readonly property bool chosen: chips.value === modelData.value
+        width: chipText.implicitWidth + Commons.Style.space(16)
+        height: chipText.implicitHeight + Commons.Style.space(8)
+        radius: height / 2
+        color: chosen ? Qt.alpha(Commons.Color.accent, 0.18) : (chipHit.containsMouse ? Commons.Style.hoverFill : "transparent")
+        Accessible.role: Accessible.RadioButton
+        Accessible.name: modelData.label
+        Accessible.checked: chosen
+        Behavior on color { ColorAnimation { duration: 120 } }
+        Text {
+          textFormat: Text.PlainText
+          id: chipText
+          anchors.centerIn: parent
+          text: chip.modelData.label
+          color: chip.chosen ? Commons.Color.accent : root.foreground
+          opacity: chip.chosen ? 1 : 0.6
+          font.family: Commons.Style.font.family
+          font.pixelSize: Commons.Style.font.caption
+          font.bold: chip.chosen
+        }
+        MouseArea {
+          id: chipHit
+          anchors.fill: parent
+          hoverEnabled: true
+          cursorShape: Qt.PointingHandCursor
+          onClicked: chips.picked(chip.modelData.value)
+        }
+      }
+    }
+  }
+
   // Settings as label + control rows, so they read as one compact block.
   component SettingRow: Item {
     property string label: ""
@@ -359,17 +437,71 @@ Column {
     }
   }
 
-  ButtonGroup {
-    options: [{ value: "now", label: "Now" }, { value: "games", label: "Games" }, { value: "settings", label: "Settings" }]
-    value: root.tab
-    foreground: root.foreground
-    fontSize: Commons.Style.font.bodySmall
-    onChanged: value => root.tab = value
+  // The tabs as an underlined strip, so they read as places in the panel
+  // and the Games tab's sort buttons below them as controls.
+  Item {
+    id: tabStrip
+    readonly property var tabs: [{ value: "now", label: "Now" }, { value: "games", label: "Games" }, { value: "settings", label: "Settings" }]
+    readonly property real tabWidth: width / tabs.length
+    readonly property int current: Math.max(0, tabs.findIndex(function(t) { return t.value === root.tab }))
+    width: root.width
+    height: Commons.Style.space(30)
+
+    Rectangle {
+      anchors.bottom: parent.bottom
+      width: parent.width
+      height: 1
+      color: Qt.alpha(root.foreground, 0.12)
+    }
+    Rectangle {
+      anchors.bottom: parent.bottom
+      x: tabStrip.current * tabStrip.tabWidth + Commons.Style.space(14)
+      width: tabStrip.tabWidth - Commons.Style.space(28)
+      height: 2
+      radius: 1
+      color: Commons.Color.accent
+      Behavior on x { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+    }
+    Row {
+      anchors.fill: parent
+      Repeater {
+        model: tabStrip.tabs
+        delegate: Item {
+          id: tabItem
+          required property var modelData
+          required property int index
+          readonly property bool active: root.tab === modelData.value
+          width: tabStrip.tabWidth
+          height: tabStrip.height
+          Accessible.role: Accessible.PageTab
+          Accessible.name: modelData.label
+          Text {
+            textFormat: Text.PlainText
+            anchors.centerIn: parent
+            anchors.verticalCenterOffset: -1
+            text: tabItem.modelData.label
+            color: root.foreground
+            opacity: tabItem.active ? 1 : (tabHit.containsMouse ? 0.8 : 0.5)
+            font.family: Commons.Style.font.family
+            font.pixelSize: Commons.Style.font.body
+            font.bold: tabItem.active
+            Behavior on opacity { NumberAnimation { duration: 120 } }
+          }
+          MouseArea {
+            id: tabHit
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.tab = tabItem.modelData.value
+          }
+        }
+      }
+    }
   }
 
   // ---------------------------------------------------------------- Now
 
-  Column {
+  TabPage {
     id: nowTab
     visible: root.tab === "now"
     width: root.width
@@ -436,7 +568,7 @@ Column {
         Item {
           id: banner
           width: parent.width
-          height: Math.round(width * 0.36)
+          height: Math.round(width * 0.42)
 
           // Library hero art carries no logo, so the name can sit on it;
           // the header (which has one) only stands in when there's no hero.
@@ -492,43 +624,58 @@ Column {
             }
           }
 
+          // Name and count on the art, the percentage large beside them,
+          // and the game's progress as the banner's bottom edge.
           Item {
             anchors.left: parent.left
             anchors.right: parent.right
-            anchors.bottom: parent.bottom
-            anchors.margins: Commons.Style.space(10)
-            height: playName.height
-            Text {
-              textFormat: Text.PlainText
-              id: playName
-              width: parent.width - playPct.width - Commons.Style.space(10)
+            anchors.bottom: playBar.top
+            anchors.margins: Commons.Style.space(12)
+            height: Math.max(playNames.height, playPct.height)
+            Column {
+              id: playNames
+              anchors.left: parent.left
+              anchors.right: playPct.left
+              anchors.rightMargin: Commons.Style.space(12)
               anchors.bottom: parent.bottom
-              text: playing.game ? playing.game.game : ""
-              color: root.foreground
-              font.family: Commons.Style.font.family
-              font.pixelSize: Commons.Style.font.heading
-              font.bold: true
-              elide: Text.ElideRight
+              spacing: Commons.Style.space(2)
+              Text {
+                textFormat: Text.PlainText
+                width: parent.width
+                text: playing.game ? playing.game.game : ""
+                color: root.foreground
+                font.family: Commons.Style.font.family
+                font.pixelSize: Commons.Style.font.heading
+                font.bold: true
+                elide: Text.ElideRight
+              }
+              Caption {
+                width: parent.width
+                opacity: 0.75
+                text: playing.game ? playing.game.unlocked + " of " + playing.game.total + " unlocked" : ""
+              }
             }
             Text {
               textFormat: Text.PlainText
               id: playPct
               anchors.right: parent.right
-              anchors.baseline: playName.baseline
-              text: playing.game ? playing.game.unlocked + " / " + playing.game.total : ""
+              anchors.bottom: parent.bottom
+              anchors.bottomMargin: -3
+              text: playing.game ? Math.floor(100 * playing.game.unlocked / playing.game.total) + "%" : ""
               color: root.foreground
-              opacity: 0.8
               font.family: Commons.Style.font.family
-              font.pixelSize: Commons.Style.font.bodySmall
+              font.pixelSize: Commons.Style.font.display
               font.bold: true
             }
           }
-        }
-
-        Bar {
-          x: Commons.Style.space(10)
-          width: parent.width - Commons.Style.space(20)
-          fraction: playing.game ? playing.game.unlocked / playing.game.total : 0
+          Bar {
+            id: playBar
+            anchors.bottom: parent.bottom
+            width: parent.width
+            height: 3
+            radius: 0
+            fraction: playing.game ? playing.game.unlocked / playing.game.total : 0
+          }
         }
 
         // This session's unlocks, on the label's line.
@@ -539,7 +686,7 @@ Column {
           MiniLabel {
             id: sessionLabel
             anchors.verticalCenter: parent.verticalCenter
-            text: "THIS SESSION"
+            text: playing.game && playing.game.session.length ? "THIS SESSION · " + playing.game.session.length : "THIS SESSION"
           }
           Row {
             id: sessionIcons
@@ -556,8 +703,8 @@ Column {
               delegate: AchIcon {
                 required property var modelData
                 source: modelData.icon
-                width: 24
-                height: 24
+                width: 26
+                height: 26
               }
             }
           }
@@ -578,14 +725,16 @@ Column {
               id: nextRow
               required property var modelData
               width: parent.width
-              height: 28
-              AchIcon { id: nextIcon; source: nextRow.modelData.icon; locked: true; width: 28; height: 28 }
+              height: Math.max(32, nextText.height)
+              AchIcon { id: nextIcon; anchors.verticalCenter: parent.verticalCenter; source: nextRow.modelData.icon; locked: true; width: 32; height: 32 }
               Column {
+                id: nextText
                 anchors.left: nextIcon.right
                 anchors.leftMargin: Commons.Style.space(10)
                 anchors.right: pctText.left
                 anchors.rightMargin: Commons.Style.space(10)
                 anchors.verticalCenter: parent.verticalCenter
+                spacing: Commons.Style.space(2)
                 Text {
                   textFormat: Text.PlainText
                   width: parent.width
@@ -600,33 +749,36 @@ Column {
                   visible: text !== ""
                   text: nextRow.modelData.desc
                 }
+                // A counter achievement shows how far along it is: a thin
+                // bar under its text and the count beside the rarity.
+                Bar {
+                  visible: !!nextRow.modelData.progress
+                  width: parent.width
+                  height: 2
+                  fraction: nextRow.modelData.progress ? nextRow.modelData.progress.value / nextRow.modelData.progress.max : 0
+                }
               }
-              // A counter achievement says how far along it is ("9 / 14")
-              // beside its rarity, over a thin bar.
+              // The rarity in the metal it would earn, the count under it.
               Column {
                 id: pctText
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
-                spacing: 3
+                spacing: Commons.Style.space(1)
+                Text {
+                  textFormat: Text.PlainText
+                  anchors.right: parent.right
+                  readonly property var pct: nextRow.modelData.percent
+                  visible: pct !== null && pct !== undefined
+                  text: visible ? pct.toFixed(1) + "%" : ""
+                  color: root.metalColors[root.tierOf(pct)]
+                  font.family: Commons.Style.font.family
+                  font.pixelSize: Commons.Style.font.bodySmall
+                  font.bold: true
+                }
                 Caption {
                   anchors.right: parent.right
-                  readonly property var prog: nextRow.modelData.progress
-                  readonly property var pct: nextRow.modelData.percent
-                  text: [prog ? prog.value + " / " + prog.max : "",
-                         pct !== null && pct !== undefined ? pct.toFixed(1) + "%" : ""]
-                    .filter(function(s) { return s !== "" }).join(" · ")
-                }
-                Rectangle {
-                  anchors.right: parent.right
                   visible: !!nextRow.modelData.progress
-                  width: Commons.Style.space(40)
-                  height: 2
-                  color: Qt.alpha(root.foreground, 0.15)
-                  Rectangle {
-                    width: nextRow.modelData.progress ? parent.width * nextRow.modelData.progress.value / nextRow.modelData.progress.max : 0
-                    height: parent.height
-                    color: Commons.Color.accent
-                  }
+                  text: visible ? nextRow.modelData.progress.value + " / " + nextRow.modelData.progress.max : ""
                 }
               }
             }
@@ -781,6 +933,9 @@ Column {
           color: "transparent"
           border.width: 1
           border.color: Qt.alpha(root.metalColors.platinum, shelfHit.containsMouse ? 1 : 0.45)
+          z: shelfHit.containsMouse ? 1 : 0
+          scale: shelfHit.containsMouse ? 1.06 : 1
+          Behavior on scale { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
           Accessible.role: Accessible.Button
           Accessible.name: modelData.game + ", platinum " + root.day(modelData.platinum)
 
@@ -837,7 +992,7 @@ Column {
 
   // ---------------------------------------------------------------- Games
 
-  Column {
+  TabPage {
     id: gamesTab
     visible: root.tab === "games"
     width: root.width
@@ -852,7 +1007,7 @@ Column {
               : root.sortedGames.length === root.games.length ? root.games.length + " GAMES"
               : root.sortedGames.length + " OF " + root.games.length + " GAMES"
       }
-      ButtonGroup {
+      Chips {
         id: sortGroup
         anchors.right: parent.right
         options: [
@@ -861,9 +1016,7 @@ Column {
           { value: "name", label: "Name" }
         ]
         value: root.sort
-        foreground: root.foreground
-        fontSize: Commons.Style.font.bodySmall
-        onChanged: value => root.sort = value
+        onPicked: value => root.sort = value
       }
     }
 
@@ -897,7 +1050,7 @@ Column {
         readonly property bool platinum: modelData.platinum > 0
         readonly property bool hiddenGame: root.isHidden(modelData)
         width: root.width
-        height: Commons.Style.space(36)
+        height: Commons.Style.space(46)
         // A hidden game dims its art, name and bar, but not its Show link.
         readonly property real dim: hiddenGame ? 0.45 : 1
         Accessible.role: Accessible.Button
@@ -921,10 +1074,20 @@ Column {
           id: gameArt
           x: Commons.Style.space(8)
           anchors.verticalCenter: parent.verticalCenter
-          height: parent.height - Commons.Style.space(6)
+          height: parent.height - Commons.Style.space(8)
           width: Math.round(height * 460 / 215)
           source: gameRow.modelData.header || ""
           opacity: gameRow.dim
+        }
+        Thumb {
+          visible: gameRow.platinum
+          anchors.right: gameArt.right
+          anchors.bottom: gameArt.bottom
+          anchors.margins: 2
+          style: root.iconSet
+          metal: "platinum"
+          width: 16
+          height: 16
         }
         Column {
           anchors.left: gameArt.right
@@ -972,15 +1135,19 @@ Column {
                 onClicked: root.toggleHidden(gameRow.modelData)
               }
             }
-            Caption {
+            // The percentage leads; a platinum says so in its metal.
+            Text {
+              textFormat: Text.PlainText
               id: gameCount
               anchors.right: parent.right
               anchors.verticalCenter: parent.verticalCenter
-              text: gameRow.platinum ? "Platinum · " + root.day(gameRow.modelData.platinum)
-                    : Math.floor(100 * gameRow.modelData.unlocked / gameRow.modelData.total) + "% · "
-                      + gameRow.modelData.unlocked + " / " + gameRow.modelData.total
+              text: gameRow.platinum ? "PLATINUM" : Math.floor(100 * gameRow.modelData.unlocked / gameRow.modelData.total) + "%"
               color: gameRow.platinum ? root.metalColors.platinum : root.foreground
-              opacity: 0.6 * gameRow.dim
+              opacity: (gameRow.platinum ? 1 : 0.85) * gameRow.dim
+              font.family: Commons.Style.font.family
+              font.pixelSize: Commons.Style.font.caption
+              font.letterSpacing: gameRow.platinum ? 1.5 : 0
+              font.bold: true
             }
           }
           Bar {
@@ -989,6 +1156,20 @@ Column {
             opacity: gameRow.dim
             fraction: gameRow.modelData.unlocked / gameRow.modelData.total
             fill: gameRow.platinum ? root.metalColors.platinum : Commons.Color.accent
+          }
+          Item {
+            width: parent.width
+            height: gameMeta.height
+            Caption {
+              id: gameMeta
+              opacity: 0.5 * gameRow.dim
+              text: gameRow.modelData.unlocked + " / " + gameRow.modelData.total
+            }
+            Caption {
+              anchors.right: parent.right
+              opacity: 0.5 * gameRow.dim
+              text: gameRow.platinum ? root.day(gameRow.modelData.platinum) : root.ago(gameRow.modelData.played)
+            }
           }
         }
       }
@@ -1040,8 +1221,8 @@ Column {
       model: root.games === null ? 8 : 0
       delegate: Row {
         spacing: Commons.Style.space(10)
-        height: Commons.Style.space(36)
-        Bone { width: Math.round(height * 460 / 215); height: Commons.Style.space(30); anchors.verticalCenter: parent.verticalCenter }
+        height: Commons.Style.space(46)
+        Bone { width: Math.round(height * 460 / 215); height: Commons.Style.space(38); anchors.verticalCenter: parent.verticalCenter }
         Column {
           anchors.verticalCenter: parent.verticalCenter
           spacing: Commons.Style.space(6)
@@ -1054,7 +1235,7 @@ Column {
 
   // ---------------------------------------------------------- Settings
 
-  Column {
+  TabPage {
     id: settingsTab
     visible: root.tab === "settings"
     width: root.width

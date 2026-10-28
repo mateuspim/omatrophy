@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- A redesigned bar panel: the tabs as an underlined strip, the playing
+  game's percentage and progress on its art, Up next rarities in the metal
+  they'd earn, quieter sort chips, and Games rows with bigger art, the
+  percentage first and when you last played. Bars fill and tabs fade in
+  as they show.
+
 ## 0.1.0 - 2026-10-27
 
 - First version: Steam achievement unlocks as toasts on the Overlay layer,
