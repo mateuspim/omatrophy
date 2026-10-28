@@ -14,6 +14,18 @@ picker=false
 if [[ ${1:-} == --picker ]]; then picker=true; shift; fi
 kinds=("$@")
 [[ ${#kinds[@]} -gt 0 ]] || kinds=(unlock rare platinum)
+# Arguments and paths are pasted into QML below, so only let through what
+# can't end a QML string or add code to it.
+[[ $secs =~ ^[0-9]+$ ]] || { echo "-t takes whole seconds, not '$secs'" >&2; exit 2; }
+for kind in "${kinds[@]}"; do
+  [[ $kind =~ ^(unlock|rare|bronze|silver|gold|platinum)$ ]] ||
+    { echo "unknown card: $kind (unlock, rare, bronze, silver, gold or platinum)" >&2; exit 2; }
+done
+theme=$HOME/.local/state/omarchy/current/theme
+for path in "$repo" "$theme"; do
+  [[ $path != *[\"\\]* && $path != *$'\n'* ]] ||
+    { echo "can't preview from a path with a quote, backslash or newline: $path" >&2; exit 2; }
+done
 
 dir=$(mktemp -d)
 trap 'rm -rf "$dir"' EXIT
@@ -21,7 +33,6 @@ trap 'rm -rf "$dir"' EXIT
 # config root, so link the shell's Commons in beside our entry point.
 ln -s /usr/share/omarchy/shell/Commons "$dir/Commons"
 ln -s /usr/share/omarchy/shell/Ui "$dir/Ui"
-theme=$HOME/.local/state/omarchy/current/theme
 args=$(printf '"%s", ' "${kinds[@]}")
 cat > "$dir/shell.qml" <<QML
 import Quickshell

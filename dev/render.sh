@@ -23,12 +23,18 @@ if [[ ${1:-} == --live ]]; then live=true; shift; fi
 [[ $# -eq 2 ]] || { sed -n '5,14p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 target=$1
 out=$(realpath -m "$2")
+theme=$HOME/.local/state/omarchy/current/theme
+# The paths are pasted into QML strings below; refuse any that could end
+# the string and add code to the throwaway shell.
+for path in "$repo" "$out" "$theme"; do
+  [[ $path != *[\"\\]* && $path != *$'\n'* ]] ||
+    { echo "can't render with a quote, backslash or newline in a path: $path" >&2; exit 2; }
+done
 
 dir=$(mktemp -d)
 trap 'rm -rf "$dir"' EXIT
 ln -s /usr/share/omarchy/shell/Commons "$dir/Commons"
 ln -s /usr/share/omarchy/shell/Ui "$dir/Ui"
-theme=$HOME/.local/state/omarchy/current/theme
 
 case $target in
   now|idle|settings|games|loading)
