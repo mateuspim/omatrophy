@@ -1763,7 +1763,8 @@ Column {
 
     // Steam shows its own popup for the same unlock. OmaTrophy only reads
     // Steam's files (ADR 1), and Steam rewrites its config while it runs,
-    // so this opens Steam's settings for the owner to switch it off there.
+    // so this opens Steam's Notifications page for the owner to switch it
+    // off there. Page id and labels from Steam's own client UI (steamui).
     SettingRow {
       label: "STEAM POPUPS"
       Rectangle {
@@ -1792,7 +1793,7 @@ Column {
           anchors.fill: parent
           hoverEnabled: true
           cursorShape: Qt.PointingHandCursor
-          onClicked: Qt.openUrlExternally("steam://open/settings")
+          onClicked: Qt.openUrlExternally("steam://open/settings/notifications")
         }
       }
     }
@@ -1802,7 +1803,7 @@ Column {
       width: root.width
       wrapMode: Text.WordWrap
       opacity: 0.4
-      text: "Steam shows its own popup too. In Steam: Settings › Notifications, turn off achievement unlocks."
+      text: "Steam shows its own popup too. On the page this opens, find \"When I unlock an achievement\" and untick Show Toast (and Play Sound)."
     }
 
     Caption {
