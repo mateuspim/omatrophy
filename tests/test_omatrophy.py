@@ -1079,6 +1079,18 @@ class CommunityBackfill(unittest.TestCase):
         self.assertFalse(steam_community.due('5', now - 500 * day, now, {}))
         self.assertTrue(steam_community.due('5', now - day, now, {}))
 
+    def test_an_unreadable_page_is_skipped_for_a_day(self):
+        pages = {'1': ValueError('achievement page for 1 had no data'), '2': None}
+        result = self.run_backfill([(30, '1'), (20, '2')], pages=pages)
+        self.assertEqual(result, (1, False))
+        self.assertEqual(self.asked, ['1', '2'])
+        self.asked.clear()
+        self.run_backfill([(30, '1'), (20, '2')], pages=pages)
+        self.assertEqual(self.asked, [])
+        with mock.patch.object(steam_community.time, 'time', return_value=time.time() + steam_community.SKIP_SECONDS + 1):
+            self.run_backfill([(30, '1'), (20, '2')], pages=pages)
+        self.assertEqual(self.asked, ['1'])
+
     def test_first_error_stops_the_run(self):
         result = self.run_backfill([(30, '1'), (20, '2')], pages={'1': OSError('429'), '2': None})
         self.assertEqual(result, (0, True))

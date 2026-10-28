@@ -42,6 +42,10 @@ community on`, then `omatrophy.py sync` to watch it work.
   it, so the backfill reads 15 pages a run and the watcher runs it every
   hour (4 to 8 h after a failed run). A big library fills in over a
   day or two. Running `sync` over and over only keeps the limit going.
+- **"skipped <app> for a day: ... had no data".** Steam served that
+  game's page in a shape OmaTrophy can't read (it has changed key names
+  before); the run carries on and tries that game again the next day. If
+  it keeps happening, open an issue with the app id.
 - **Every game says "none".** Your profile or its game details are private:
   Steam > Profile > Edit Profile > Privacy Settings, set *My profile* and
   *Game details* to Public.
