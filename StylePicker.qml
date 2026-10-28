@@ -945,8 +945,9 @@ Column {
     // ------------------------------------------------ platinum shelf
 
     PanelSectionHeader {
-      visible: shelf.count > 0
-      text: "PLATINUM SHELF · " + shelf.count
+      readonly property int hiddenPlatinums: root.cabinet ? root.cabinet.shelf.length - shelf.count : 0
+      visible: shelf.count > 0 || hiddenPlatinums > 0
+      text: "PLATINUM SHELF · " + shelf.count + (hiddenPlatinums > 0 ? " · " + hiddenPlatinums + " HIDDEN" : "")
       foreground: root.foreground
     }
 
@@ -959,7 +960,9 @@ Column {
       readonly property real tileWidth: (root.width - spacing * (columns - 1)) / columns
       Repeater {
         id: shelf
-        model: root.cabinet ? root.cabinet.shelf : []
+        // A hidden game leaves the shelf (and Closest); the Games tab's
+        // Show brings it back.
+        model: root.cabinet ? root.cabinet.shelf.filter(function(g) { return !root.isHidden(g) }) : []
         // Each platinum game's art with a metal edge; the date on hover.
         delegate: Rectangle {
           id: shelfCard
@@ -993,8 +996,41 @@ Column {
           }
           Hit { id: shelfHit; game: shelfCard.modelData }
           PanelToolTip {
-            visible: shelfHit.containsMouse
+            visible: shelfHit.containsMouse && !removeHit.containsMouse
             text: shelfCard.modelData.game + " · " + root.day(shelfCard.modelData.platinum)
+          }
+          // Takes the game off the shelf; shown on hover only.
+          Rectangle {
+            anchors.left: parent.left
+            anchors.top: parent.top
+            anchors.margins: 3
+            width: 16
+            height: 16
+            radius: 8
+            visible: shelfHit.containsMouse || removeHit.containsMouse
+            color: removeHit.containsMouse ? Commons.Color.accent : Qt.alpha(Commons.Color.popups.background, 0.85)
+            Accessible.role: Accessible.Button
+            Accessible.name: "Take " + shelfCard.modelData.game + " off the shelf"
+            Text {
+              textFormat: Text.PlainText
+              anchors.centerIn: parent
+              text: "×"
+              color: removeHit.containsMouse ? Commons.Color.popups.background : root.foreground
+              font.pixelSize: 12
+              font.bold: true
+            }
+            MouseArea {
+              id: removeHit
+              anchors.fill: parent
+              anchors.margins: -2
+              hoverEnabled: true
+              cursorShape: Qt.PointingHandCursor
+              onClicked: root.toggleHidden(shelfCard.modelData)
+            }
+            PanelToolTip {
+              visible: removeHit.containsMouse
+              text: "Off the shelf · Games tab › Show brings it back"
+            }
           }
         }
       }
@@ -1150,14 +1186,15 @@ Column {
               elide: Text.ElideRight
             }
             // Hide or show this game; only on hover, or always for a
-            // hidden one so it can come back.
+            // hidden one so it can come back. Hiding a platinum takes it
+            // off the shelf.
             Text {
               textFormat: Text.PlainText
               id: hideToggle
               anchors.right: gameCount.left
               anchors.rightMargin: Commons.Style.space(8)
               anchors.verticalCenter: parent.verticalCenter
-              visible: !gameRow.platinum && (gameHit.containsMouse || hideHit.containsMouse || gameRow.hiddenGame)
+              visible: gameHit.containsMouse || hideHit.containsMouse || gameRow.hiddenGame
               text: gameRow.hiddenGame ? "Show" : "Hide"
               color: Commons.Color.accent
               opacity: hideHit.containsMouse ? 1 : 0.75

@@ -33,7 +33,8 @@ achievement list.
   unlocks and the likeliest next ones, or the last three games you played,
   and a shelf of your platinums; every game, eight to a page, filtered as you
   type and sorted by recent, closest to platinum or name, with games you
-  won't finish set aside.
+  won't finish set aside, and platinums you'd rather not show taken off
+  the shelf.
 - An achievement tracker over the screen: every achievement of a game with
   its rarity, the day you got it, and how far along a counter is ("52 /
   80"); filtered to locked, unlocked or rare, sorted, and searched as you
@@ -114,7 +115,7 @@ position and sound. Each choice applies to the next toast. From a terminal:
 omatrophy.py set position top-right     # top-center, top-left, top-right
 omatrophy.py set sound off              # on, off, omatrophy, classic
 omatrophy.py set icons vector           # omarchy, vector, painted
-omatrophy.py hide steam 20920           # out of "closest to platinum"; unhide brings it back
+omatrophy.py hide steam 20920           # out of "closest to platinum" and the shelf; unhide brings it back
 omatrophy.py test platinum              # bronze, silver, gold, platinum
 omatrophy.py status                     # progress of every game
 omatrophy.py now                        # the panel's Now tab, as JSON

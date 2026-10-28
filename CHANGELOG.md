@@ -10,6 +10,9 @@
 - The Games tab shows eight games a page with a pager (previous, page
   numbers, next) instead of 25 and "Show more", so it takes half the
   panel instead of all of it.
+- Platinums can come off the shelf: an × on a shelf tile, or Hide on a
+  platinum in the Games tab (Show brings it back). It uses the same
+  `hidden` list as Closest; totals still count the game.
 - Settings redesigned: each trophy style card shows its whole set, preview
   tiles name their metal, the toast position is picked on a small drawing
   of the screen, and the sound is a row of chips.

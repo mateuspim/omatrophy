@@ -496,7 +496,7 @@ def game_key(store_id, game):
 
 
 def hidden_games():
-    """{"store:game"} the owner hid from "closest to platinum"; a broken list reads as empty."""
+    """{"store:game"} the owner hid from "closest to platinum" and the platinum shelf; a broken list reads as empty."""
     keys = read_json(config_path(), {}).get('hidden', [])
     return {k for k in keys if isinstance(k, str)} if isinstance(keys, list) else set()
 
