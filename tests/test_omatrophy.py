@@ -881,7 +881,7 @@ class PanelJson(unittest.TestCase):
         self.assertIn('launch it once', str(e.exception))
 
 
-def community_page(app, unlocked, name='Remote Game', extra=()):
+def community_page(app, unlocked, name='Remote Game', extra=(), schema_key='schema'):
     """A profile achievement page as Steam serves it: the data sits in a
     JSON script whose renderContext.queryData is itself JSON (ADR 11)."""
     schema = {'appid': int(app), 'groups': [{'id': 0, 'achievements': [
@@ -893,7 +893,7 @@ def community_page(app, unlocked, name='Remote Game', extra=()):
     user = {'appid': int(app), 'achievements': {str(k): {'internal_key': k, 'unlocked': True, 'unlock_time': t}
                                                 for k, t in unlocked.items()}}
     queries = [{'queryKey': ['achievements', int(app), 'user_achievements', '1'], 'state': {'data': user}},
-               {'queryKey': ['achievements', int(app), 'schema'], 'state': {'data': schema}},
+               {'queryKey': ['achievements', int(app), schema_key], 'state': {'data': schema}},
                {'queryKey': ['StoreItem', f'app_{app}', 'default_info'], 'state': {'data': {'name': name}}},
                {'queryKey': ['AOWarningCookie'], 'state': {'data': None}}] + list(extra)
     ssr = json.dumps({'route': '/id/:vanityurl/achievements/:appid',
@@ -910,6 +910,11 @@ class CommunityPage(unittest.TestCase):
                          ('ACH_A', 'Alpha', 'Do alpha', True, 1700000000))
         self.assertEqual((a['icon'], a['icon_locked']), ('https://cdn.fastly.steamstatic.com/x/a.jpg', 'https://cdn.fastly.steamstatic.com/x/a_g.jpg'))
         self.assertEqual((b['unlocked'], b['time'], b['hidden']), (False, 0, True))
+
+    def test_reads_the_schema_v2_key_too(self):
+        page = steam_community.parse_page(community_page('55', {256: 1700000000}, schema_key='schema_v2'), '55')
+        self.assertEqual([a['api'] for a in page['achievements']], ['ACH_A', 'ACH_B'])
+        self.assertTrue(page['achievements'][0]['unlocked'])
 
     def test_archived_achievements_are_left_out(self):
         page = steam_community.parse_page(community_page('55', {}), '55')

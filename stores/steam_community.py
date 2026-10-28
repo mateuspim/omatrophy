@@ -72,7 +72,9 @@ def parse_page(html, app):
     schema, user, info = None, None, None
     for key, data in found.items():
         if len(key) >= 3 and key[0] == 'achievements' and str(key[1]) == str(app):
-            if key[2] == 'schema':
+            # Steam serves both names for the same shape (seen 2026-10-28,
+            # schema_v2 on Jedi: Survivor); the newer one wins.
+            if key[2] == 'schema_v2' or (key[2] == 'schema' and schema is None):
                 schema = data
             elif key[2] == 'user_achievements':
                 user = data
