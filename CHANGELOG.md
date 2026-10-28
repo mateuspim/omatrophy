@@ -7,6 +7,9 @@
   they'd earn, quieter sort chips, and Games rows with bigger art, the
   percentage first and when you last played. Bars fill and tabs fade in
   as they show.
+- The Games tab shows eight games a page with a pager (previous, page
+  numbers, next) instead of 25 and "Show more", so it takes half the
+  panel instead of all of it.
 - Settings redesigned: each trophy style card shows its whole set, preview
   tiles name their metal, the toast position is picked on a small drawing
   of the screen, and the sound is a row of chips.

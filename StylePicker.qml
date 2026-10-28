@@ -47,13 +47,16 @@ Column {
   readonly property var sortedGames: games ? games.filter(showGame).sort(gameOrder) : []
   readonly property int hiddenCount: games ? games.filter(function(g) { return isHidden(g) }).length : 0
   // With the community backfill a library runs to hundreds of games, and a
-  // row each made the panel slow to open: the list shows a page at a time
-  // and "Show more" adds the next. Filter and sort see every game first.
-  readonly property int gamesPage: 25
-  property int gamesShown: gamesPage
-  readonly property var shownGames: sortedGames.slice(0, gamesShown)
-  onSortChanged: gamesShown = gamesPage
-  onGameFilterChanged: gamesShown = gamesPage
+  // row each made the panel slow to open: the list shows a short page, about
+  // half the panel, with a pager under it. Filter and sort see every game
+  // first; changing either goes back to the first page.
+  readonly property int gamesPage: 8
+  property int gamesPageIndex: 0
+  readonly property int gamesPageCount: Math.max(1, Math.ceil(sortedGames.length / gamesPage))
+  readonly property var shownGames: sortedGames.slice(gamesPageIndex * gamesPage, (gamesPageIndex + 1) * gamesPage)
+  onSortChanged: gamesPageIndex = 0
+  onGameFilterChanged: gamesPageIndex = 0
+  onGamesPageCountChanged: gamesPageIndex = Math.min(gamesPageIndex, gamesPageCount - 1)
   // True while the filter field has the keyboard; Panel.qml then lets keys
   // through to it instead of its own shortcuts.
   readonly property bool typing: filterField.activeFocus
@@ -105,6 +108,21 @@ Column {
   function tierOf(pct) {
     if (pct === null || pct === undefined || pct > 35) return "bronze"
     return pct > 10 ? "silver" : "gold"
+  }
+
+  // The pager's buttons: every page when there are few, otherwise the
+  // first, the last and the current one with its neighbours, with -1
+  // standing for a gap ("1 … 4 5 6 … 16").
+  function pageButtons(current, count) {
+    if (count <= 7) return Array.from({ length: count }, function(_, i) { return i })
+    var pages = [0]
+    var from = Math.max(1, Math.min(current - 1, count - 4))
+    var to = Math.min(count - 2, Math.max(current + 1, 3))
+    if (from > 1) pages.push(-1)
+    for (var i = from; i <= to; i++) pages.push(i)
+    if (to < count - 2) pages.push(-1)
+    pages.push(count - 1)
+    return pages
   }
 
   function preview(kind) {
@@ -1194,29 +1212,64 @@ Column {
       }
     }
 
+    // Previous, the page numbers and next, with which games these are.
     Item {
       width: root.width
-      height: moreLink.height + Commons.Style.space(8)
-      visible: root.sortedGames.length > root.gamesShown
-      Accessible.role: Accessible.Button
-      Accessible.name: moreLink.text
-      Text {
-        textFormat: Text.PlainText
-        id: moreLink
-        anchors.centerIn: parent
-        text: "Show " + Math.min(root.gamesPage, root.sortedGames.length - root.gamesShown)
-              + " more · " + (root.sortedGames.length - root.gamesShown) + " left"
-        color: Commons.Color.accent
-        opacity: moreHit.containsMouse ? 1 : 0.75
-        font.family: Commons.Style.font.family
-        font.pixelSize: Commons.Style.font.caption
+      height: pager.height + Commons.Style.space(10)
+      visible: root.gamesPageCount > 1
+      Caption {
+        anchors.left: parent.left
+        anchors.verticalCenter: pager.verticalCenter
+        opacity: 0.45
+        text: (root.gamesPageIndex * root.gamesPage + 1) + "–"
+              + Math.min(root.sortedGames.length, (root.gamesPageIndex + 1) * root.gamesPage)
+              + " of " + root.sortedGames.length
       }
-      MouseArea {
-        id: moreHit
-        anchors.fill: parent
-        hoverEnabled: true
-        cursorShape: Qt.PointingHandCursor
-        onClicked: root.gamesShown += root.gamesPage
+      Row {
+        id: pager
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        spacing: Commons.Style.space(2)
+        Repeater {
+          model: [-2].concat(root.pageButtons(root.gamesPageIndex, root.gamesPageCount), [-3])
+          // -2 and -3 are the arrows, -1 a gap, anything else a page.
+          delegate: Rectangle {
+            id: pageButton
+            required property int modelData
+            readonly property bool arrow: modelData === -2 || modelData === -3
+            readonly property int target: modelData === -2 ? root.gamesPageIndex - 1
+                                          : modelData === -3 ? root.gamesPageIndex + 1 : modelData
+            readonly property bool usable: modelData !== -1 && target >= 0 && target < root.gamesPageCount
+            readonly property bool chosen: !arrow && modelData === root.gamesPageIndex
+            width: Math.max(height, pageText.implicitWidth + Commons.Style.space(10))
+            height: pageText.implicitHeight + Commons.Style.space(8)
+            radius: height / 2
+            color: chosen ? Qt.alpha(Commons.Color.accent, 0.18)
+                   : (pageHit.containsMouse && usable ? Commons.Style.hoverFill : "transparent")
+            Accessible.role: Accessible.Button
+            Accessible.name: modelData === -2 ? "Previous page" : modelData === -3 ? "Next page" : "Page " + (modelData + 1)
+            Text {
+              textFormat: Text.PlainText
+              id: pageText
+              anchors.centerIn: parent
+              text: pageButton.modelData === -2 ? "‹" : pageButton.modelData === -3 ? "›"
+                    : pageButton.modelData === -1 ? "…" : String(pageButton.modelData + 1)
+              color: pageButton.chosen ? Commons.Color.accent : root.foreground
+              opacity: pageButton.chosen ? 1 : (pageButton.usable || pageButton.modelData === -1 ? 0.65 : 0.2)
+              font.family: Commons.Style.font.family
+              font.pixelSize: pageButton.arrow ? Commons.Style.font.body : Commons.Style.font.caption
+              font.bold: pageButton.chosen || pageButton.arrow
+            }
+            MouseArea {
+              id: pageHit
+              anchors.fill: parent
+              hoverEnabled: true
+              enabled: pageButton.usable && !pageButton.chosen
+              cursorShape: Qt.PointingHandCursor
+              onClicked: root.gamesPageIndex = pageButton.target
+            }
+          }
+        }
       }
     }
 
