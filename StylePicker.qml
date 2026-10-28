@@ -61,7 +61,10 @@ Column {
   // through to it instead of its own shortcuts.
   readonly property bool typing: filterField.activeFocus
 
-  onTabChanged: if (tab === "games" && games === null && live) gamesReader.running = true
+  // The Games tab reads once per open; a copy from the last read (below)
+  // shows until it answers.
+  property bool gamesRead: false
+  onTabChanged: if (tab === "games" && !gamesRead && live) { gamesRead = true; gamesReader.running = true }
 
   // Asks Panel.qml to open the tracker on one game; the panel owns the
   // shell handle, this file only knows the game.
@@ -182,6 +185,29 @@ Column {
     }
   }
 
+  // The last `now` and `games` answers, kept by omatrophy.py. This file is
+  // rebuilt on every open, so without them each open showed bones while
+  // Python read the stores again; with them the panel opens filled and the
+  // fresh read replaces the copy a moment later.
+  FileView {
+    path: root.live ? Quickshell.env("HOME") + "/.cache/omatrophy/panel/now.json" : ""
+    blockLoading: true
+    printErrors: false
+    onLoaded: {
+      if (root.cabinet !== null) return
+      try { root.cabinet = JSON.parse(text()) } catch (e) {}
+    }
+  }
+  FileView {
+    path: root.live ? Quickshell.env("HOME") + "/.cache/omatrophy/panel/games.json" : ""
+    blockLoading: true
+    printErrors: false
+    onLoaded: {
+      if (root.games !== null) return
+      try { root.games = JSON.parse(text()) } catch (e) {}
+    }
+  }
+
   Process { id: runner }
 
   Process {
@@ -189,7 +215,8 @@ Column {
     command: ["python3", root.helperPath, "games"]
     stdout: StdioCollector {
       onStreamFinished: {
-        try { root.games = JSON.parse(text) } catch (e) { root.games = [] }
+        // A failed read keeps the last copy rather than emptying the list.
+        try { root.games = JSON.parse(text) } catch (e) { if (root.games === null) root.games = [] }
       }
     }
   }

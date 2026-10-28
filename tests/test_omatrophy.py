@@ -948,6 +948,25 @@ class WarmNames(unittest.TestCase):
         self.assertEqual(sorted(asked), ['1', '2', 'bad'])
 
 
+class PanelAnswer(unittest.TestCase):
+    def test_prints_and_keeps_a_copy_for_the_next_open(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(omatrophy, 'CACHE', tmp):
+            out = io.StringIO()
+            with redirect_stdout(out):
+                omatrophy.panel_answer('now', {'games': 3})
+            self.assertEqual(json.loads(out.getvalue()), {'games': 3})
+            with open(f'{tmp}/panel/now.json') as f:
+                self.assertEqual(json.load(f), {'games': 3})
+
+    def test_still_prints_when_the_copy_cannot_be_written(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(omatrophy, 'CACHE', f'{tmp}/file'):
+            open(f'{tmp}/file', 'w').close()
+            out = io.StringIO()
+            with redirect_stdout(out):
+                omatrophy.panel_answer('games', [])
+            self.assertEqual(json.loads(out.getvalue()), [])
+
+
 class Hidden(unittest.TestCase):
     def test_with_hidden_adds_removes_and_sorts(self):
         self.assertEqual(omatrophy.with_hidden(['steam:9'], 'steam:1', True), ['steam:1', 'steam:9'])

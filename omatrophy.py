@@ -26,7 +26,7 @@ import json, os, sys, threading, time
 from concurrent.futures import ThreadPoolExecutor
 
 import stores
-from stores.base import STATE, cached, read_json, write_json
+from stores.base import CACHE, STATE, cached, read_json, write_json
 
 INBOX = f'{STATE}/inbox.jsonl'
 # An unlock older than this when its file changes is a cache sync of past
@@ -412,6 +412,17 @@ def games():
             for (s, g, achs), name in zip(lib, names)]
 
 
+def panel_answer(name, value):
+    """Print a read for the bar panel and keep a copy: the panel is rebuilt on
+    every open, and shows the copy at once while this fresh read runs. A copy
+    that can't be written only costs the next open its head start."""
+    try:
+        write_json(f'{CACHE}/panel/{name}.json', value)
+    except OSError:
+        pass
+    print(json.dumps(value))
+
+
 def detail(a, pcts):
     pct = pcts.get(a['api'])
     return {'api': a['api'], 'name': a['name'], 'desc': a['desc'], 'icon': a['icon'],
@@ -531,9 +542,9 @@ def main(argv):
     elif cmd == 'cabinet':
         cabinet()
     elif cmd == 'now':
-        print(json.dumps(now()))
+        panel_answer('now', now())
     elif cmd == 'games':
-        print(json.dumps(games()))
+        panel_answer('games', games())
     elif cmd == 'game':
         game(argv[2:])
     elif cmd == 'demo':

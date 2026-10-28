@@ -13,6 +13,9 @@
 - Platinums can come off the shelf: an × on a shelf tile, or Hide on a
   platinum in the Games tab (Show brings it back). It uses the same
   `hidden` list as Closest; totals still count the game.
+- The panel opens filled: `now` and `games` keep their last answer in
+  `~/.cache/omatrophy/panel/`, the panel shows it at once and a fresh
+  read replaces it a moment later, instead of bones on every open.
 - Settings redesigned: each trophy style card shows its whole set, preview
   tiles name their metal, the toast position is picked on a small drawing
   of the screen, and the sound is a row of chips.
