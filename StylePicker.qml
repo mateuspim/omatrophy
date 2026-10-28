@@ -1761,6 +1761,50 @@ Column {
       }
     }
 
+    // Steam shows its own popup for the same unlock. OmaTrophy only reads
+    // Steam's files (ADR 1), and Steam rewrites its config while it runs,
+    // so this opens Steam's settings for the owner to switch it off there.
+    SettingRow {
+      label: "STEAM POPUPS"
+      Rectangle {
+        id: steamButton
+        width: steamText.implicitWidth + Commons.Style.space(20)
+        height: steamText.implicitHeight + Commons.Style.space(10)
+        radius: height / 2
+        color: steamHit.containsMouse ? Commons.Style.hoverFill : "transparent"
+        border.width: 1
+        border.color: Qt.alpha(root.foreground, steamHit.containsMouse ? 0.35 : 0.18)
+        Accessible.role: Accessible.Button
+        Accessible.name: "Open Steam's settings to turn off its achievement popups"
+        Behavior on color { ColorAnimation { duration: 120 } }
+        Text {
+          textFormat: Text.PlainText
+          id: steamText
+          anchors.centerIn: parent
+          text: "Turn off in Steam ↗"
+          color: root.foreground
+          opacity: 0.8
+          font.family: Commons.Style.font.family
+          font.pixelSize: Commons.Style.font.caption
+        }
+        MouseArea {
+          id: steamHit
+          anchors.fill: parent
+          hoverEnabled: true
+          cursorShape: Qt.PointingHandCursor
+          onClicked: Qt.openUrlExternally("steam://open/settings")
+        }
+      }
+    }
+
+    Caption {
+      textFormat: Text.PlainText
+      width: root.width
+      wrapMode: Text.WordWrap
+      opacity: 0.4
+      text: "Steam shows its own popup too. In Steam: Settings › Notifications, turn off achievement unlocks."
+    }
+
     Caption {
       width: root.width
       topPadding: Commons.Style.space(6)

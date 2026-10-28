@@ -109,7 +109,11 @@ omarchy-shell shell summon pym.omatrophy '{}'   # the running or last game
 ## Settings
 
 The panel's **Settings** tab holds the trophy style, previews of every tier,
-position, glass and sound. Each choice applies to the next toast. From a terminal:
+position, glass and sound. Each choice applies to the next toast. Steam
+also shows its own popup for each unlock; **Turn off in Steam** opens
+Steam's settings so you can switch those off under Notifications.
+
+From a terminal:
 
 ```bash
 omatrophy.py set position top-right     # top-center, top-left, top-right

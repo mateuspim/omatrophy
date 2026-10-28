@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Settings has a Steam popups row: a button that opens Steam's settings,
+  where you can turn off Steam's own achievement popup so only
+  OmaTrophy's shows. OmaTrophy doesn't change Steam's settings itself.
 - Toasts are glass: the card shows a little of the game through it, with
   light along its top. A Glass slider in Settings (and `set glass`) goes
   from Clear through Frosted (the default) to Solid, the old card.
