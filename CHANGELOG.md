@@ -7,6 +7,9 @@
   they'd earn, quieter sort chips, and Games rows with bigger art, the
   percentage first and when you last played. Bars fill and tabs fade in
   as they show.
+- Settings redesigned: each trophy style card shows its whole set, preview
+  tiles name their metal, the toast position is picked on a small drawing
+  of the screen, and the sound is a row of chips.
 
 ## 0.1.0 - 2026-10-27
 

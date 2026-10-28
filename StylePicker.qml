@@ -510,30 +510,49 @@ Column {
     // The totals, led by a platinum trophy in your style.
     Item {
       width: root.width
-      height: Commons.Style.space(60)
+      height: Commons.Style.space(76)
 
+      // A soft platinum halo behind the trophy, in rings, since the
+      // offscreen renderer and older GPUs drop blur effects.
+      Repeater {
+        model: 3
+        delegate: Rectangle {
+          required property int index
+          readonly property real size: heroTrophy.width + 6 + index * 10
+          x: heroTrophy.x + (heroTrophy.width - size) / 2
+          y: heroTrophy.y + (heroTrophy.height - size) / 2
+          width: size
+          height: size
+          radius: size / 2
+          color: Qt.alpha(root.metalColors.platinum, 0.025)
+        }
+      }
       Thumb {
         id: heroTrophy
+        x: Commons.Style.space(10)
         anchors.verticalCenter: parent.verticalCenter
         style: root.iconSet
         metal: "platinum"
-        width: 52
-        height: 52
+        width: 48
+        height: 48
       }
       Row {
         anchors.left: heroTrophy.right
-        anchors.leftMargin: Commons.Style.space(18)
+        anchors.leftMargin: Commons.Style.space(30)
+        anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
-        spacing: Commons.Style.space(22)
+        spacing: Commons.Style.space(16)
         Stat {
           value: root.cabinet ? root.cabinet.trophies.toLocaleString(Qt.locale(), "f", 0) : "–"
           label: "TROPHIES"
         }
+        Rectangle { width: 1; height: Commons.Style.space(34); anchors.verticalCenter: parent.verticalCenter; color: Qt.alpha(root.foreground, 0.12) }
         Stat {
           value: root.cabinet ? root.cabinet.platinums : "–"
           label: "PLATINUM"
           tint: root.metalColors.platinum
         }
+        Rectangle { width: 1; height: Commons.Style.space(34); anchors.verticalCenter: parent.verticalCenter; color: Qt.alpha(root.foreground, 0.12) }
         Stat {
           value: root.cabinet ? root.cabinet.games : "–"
           label: "GAMES"
@@ -1256,7 +1275,7 @@ Column {
           required property var modelData
           readonly property bool chosen: root.iconSet === modelData.id
           width: styleCards.cardWidth
-          height: Commons.Style.space(70)
+          height: Commons.Style.space(78)
           radius: Commons.Style.cornerRadius
           color: chosen ? Commons.Style.selectedFill : (pick.containsMouse ? Commons.Style.hoverFill : Qt.alpha(root.foreground, 0.04))
           border.width: 1
@@ -1271,15 +1290,46 @@ Column {
             cursorShape: Qt.PointingHandCursor
             onClicked: root.set("icons", styleCard.modelData.id)
           }
+          // The chosen style's tick, in the corner like a radio mark.
+          Rectangle {
+            visible: styleCard.chosen
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.margins: Commons.Style.space(5)
+            width: 14
+            height: 14
+            radius: 7
+            color: Commons.Color.accent
+            Text {
+              textFormat: Text.PlainText
+              anchors.centerIn: parent
+              text: "✓"
+              color: Commons.Color.popups.background
+              font.pixelSize: 10
+              font.bold: true
+            }
+          }
+          // The whole set, gold raised in the middle, so each card shows
+          // what every tier will look like.
           Column {
             anchors.centerIn: parent
-            spacing: Commons.Style.space(5)
-            Thumb {
+            spacing: Commons.Style.space(6)
+            Row {
               anchors.horizontalCenter: parent.horizontalCenter
-              style: styleCard.modelData.id
-              metal: "gold"
-              width: 34
-              height: 34
+              spacing: -4
+              Repeater {
+                model: ["bronze", "gold", "silver"]
+                delegate: Thumb {
+                  required property string modelData
+                  required property int index
+                  anchors.bottom: parent.bottom
+                  style: styleCard.modelData.id
+                  metal: modelData
+                  width: index === 1 ? 34 : 24
+                  height: width
+                  opacity: index === 1 || styleCard.chosen || pick.containsMouse ? 1 : 0.7
+                }
+              }
             }
             Text {
               textFormat: Text.PlainText
@@ -1307,8 +1357,8 @@ Column {
           delegate: Rectangle {
             id: tile
             required property string modelData
-            width: Commons.Style.space(40)
-            height: Commons.Style.space(34)
+            width: Commons.Style.space(56)
+            height: Commons.Style.space(46)
             radius: Commons.Style.cornerRadius
             color: fire.pressed ? Qt.alpha(root.metalColors[modelData], 0.22)
                    : (fire.containsMouse ? Qt.alpha(root.metalColors[modelData], 0.12) : Qt.alpha(root.foreground, 0.04))
@@ -1324,46 +1374,113 @@ Column {
               cursorShape: Qt.PointingHandCursor
               onClicked: root.preview(tile.modelData)
             }
-            Thumb {
+            Column {
               anchors.centerIn: parent
-              style: root.iconSet
-              metal: tile.modelData
-              width: 22
-              height: 22
+              spacing: Commons.Style.space(2)
+              Thumb {
+                anchors.horizontalCenter: parent.horizontalCenter
+                style: root.iconSet
+                metal: tile.modelData
+                width: 22
+                height: 22
+                scale: fire.pressed ? 0.9 : 1
+                Behavior on scale { NumberAnimation { duration: 90 } }
+              }
+              Text {
+                textFormat: Text.PlainText
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: tile.modelData.toUpperCase()
+                color: root.metalColors[tile.modelData]
+                opacity: fire.containsMouse ? 1 : 0.7
+                font.family: Commons.Style.font.family
+                font.pixelSize: 8
+                font.letterSpacing: 1
+              }
             }
           }
         }
       }
     }
 
+    // Where toasts show, picked on a small drawing of the screen: a slot
+    // along its top edge for each place, the chosen one lit.
     SettingRow {
       label: "POSITION"
-      ButtonGroup {
-        options: [
+      Rectangle {
+        id: screen
+        readonly property var places: [
           { value: "top-left", label: "Left" },
           { value: "top-center", label: "Center" },
           { value: "top-right", label: "Right" }
         ]
-        value: root.position
-        foreground: root.foreground
-        fontSize: Commons.Style.font.bodySmall
-        onChanged: value => root.set("position", value)
+        width: Commons.Style.space(150)
+        height: Math.round(width * 9 / 16)
+        radius: Math.max(2, Commons.Style.cornerRadius)
+        color: Qt.alpha(root.foreground, 0.04)
+        border.width: 1
+        border.color: Qt.alpha(root.foreground, 0.18)
+        Row {
+          anchors.top: parent.top
+          anchors.topMargin: Commons.Style.space(7)
+          anchors.horizontalCenter: parent.horizontalCenter
+          spacing: Commons.Style.space(6)
+          Repeater {
+            model: screen.places
+            delegate: Rectangle {
+              id: slot
+              required property var modelData
+              readonly property bool chosen: root.position === modelData.value
+              width: (screen.width - Commons.Style.space(14) - Commons.Style.space(12)) / 3
+              height: Commons.Style.space(16)
+              radius: 2
+              color: chosen ? Qt.alpha(Commons.Color.accent, 0.85)
+                     : (slotHit.containsMouse ? Qt.alpha(root.foreground, 0.16) : Qt.alpha(root.foreground, 0.06))
+              border.width: chosen ? 0 : 1
+              border.color: Qt.alpha(root.foreground, 0.14)
+              Accessible.role: Accessible.RadioButton
+              Accessible.name: "Toasts at the top " + modelData.label.toLowerCase()
+              Accessible.checked: chosen
+              Behavior on color { ColorAnimation { duration: 120 } }
+              MouseArea {
+                id: slotHit
+                anchors.fill: parent
+                anchors.margins: -3
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.set("position", slot.modelData.value)
+              }
+            }
+          }
+        }
+        Caption {
+          anchors.bottom: parent.bottom
+          anchors.bottomMargin: Commons.Style.space(5)
+          anchors.horizontalCenter: parent.horizontalCenter
+          opacity: 0.45
+          text: (screen.places.find(function(p) { return p.value === root.position }) || screen.places[1]).label
+        }
       }
     }
 
     SettingRow {
       label: "SOUND"
-      ButtonGroup {
+      Chips {
         options: [
           { value: "omatrophy", label: "OmaTrophy" },
           { value: "classic", label: "Classic" },
           { value: "off", label: "Silent" }
         ]
         value: root.sound ? root.chimes : "off"
-        foreground: root.foreground
-        fontSize: Commons.Style.font.bodySmall
-        onChanged: value => root.set("sound", value)
+        onPicked: value => root.set("sound", value)
       }
+    }
+
+    Caption {
+      width: root.width
+      topPadding: Commons.Style.space(6)
+      horizontalAlignment: Text.AlignHCenter
+      opacity: 0.4
+      text: "Changes apply to the next toast · try one with a preview tile"
     }
   }
 }
