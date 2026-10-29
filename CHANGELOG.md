@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 - 2026-10-29
 
 - The panel and tracker keep their images: art and achievement icons are
   saved to `~/.cache/omatrophy/images/` after the first time they show,

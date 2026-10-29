@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "pym.omatrophy",
   "name": "OmaTrophy",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "Mateus Pim",
   "license": "MIT",
   "description": "Steam achievement toasts over your games, with a platinum moment at 100%.",
