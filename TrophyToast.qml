@@ -168,8 +168,8 @@ Item {
       // The halo flares as the trophy lands, then settles to a glow.
       SequentialAnimation {
         PauseAnimation { duration: 200 }
-        NumberAnimation { target: halo; property: "opacity"; to: root.gold ? 0.8 : 0.6; duration: 380; easing.type: Easing.OutCubic }
-        NumberAnimation { target: halo; property: "opacity"; to: root.gold ? 0.45 : 0.3; duration: 900; easing.type: Easing.InOutQuad }
+        NumberAnimation { target: halo; property: "opacity"; to: root.gold ? 0.8 : (root.tier === "bronze" ? 0.75 : 0.6); duration: 380; easing.type: Easing.OutCubic }
+        NumberAnimation { target: halo; property: "opacity"; to: root.gold || root.tier === "bronze" ? 0.45 : 0.3; duration: 900; easing.type: Easing.InOutQuad }
       }
     }
     ScriptAction { script: if (root.gold) glitter.burst(40) }
@@ -354,8 +354,10 @@ Item {
           scale: medal.scale
           radius: root.iconSet === "omarchy" ? 0 : Commons.Style.cornerRadius
           color: root.tierColor
-          blur: 26
-          spread: 2
+          // Bronze's darker metal loses its glow in the wide blur; keep
+          // more light close to the tile rather than washing out the card.
+          blur: root.tier === "bronze" ? 22 : 26
+          spread: root.tier === "bronze" ? 4 : 2
           opacity: 0
         }
 

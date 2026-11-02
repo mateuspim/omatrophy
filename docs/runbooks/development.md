@@ -85,6 +85,12 @@ dev/render.sh --live tracker /tmp/t.png # your running or last game
 The software renderer drops `MultiEffect` layers (the omarchy set's accent
 inlay, card masks and shadows); check those with `dev/preview.sh`.
 
+With two monitors connected, run `bash dev/check-ipc.sh` to check that only
+the first screen's panel registers direct IPC. It mounts two throwaway
+one-pixel layer windows, swaps their screens, checks ownership follows the
+screen, and fails on duplicate-target warnings. It never loads the watcher
+or changes the live shell.
+
 ## Refresh the preview
 
 The README hero is [`preview.png`](../../preview.png) (3840 × 2160). Its

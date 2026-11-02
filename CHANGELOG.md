@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Fixed duplicate `pym.omatrophy` IPC registrations on multiple monitors.
+  Direct panel IPC belongs to the first screen; every bar button still
+  opens its own panel.
+- Bronze toasts keep a brighter, tighter halo around the trophy tile so
+  its darker metal remains visible after the landing animation.
+
 ## 0.2.0 - 2026-10-29
 
 - The panel and tracker keep their images: art and achievement icons are

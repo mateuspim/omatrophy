@@ -9,6 +9,9 @@ Panel {
   id: root
   moduleName: "pym.omatrophy"
   ipcTarget: "pym.omatrophy"
+  // Omarchy creates one widget per monitor, but IPC targets are process-wide.
+  // Only the first screen owns direct IPC; mouse access stays on every bar.
+  manageIpc: !!root.QsWindow.window && root.QsWindow.window.screen === Quickshell.screens[0]
 
   // The tracker is this plugin's overlay entry point; the shell hands its
   // summon to Tracker.qml.

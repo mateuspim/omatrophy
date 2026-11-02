@@ -86,6 +86,10 @@ Type (or press `/`) to filter by name; Enter opens the first match. Hover a
 game and click **Hide** to set aside one you won't finish: it leaves
 Closest and dims in the other sorts until you click **Show**.
 
+On multiple monitors, each trophy button opens its own panel. Direct IPC
+(`omarchy-shell pym.omatrophy toggle`, also `open` or `close`) controls the
+panel on the first screen in Quickshell's screen list.
+
 Click any game for the **tracker**, a card over the screen with every
 achievement: rarity, the trophy it would earn, and the date you got it.
 Locked counter achievements show how far along you are ("52 / 80") when
