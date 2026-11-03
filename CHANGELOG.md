@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.1 - 2026-11-03
 
 - Fixed duplicate `pym.omatrophy` IPC registrations on multiple monitors.
   Direct panel IPC belongs to the first screen; every bar button still
