@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- Settings has a Steam profile row: the community backfill's switch,
+  what it sends, and how its latest run went, including when Steam has
+  asked for a pause.
+- The backfill's page budget adapts: halved after Steam's rate limit,
+  five more after a run that used all of it (5 to 30 pages). Only a 429
+  counts; being offline doesn't shrink it. Each run is kept in
+  `~/.cache/omatrophy/community/runs.json`, so the limit can be measured
+  from real runs.
+
 ## 0.2.1 - 2026-11-03
 
 - Fixed duplicate `pym.omatrophy` IPC registrations on multiple monitors.

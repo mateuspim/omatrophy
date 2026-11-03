@@ -32,6 +32,10 @@ Column {
   property bool sound: true
   property string chimes: "omatrophy"
   property string glass: "frosted"
+  property bool community: false
+  // The Steam profile backfill's latest line, from its status.json
+  // (stores/steam_community.py); {} before the first run.
+  property var backfill: ({})
 
   // From `omatrophy.py now`; null until it answers. dev/render.sh turns
   // `live` off and sets `cabinet` to sample data.
@@ -80,6 +84,7 @@ Column {
     if (key === "icons") iconSet = value
     if (key === "position") position = value
     if (key === "glass") glass = value
+    if (key === "community") community = value === "on"
     if (key === "sound") {
       sound = value !== "off"
       if (value !== "on" && value !== "off") chimes = value
@@ -187,6 +192,7 @@ Column {
       if (typeof c.sound === "boolean") root.sound = c.sound
       if (c.chimes) root.chimes = c.chimes
       if (c.glass) root.glass = c.glass
+      root.community = c.community === true
       var keys = {}
       if (Array.isArray(c.hidden)) c.hidden.forEach(function(k) { keys[k] = true })
       root.hiddenKeys = keys
@@ -214,6 +220,30 @@ Column {
       if (root.games !== null) return
       try { root.games = JSON.parse(text()); root.gamesText = text().trim() } catch (e) {}
     }
+  }
+
+  FileView {
+    path: root.live ? Quickshell.env("HOME") + "/.cache/omatrophy/community/status.json" : ""
+    watchChanges: true
+    printErrors: false
+    onFileChanged: reload()
+    onLoaded: {
+      try { root.backfill = JSON.parse(text()) } catch (e) {}
+    }
+  }
+
+  // What the backfill row says under its switch: what turning it on sends
+  // while off, then the latest run, so a slow fill or Steam's rate limit
+  // is visible without the shell log.
+  function backfillText() {
+    if (!community)
+      return "Fills in games this machine never ran from your public Steam profile. On sends your SteamID64 to steamcommunity.com."
+    var b = backfill
+    if (!b || !b.time) return "On. The first pages come within the hour, then more every hour."
+    var at = Qt.formatTime(new Date(b.time * 1000), "hh:mm")
+    if (b.limited)
+      return "Steam asked for a pause at " + at + ". The next run waits a few hours and fetches fewer pages."
+    return "Last run " + at + " · " + b.line
   }
 
   Process { id: runner }
@@ -1759,6 +1789,28 @@ Column {
         value: root.sound ? root.chimes : "off"
         onPicked: value => root.set("sound", value)
       }
+    }
+
+    // The opt-in profile backfill (ADR 11). The switch goes through
+    // `set community`, like every other setting.
+    SettingRow {
+      label: "STEAM PROFILE"
+      Chips {
+        options: [
+          { value: "off", label: "Off" },
+          { value: "on", label: "Fill in" }
+        ]
+        value: root.community ? "on" : "off"
+        onPicked: value => root.set("community", value)
+      }
+    }
+
+    Caption {
+      textFormat: Text.PlainText
+      width: root.width
+      wrapMode: Text.WordWrap
+      opacity: 0.4
+      text: root.backfillText()
     }
 
     // Steam shows its own popup for the same unlock. OmaTrophy only reads
