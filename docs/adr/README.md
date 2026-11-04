@@ -25,6 +25,7 @@ made.
 | [11](0011-backfill-from-the-community-profile.md) | Backfill games this machine never ran from the public profile, opt-in | Accepted |
 | [12](0012-read-comets-gameplay-database-for-gog.md) | Read Comet's gameplay database for GOG | Accepted |
 | [13](0013-load-stats-through-the-steam-client.md) | Load played games' stats through the Steam client, on request | Accepted |
+| [14](0014-generate-guides-through-the-users-agent.md) | Make 100% guides through the user's own coding agent, on request | Accepted |
 
 ## Rules
 
