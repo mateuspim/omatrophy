@@ -20,6 +20,8 @@ open; the watcher and `Tracker.qml` are unchanged, so no restart is needed.
 - `guide bench` makes one game's guide with several agents and models and
   ranks them by verified quotes, coverage and filled fields, with time and
   cost; `--pick` makes the winner the default, local endpoints included.
+- The Settings tab is split into sections (Toasts, Now tab, Guides,
+  Stores) with an **Overview** of what each is set to.
 - The Now tab's **Up next** follows the game's guide when it has one,
   with its time, missable warning and tip.
 - `omatrophy.py guide [store app]`, `guide import <folder>`, `guide make`,

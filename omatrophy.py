@@ -994,6 +994,7 @@ SETTINGS = {'position': ('top-center', 'top-left', 'top-right'),
             # The panel's last picks, so the next open shows the same view.
             'games-sort': ('recent', 'closest', 'name'),
             'rarest': ('ever', 'month', 'platinum'),
+            'settings-section': ('overview', 'toasts', 'now', 'guides', 'stores'),
             'community': ('on', 'off'),
             'guide-web': ('on', 'off'),
             'guide-jail': ('on', 'off')}
