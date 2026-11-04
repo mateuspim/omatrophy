@@ -712,6 +712,16 @@ class PanelJson(unittest.TestCase):
         self.assertEqual(now['started'], 2)
         self.assertEqual([c['minutes'] for c in now['recent']], [0, 0])
 
+    def test_showcase_shows_earned_picks_and_skips_the_rest(self):
+        with FakeLibrary():
+            store = steam.Steam()
+            by_key = {('steam', g): (store, store.achievements(g)) for g in ('10', '20', '30')}
+            items = omatrophy.showcase_items(['steam:20:ACH_1', 'steam:10', 'steam:20', 'steam:20:ACH_3',
+                                              'steam:99:ACH_0', 'gog:1:A'], by_key)
+        self.assertEqual([(i['key'], i['name'], i['tier']) for i in items],
+                         [('steam:20:ACH_1', 'Half Game 1', 'gold'), ('steam:10', 'Platinum', 'platinum')])
+        self.assertEqual(items[1]['game'], 'Done Game')
+
     def test_game_detail_for_the_tracker(self):
         with FakeLibrary(running={'game': '20', 'since': 0}):
             store = steam.Steam()
@@ -1096,6 +1106,23 @@ class Settings(unittest.TestCase):
                 self.assertEqual(json.load(f), {'games-sort': 'closest', 'rarest': 'platinum'})
             with self.assertRaises(SystemExit):
                 omatrophy.set_option('rarest', 'yesterday')
+
+    def test_showcase_pins_in_order_up_to_six(self):
+        self.assertEqual(omatrophy.with_showcase(['a', 'b'], 'c', True), ['a', 'b', 'c'])
+        self.assertEqual(omatrophy.with_showcase(['a', 'b'], 'a', True), ['b', 'a'])
+        self.assertEqual(omatrophy.with_showcase(['a', 'b'], 'a', False), ['b'])
+        self.assertIsNone(omatrophy.with_showcase(list('abcdef'), 'g', True))
+        self.assertEqual(omatrophy.with_showcase('broken', 'a', True), ['a'])
+
+    def test_showcase_command_writes_config(self):
+        with tempfile.TemporaryDirectory() as home, mock.patch.dict(os.environ, {'HOME': home}):
+            with redirect_stdout(io.StringIO()):
+                omatrophy.set_showcase('steam', '35140', 'ACH_BATMAN', True)
+                omatrophy.set_showcase('gog', '1413291984', '', True)
+            with open(f'{home}/.config/omatrophy/config.json') as f:
+                self.assertEqual(json.load(f)['showcase'], ['steam:35140:ACH_BATMAN', 'gog:1413291984'])
+            with self.assertRaises(SystemExit):
+                omatrophy.set_showcase('epic', '1', 'A', True)
 
 class BackfillLoop(unittest.TestCase):
     def test_wait_doubles_after_failures_up_to_a_cap(self):

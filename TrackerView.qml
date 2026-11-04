@@ -7,7 +7,9 @@ import qs.Commons as Commons
 
 // The tracker's card: one game's every achievement, with rarity, the date
 // you got it, and filters (all, locked, unlocked, rare) plus type-to-search.
-// Read-only. Built from its text by Tracker.qml (FreshObject.qml), so it must not use
+// It changes nothing in a game; the only things it writes are your own
+// settings through omatrophy.py (its sort, and the trophies pinned to the
+// Profile showcase with ☆). Built from its text by Tracker.qml (FreshObject.qml), so it must not use
 // other QML types from this folder. Tracker.qml calls load(); dev/render.sh
 // sets `game` to sample data instead.
 Item {
@@ -48,6 +50,10 @@ Item {
   property bool cascading: false
   // Hidden achievements revealed with Enter, by api name; hover reveals too.
   property var revealed: ({})
+  // The Profile showcase's picks from config.json, so a ★ shows lit;
+  // "store:game:api", or "store:game" for a game's platinum.
+  property var showcaseKeys: []
+  readonly property int showcaseMax: 6
   // An achievement to highlight once the game loads, from the request.
   property string focusApi: ""
 
@@ -195,6 +201,26 @@ Item {
     }
   }
 
+  function showcaseKey(api) {
+    return game ? game.store + ":" + game.app + (api ? ":" + api : "") : ""
+  }
+
+  function pinned(api) {
+    return showcaseKeys.indexOf(showcaseKey(api)) >= 0
+  }
+
+  // Pins or unpins one trophy (no api: the game's platinum) on the Profile
+  // showcase. Shown at once; omatrophy.py writes config.json, which the
+  // panel reads on its next open. A full showcase takes no more.
+  function togglePin(api) {
+    var key = showcaseKey(api)
+    var add = showcaseKeys.indexOf(key) < 0
+    if (add && showcaseKeys.length >= showcaseMax) return
+    showcaseKeys = add ? showcaseKeys.concat([key]) : showcaseKeys.filter(function(k) { return k !== key })
+    var args = ["python3", helperPath, "showcase", add ? "add" : "remove", String(game.store), String(game.app)]
+    saver.exec(api ? args.concat([api]) : args)
+  }
+
   // Move the highlighted row; the first key press lands on the first row.
   function moveTo(index) {
     if (list.count === 0) return
@@ -257,6 +283,7 @@ Item {
       try { c = JSON.parse(text()) } catch (e) { return }
       if (c.icons) root.iconSet = c.icons
       if (c["tracker-sort"]) root.sortBy = c["tracker-sort"]
+      if (Array.isArray(c.showcase)) root.showcaseKeys = c.showcase
     }
   }
 
@@ -291,6 +318,42 @@ Item {
 
   // One trophy, drawn the way the cards draw it (the omarchy set's inlay
   // painted in the theme accent).
+  // A ★ that pins a trophy to the Profile showcase: lit while pinned,
+  // dim on offer, and "full" when six are already pinned.
+  component PinStar: Rectangle {
+    id: pin
+    property bool on: false
+    readonly property bool full: !on && root.showcaseKeys.length >= root.showcaseMax
+    readonly property bool hovered: pinHit.containsMouse
+    signal toggled()
+    width: Commons.Style.space(26)
+    height: width
+    radius: width / 2
+    color: pinHit.containsMouse && !full ? Commons.Style.hoverFill : "transparent"
+    Accessible.role: Accessible.CheckBox
+    Accessible.name: on ? "Pinned to the showcase" : "Pin to the showcase"
+    Accessible.checked: on
+    Text {
+      textFormat: Text.PlainText
+      anchors.centerIn: parent
+      text: pin.on ? "★" : "☆"
+      color: pin.on ? Commons.Color.accent : root.foreground
+      opacity: pin.on ? 1 : (pin.full ? 0.2 : (pinHit.containsMouse ? 0.9 : 0.5))
+      font.pixelSize: Commons.Style.font.title
+    }
+    MouseArea {
+      id: pinHit
+      anchors.fill: parent
+      hoverEnabled: true
+      cursorShape: pin.full ? Qt.ArrowCursor : Qt.PointingHandCursor
+      onClicked: if (!pin.full) pin.toggled()
+    }
+    PanelToolTip {
+      visible: pinHit.containsMouse
+      text: pin.on ? "On your showcase · click to take it off" : pin.full ? "Showcase full (6) · unpin one first" : "Pin to your Profile showcase"
+    }
+  }
+
   component Trophy: Item {
     id: trophy
     property string style: "omarchy"
@@ -582,6 +645,12 @@ Item {
               font.family: Commons.Style.font.family
               font.pixelSize: Commons.Style.font.bodySmall
               font.bold: true
+            }
+            // A finished game's platinum can go on the showcase too.
+            PinStar {
+              anchors.verticalCenter: parent.verticalCenter
+              on: root.game !== null && root.pinned("")
+              onToggled: root.togglePin("")
             }
           }
         }
@@ -879,8 +948,8 @@ Item {
         Column {
           anchors.left: iconFrame.right
           anchors.leftMargin: Commons.Style.space(12)
-          anchors.right: side.left
-          anchors.rightMargin: Commons.Style.space(12)
+          anchors.right: rowPin.left
+          anchors.rightMargin: Commons.Style.space(8)
           anchors.verticalCenter: parent.verticalCenter
           spacing: Commons.Style.space(3)
           Text {
@@ -900,6 +969,19 @@ Item {
             text: row.secret ? "Hover or press Enter to reveal" : row.ach.desc
             visible: text !== ""
           }
+        }
+
+        // Only an earned trophy can go on the showcase; the star shows on
+        // hover, or always once pinned.
+        PinStar {
+          id: rowPin
+          anchors.right: side.left
+          anchors.rightMargin: Commons.Style.space(6)
+          anchors.verticalCenter: parent.verticalCenter
+          visible: row.ach.unlocked
+          on: root.pinned(row.ach.api)
+          opacity: on || rowHover.containsMouse || hovered ? 1 : 0
+          onToggled: root.togglePin(row.ach.api)
         }
 
         Column {

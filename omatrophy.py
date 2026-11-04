@@ -21,6 +21,8 @@ Usage:
   omatrophy.py sync                   run that backfill now, with progress
   omatrophy.py hide <store> <game>    keep a game you won't finish out of "closest to platinum"
   omatrophy.py unhide <store> <game>  bring it back
+  omatrophy.py showcase add|remove <store> <game> [api]
+                                      pin a trophy (or, with no api, the game's platinum) to the Profile showcase
 
 Each store (stores/) reads its launcher's own files; this file diffs them and
 turns new unlocks into events. Steam and GOG (through Heroic) so far.
@@ -541,7 +543,7 @@ def now(recent_n=3, rarest_n=8, nearest_n=4):
         nearest.append(dict(game_card(s, r['app'], achs), latest=[]))
     return dict(totals(rows), metals=metal_tally(lib), completion=average_completion(rows),
                 started=sum(1 for r in rows if r['unlocked']), playtime=playtime_totals(playtime),
-                favorite=favorite,
+                favorite=favorite, showcase=showcase_items(showcase_keys(), by_key),
                 playing=playing, recent=recent, shelf=shelf, nearest=nearest,
                 stores=store_rows(stores.STORES, found, lib),
                 rarest=rarest_cards(lib, rarest_n, time.time(), hidden))
@@ -765,6 +767,72 @@ def set_hidden(store_id, game, hide):
     print(f'{"hidden" if hide else "shown"}: {game_key(store_id, game)}')
 
 
+# The Profile tab's showcase holds as many picks as one row of tiles.
+SHOWCASE_MAX = 6
+
+
+def showcase_keys():
+    """The owner's showcase picks, in the order picked: "store:game:api" for
+    one achievement, "store:game" for a game's platinum."""
+    keys = read_json(config_path(), {}).get('showcase', [])
+    return [k for k in keys if isinstance(k, str)] if isinstance(keys, list) else []
+
+
+def with_showcase(keys, key, add):
+    """The showcase list with `key` added at the end or removed; None when
+    adding to a full showcase, so the caller can say so."""
+    # A hand-edited list can be anything; a string would read letter by letter.
+    out = [k for k in keys if isinstance(k, str) and k != key] if isinstance(keys, list) else []
+    if not add:
+        return out
+    if len(out) >= SHOWCASE_MAX:
+        return None
+    return out + [key]
+
+
+def set_showcase(store_id, game, api, add):
+    """Pin or unpin one achievement (or, with no api, a game's platinum)."""
+    if store_id not in [cls.id for cls in stores.STORES] or not game or ':' in game:
+        raise SystemExit('usage: omatrophy.py showcase add|remove '
+                         f'{"|".join(cls.id for cls in stores.STORES)} <game id> [achievement api]')
+    key = game_key(store_id, game) + (f':{api}' if api else '')
+    path = config_path()
+    cfg = read_json(path, {})
+    keys = with_showcase(cfg.get('showcase', []), key, add)
+    if keys is None:
+        raise SystemExit(f'The showcase is full ({SHOWCASE_MAX}); remove one first: omatrophy.py showcase remove ...')
+    cfg['showcase'] = keys
+    write_json(path, cfg, indent=2)
+    print(f'{"pinned" if add else "unpinned"}: {key}')
+
+
+def showcase_items(keys, by_key):
+    """The picks still earned, as tiles: an unlocked achievement with its
+    rarity, or a finished game's platinum with its art. Picks whose game
+    or unlock is gone are skipped, not shown broken."""
+    out = []
+    for key in keys:
+        store_id, _, rest = key.partition(':')
+        game, _, api = rest.partition(':')
+        found = by_key.get((store_id, game))
+        if not found:
+            continue
+        s, achs = found
+        if not api:
+            when = platinum_time(achs)
+            if when:
+                out.append({'key': key, 'store': store_id, 'app': game, 'api': '', 'name': 'Platinum',
+                            'icon': s.art(game)['header'], 'time': when, 'percent': None, 'tier': 'platinum',
+                            'game': s.game_name(game)})
+            continue
+        a = next((a for a in achs if a['api'] == api and a['unlocked']), None)
+        if a:
+            pct = s.known_percents(game).get(api)
+            out.append(dict(brief(a), key=key, store=store_id, app=game, api=api, percent=pct,
+                            tier=tier(pct), game=s.game_name(game)))
+    return out
+
+
 def main(argv):
     cmd = argv[1] if len(argv) > 1 else 'watch'
     if cmd == 'watch':
@@ -787,6 +855,8 @@ def main(argv):
         set_option(argv[2], argv[3])
     elif cmd == 'sync':
         sync()
+    elif cmd == 'showcase' and len(argv) in (5, 6) and argv[2] in ('add', 'remove'):
+        set_showcase(argv[3], argv[4], argv[5] if len(argv) == 6 else '', argv[2] == 'add')
     elif cmd in ('hide', 'unhide') and len(argv) == 4:
         set_hidden(argv[2], argv[3], cmd == 'hide')
     else:

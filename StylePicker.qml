@@ -145,6 +145,18 @@ Column {
     return Math.round(minutes / 60).toLocaleString(Qt.locale(), "f", 0) + " h"
   }
 
+  // Showcase picks taken off since the last read: gone at once, without
+  // rebuilding the whole tab.
+  property var unpinned: ({})
+
+  function unpin(pick) {
+    var gone = Object.assign({}, unpinned)
+    gone[pick.key] = true
+    unpinned = gone
+    var args = ["python3", helperPath, "showcase", "remove", String(pick.store), String(pick.app)]
+    runner.exec(pick.api ? args.concat([pick.api]) : args)
+  }
+
   // The rows of a list whose game isn't hidden.
   function unhidden(rows) {
     return rows.filter(function(g) { return !isHidden(g) })
@@ -1733,49 +1745,140 @@ Column {
 
     // ------------------------------------------------ showcase
 
-    PanelSectionHeader {
-      visible: showcase.count > 0
-      text: "SHOWCASE · RAREST EVER"
-      foreground: root.foreground
+    // Up to six trophies you pin with ☆ in the tracker (a game's platinum
+    // too), like Steam's achievement showcase. Until you pin one, your
+    // rarest ever stand in, so the tile is never empty.
+    Item {
+      id: showcaseHeader
+      readonly property var picks: root.cabinet && root.cabinet.showcase
+        ? root.cabinet.showcase.filter(function(p) { return !root.unpinned[p.key] }) : []
+      readonly property bool picked: picks.length > 0
+      readonly property var tiles: picked ? picks
+        : (root.cabinet && root.cabinet.rarest ? root.unhidden(root.cabinet.rarest.ever).slice(0, 6) : [])
+      visible: tiles.length > 0
+      width: root.width
+      height: showcaseTitle.height
+      PanelSectionHeader {
+        id: showcaseTitle
+        text: showcaseHeader.picked ? "SHOWCASE · " + showcaseHeader.picks.length + " / 6" : "SHOWCASE · RAREST EVER"
+        foreground: root.foreground
+      }
+      Caption {
+        anchors.right: parent.right
+        anchors.verticalCenter: parent.verticalCenter
+        opacity: 0.45
+        text: "☆ a trophy in the tracker to pin it"
+      }
     }
 
-    // Your six rarest trophies as icons, each framed in its metal; a click
-    // opens it in the tracker.
+    // Each pick framed in its metal; a click opens it in the tracker, the
+    // × takes it off. Empty slots say how to fill them.
     Row {
       id: showcaseRow
-      visible: showcase.count > 0
+      visible: showcaseHeader.visible
       spacing: Commons.Style.space(6)
       readonly property real tile: (root.width - spacing * 5) / 6
       Repeater {
         id: showcase
-        model: root.cabinet && root.cabinet.rarest ? root.unhidden(root.cabinet.rarest.ever).slice(0, 6) : []
+        model: showcaseHeader.tiles
         delegate: Rectangle {
           id: showTile
           required property var modelData
           required property int index
+          readonly property bool platinum: modelData.tier === "platinum"
           width: showcaseRow.tile
           height: width
           radius: Commons.Style.cornerRadius
           color: Qt.alpha(root.metalColors[modelData.tier], showHit.containsMouse ? 0.22 : 0.1)
           border.width: 1
           border.color: Qt.alpha(root.metalColors[modelData.tier], showHit.containsMouse ? 1 : 0.55)
+          clip: true
           property real rise: 0
           opacity: 0
           transform: Translate { y: showTile.rise }
           FadeIn { item: showTile; order: showTile.index }
           Accessible.role: Accessible.Button
-          Accessible.name: modelData.name + ", " + modelData.game + ", " + modelData.percent.toFixed(1) + " percent"
+          Accessible.name: modelData.name + ", " + modelData.game
           AchIcon {
+            visible: !showTile.platinum
             anchors.fill: parent
             anchors.margins: 4
             source: showTile.modelData.icon
             scale: showHit.containsMouse ? 1.06 : 1
             Behavior on scale { NumberAnimation { duration: 140 } }
           }
+          // A platinum: the game's art, dimmed, under the platinum trophy.
+          Art {
+            visible: showTile.platinum
+            anchors.fill: parent
+            anchors.margins: 1
+            source: showTile.platinum ? showTile.modelData.icon || "" : ""
+            label: ""
+            opacity: 0.45
+          }
+          Thumb {
+            visible: showTile.platinum
+            anchors.centerIn: parent
+            style: root.iconSet
+            metal: "platinum"
+            width: parent.width * 0.55
+            height: width
+            scale: showHit.containsMouse ? 1.08 : 1
+            Behavior on scale { NumberAnimation { duration: 140 } }
+          }
           Hit { id: showHit; game: showTile.modelData }
           PanelToolTip {
-            visible: showHit.containsMouse
-            text: showTile.modelData.name + " · " + showTile.modelData.game + " · " + showTile.modelData.percent.toFixed(1) + "%"
+            visible: showHit.containsMouse && !unpinHit.containsMouse
+            text: showTile.modelData.name + " · " + showTile.modelData.game
+                  + (showTile.modelData.percent !== null && showTile.modelData.percent !== undefined ? " · " + showTile.modelData.percent.toFixed(1) + "%" : "")
+          }
+          Rectangle {
+            visible: showcaseHeader.picked && (showHit.containsMouse || unpinHit.containsMouse)
+            anchors.left: parent.left
+            anchors.top: parent.top
+            anchors.margins: 2
+            width: 16
+            height: 16
+            radius: 8
+            color: unpinHit.containsMouse ? Commons.Color.accent : Qt.alpha(Commons.Color.popups.background, 0.85)
+            Accessible.role: Accessible.Button
+            Accessible.name: "Take " + showTile.modelData.name + " off the showcase"
+            Text {
+              textFormat: Text.PlainText
+              anchors.centerIn: parent
+              text: "×"
+              color: unpinHit.containsMouse ? Commons.Color.popups.background : root.foreground
+              font.pixelSize: 12
+              font.bold: true
+            }
+            MouseArea {
+              id: unpinHit
+              anchors.fill: parent
+              anchors.margins: -2
+              hoverEnabled: true
+              cursorShape: Qt.PointingHandCursor
+              onClicked: root.unpin(showTile.modelData)
+            }
+          }
+        }
+      }
+      // The slots still open once you've pinned something.
+      Repeater {
+        model: showcaseHeader.picked ? 6 - showcaseHeader.picks.length : 0
+        delegate: Rectangle {
+          width: showcaseRow.tile
+          height: width
+          radius: Commons.Style.cornerRadius
+          color: "transparent"
+          border.width: 1
+          border.color: Qt.alpha(root.foreground, 0.12)
+          Text {
+            textFormat: Text.PlainText
+            anchors.centerIn: parent
+            text: "+"
+            color: root.foreground
+            opacity: 0.3
+            font.pixelSize: Commons.Style.font.title
           }
         }
       }

@@ -96,7 +96,9 @@ Closest and dims in the other sorts until you click **Show**.
 
 The **Profile** tab shows your library at a glance, in tiles after Steam's
 profile showcases: your most played game with its hours and rare
-trophies, your six rarest trophies, your two newest platinums with games
+trophies, a showcase of six trophies you pick (click ☆ on any earned
+trophy in the tracker, or beside a finished game's platinum; until you
+do, your rarest stand in), your two newest platinums with games
 completed, started and average completion, and hours played in the past
 two weeks and in all. Playtime comes from the launchers' own files.
 
