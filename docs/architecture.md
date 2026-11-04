@@ -4,7 +4,7 @@ OmaTrophy has two halves: a Python watcher that turns game stores' local
 achievement data into JSON event lines, and QML in the Omarchy shell that
 turns those lines into cards on screen.
 
-```
+```text
  launcher files ──▶ stores/<id>.py ──▶ omatrophy.py watch ──stdout──▶ Service.qml ──▶ TrophyToast.qml
  (Steam, Comet)      read + describe     diff, tier, events   JSON lines   queue, window      PlatinumCard.qml
                                               ▲                               ▲
