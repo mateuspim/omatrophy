@@ -173,10 +173,24 @@ Steam and GOG are supported today.
 
 Native or Flatpak; set `STEAM_DIR` if yours lives elsewhere.
 
-Steam keeps a game's achievements on disk only once that game has run on
-this machine, so a fresh install shows just a few games. If your profile
-and game details are public, fill in the rest from your Steam Community
-profile:
+Steam keeps a game's achievements on disk only once its client has
+loaded them here: by playing the game, or just by opening its library
+page. So a fresh install shows just a few games. With Steam running and no
+game open, let OmaTrophy open those pages for you:
+
+```bash
+omatrophy.py steam-load          # every played game with no stats here, most played first
+omatrophy.py steam-load stop     # from another terminal: stop after the current game
+```
+
+Steam's window comes forward and moves page to page while it runs: about
+a second per game with achievements, 8 s for one without (those wait a
+month before the next try). It stops by itself when a game starts or Steam
+closes; run it again to go on. Everything stays on this machine
+([ADR 13](docs/adr/0013-load-stats-through-the-steam-client.md)).
+
+If your profile and game details are public, you can also fill in games
+from your Steam Community profile:
 
 ```bash
 omatrophy.py set community on   # off by default; sends your SteamID64 to steamcommunity.com

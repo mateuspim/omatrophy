@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Load from Steam: `omatrophy.py steam-load` opens the library page of
+  every game you played that OmaTrophy can't see yet, and the Steam
+  client caches its achievements locally, about a second a game, with
+  no key and no rate limit (ADR 13). `steam-load stop` and
+  `steam-load status` go with it.
+
 ## 0.4.0 - 2026-11-04
 
 After updating, restart the shell once (`omarchy restart shell`) so the
