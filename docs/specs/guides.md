@@ -143,7 +143,7 @@ web, models: [{id, name, efforts}], model, effort, source}]`. It lists
 every agent in the adapter table. `default` marks the one
 `omarchy-default-agent` names, and `model`/`effort` are the picks from
 `guide-models`. `models` comes from the source named in the table and is
-empty when the agent can't list them. The panel then offers free text:
+empty when the agent can't list them, isn't installed, or isn't supported yet. The panel then offers free text:
 any string the agent's model flag takes, such as a full model id, a
 `provider/model` for a local endpoint, or an alias. `guide model <agent>
 <model> [effort]` sets a pick, and `guide model <agent> default` clears

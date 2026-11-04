@@ -360,7 +360,9 @@ def listing(cfg):
         pick = chosen.get(a.id, {})
         out.append({'agent': a.id, 'name': a.name, 'installed': installed, 'supported': a.checked,
                     'default': a.id == default, 'web': a.web,
-                    'models': a.models() if installed else [],
+                    # Only agents that can run: a listing command can be slow
+                    # (opencode's took over 20 s once), and the panel waits on it.
+                    'models': a.models() if installed and a.checked else [],
                     'model': pick.get('model', ''), 'effort': pick.get('effort', ''), 'source': a.models_source})
     return out
 
