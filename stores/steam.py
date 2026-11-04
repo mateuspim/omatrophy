@@ -8,7 +8,7 @@ what was played last from userdata/<account>/config/localconfig.vdf.
 """
 import os, re, struct, threading, time
 
-from . import steam_community
+from . import steam_community, steam_loader
 from .base import CACHE, STATE, Store, boot_time, cached, config, http_json, read_json, started_at, write_json
 from .steam_community import app_id
 
@@ -331,6 +331,18 @@ class Steam(Store):
         result = steam_community.backfill(self.uid, self.recent(), set(self.local_games()), say=say)
         self.remember_names()
         return result
+
+    def missing(self):
+        """Played games with no local stats file, most played first: the
+        queue for Load from Steam (ADR 13)."""
+        return steam_loader.missing(self.playtime(), set(self.local_games()),
+                                    steam_loader.none_index(), time.time())
+
+    def load_from_steam(self, busy, say=None):
+        """Open each missing game's library page so the client caches its
+        stats. Only the owner starts this: Steam's window moves."""
+        stats = lambda app: os.path.exists(f'{self.stats}/UserGameStats_{self.uid}_{app}.bin')
+        return steam_loader.load(self.missing(), stats, busy, say=say)
 
     def remember_names(self):
         """Copy game names from cached profile pages into the name cache,
