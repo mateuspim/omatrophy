@@ -1791,10 +1791,23 @@ Column {
       }
     }
 
+    // Said under the toast rows only: the Steam rows below don't touch
+    // toasts, so a footer for the whole tab read wrong there.
+    Caption {
+      width: root.width
+      horizontalAlignment: Text.AlignHCenter
+      opacity: 0.4
+      text: "These apply to the next toast · try one with a preview tile"
+    }
+
+    Item { width: 1; height: Commons.Style.space(8) }
+
+    PanelSectionHeader { text: "STEAM"; foreground: root.foreground }
+
     // The opt-in profile backfill (ADR 11). The switch goes through
     // `set community`, like every other setting.
     SettingRow {
-      label: "STEAM PROFILE"
+      label: "PROFILE"
       Chips {
         options: [
           { value: "off", label: "Off" },
@@ -1818,7 +1831,7 @@ Column {
     // so this opens Steam's Notifications page for the owner to switch it
     // off there. Page id and labels from Steam's own client UI (steamui).
     SettingRow {
-      label: "STEAM POPUPS"
+      label: "POPUPS"
       Rectangle {
         id: steamButton
         width: steamText.implicitWidth + Commons.Style.space(20)
@@ -1858,12 +1871,5 @@ Column {
       text: "Steam shows its own popup too. On the page this opens, find \"When I unlock an achievement\" and untick Show Toast (and Play Sound)."
     }
 
-    Caption {
-      width: root.width
-      topPadding: Commons.Style.space(6)
-      horizontalAlignment: Text.AlignHCenter
-      opacity: 0.4
-      text: "Changes apply to the next toast · try one with a preview tile"
-    }
   }
 }

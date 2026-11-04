@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Settings groups the Steam rows under their own header, and the "applies
+  to the next toast" note sits under the toast settings it is about.
+
 ## 0.3.0 - 2026-11-03
 
 - GOG support: games played through Heroic Games Launcher toast, show
