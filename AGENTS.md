@@ -34,7 +34,9 @@ says how the parts fit, `docs/adr/` why, `docs/specs/` what the contracts are
   the bar's colour is meant for the bar's background.
 - Stores read the launcher's local data and need no account keys (ADR 1,
   ADR 7). A store answers in plain dicts; diffing, tiers and events stay in
-  `omatrophy.py`. New store: `docs/guide/stores.md`.
+  `omatrophy.py`. New store: `docs/guide/stores.md`; read its "Stores we
+  checked" table first (why Epic, Battle.net and others are out) and add
+  what you find.
 - The watcher only prints events; the shell decides what to show (ADR 6).
   Event and CLI shapes are public contracts: change `docs/specs/` with them.
 - Never restart the user's shell while a game runs
