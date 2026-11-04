@@ -439,6 +439,36 @@ def store_rows(classes, found, lib):
     return [{'id': c.id, 'name': c.name, 'found': c.id in found_ids, 'games': counts.get(c.id, 0)} for c in classes]
 
 
+def library_playtime(found):
+    """{(store id, game): {'total', 'recent'}} minutes for every game a store
+    keeps playtime for, achievements or not."""
+    out = {}
+    for s in found:
+        try:
+            out.update({(s.id, g): v for g, v in s.playtime().items()})
+        except Exception:
+            continue
+    return out
+
+
+def playtime_totals(playtime):
+    """Minutes played in all and in the past two weeks, over every game; a
+    store that keeps no two-week figure adds nothing to `recent`."""
+    return {'total': sum(v['total'] for v in playtime.values()),
+            'recent': sum(v['recent'] or 0 for v in playtime.values())}
+
+
+def favorite_game(lib, playtime, hidden=()):
+    """(store, game, achievements) of the most played game with
+    achievements, hidden ones aside; None when no store keeps playtime."""
+    best, most = None, 0
+    for s, g, achs in lib:
+        minutes = playtime.get((s.id, g), {}).get('total', 0)
+        if minutes > most and game_key(s.id, g) not in hidden:
+            best, most = (s, g, achs), minutes
+    return best
+
+
 def recent_games(played, owned, skip, n):
     """The n most recently played games we hold achievements for, minus `skip`."""
     out = []
@@ -471,7 +501,7 @@ def playing_card(store, game, achs, since):
     return card
 
 
-def now(recent_n=3, rarest_n=3, nearest_n=4):
+def now(recent_n=3, rarest_n=8, nearest_n=4):
     """Everything the panel's Now tab shows, in one read of every store."""
     found = found_stores()
     lib = library(found)
@@ -485,23 +515,36 @@ def now(recent_n=3, rarest_n=3, nearest_n=4):
             playing = playing_card(s, run['game'], by_key[skip][1], run['since'])
             break
     played = sorted(((t, (s.id, g)) for s in found for t, g in s.recent()), key=lambda r: -r[0])
+    playtime = library_playtime(found)
+    def minutes(key):
+        return playtime.get(key, {}).get('total', 0)
     recent = []
     for when, key in recent_games(played, by_key, skip, recent_n):
         s, achs = by_key[key]
-        recent.append(game_card(s, key[1], achs, when))
+        recent.append(dict(game_card(s, key[1], achs, when), minutes=minutes(key)))
     shelf = sorted((dict(game_card(s, g, achs), latest=[]) for s, g, achs in lib if platinum_time(achs)),
                    key=lambda c: -c['platinum'])
     # The panel hides games live, before the next read: a few extra rarest
     # unlocks and nearest games let it drop a hidden one and still fill.
+    # The rarest list shows three and the Profile showcase six.
     hidden = hidden_games()
+    favorite = None
+    best = favorite_game(lib, playtime, hidden)
+    if best:
+        s, g, achs = best
+        pcts = s.known_percents(g)
+        rare = sum(1 for a in achs if a['unlocked'] and tier(pcts.get(a['api'])) == 'gold')
+        favorite = dict(game_card(s, g, achs), minutes=minutes((s.id, g)), rare=rare)
     nearest = []
     for r in nearest_platinum(rows, nearest_n + 2, hidden):
         s, achs = by_key[(r['store'], r['app'])]
         nearest.append(dict(game_card(s, r['app'], achs), latest=[]))
     return dict(totals(rows), metals=metal_tally(lib), completion=average_completion(rows),
+                started=sum(1 for r in rows if r['unlocked']), playtime=playtime_totals(playtime),
+                favorite=favorite,
                 playing=playing, recent=recent, shelf=shelf, nearest=nearest,
                 stores=store_rows(stores.STORES, found, lib),
-                rarest=rarest_cards(lib, rarest_n + 2, time.time(), hidden))
+                rarest=rarest_cards(lib, rarest_n, time.time(), hidden))
 
 
 def games():

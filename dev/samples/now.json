@@ -93,7 +93,8 @@
      "icon": "dev/samples/art/icon-keeper.svg",
      "time": 1792740800
     }
-   ]
+   ],
+   "minutes": 726
   },
   {
    "store": "steam",
@@ -110,7 +111,8 @@
      "icon": "dev/samples/art/icon-shoreline.svg",
      "time": 1792481600
     }
-   ]
+   ],
+   "minutes": 726
   },
   {
    "store": "steam",
@@ -127,7 +129,8 @@
      "icon": "dev/samples/art/icon-fold.svg",
      "time": 1791272000
     }
-   ]
+   ],
+   "minutes": 726
   }
  ],
  "shelf": [
@@ -244,6 +247,36 @@
     "app": "12",
     "tier": "gold",
     "game": "Glasswing"
+   },
+   {
+    "name": "Collector",
+    "icon": "dev/samples/art/icon-collector.svg",
+    "time": 1775000000,
+    "percent": 6.1,
+    "store": "steam",
+    "app": "12",
+    "tier": "gold",
+    "game": "Glasswing"
+   },
+   {
+    "name": "Cartographer",
+    "icon": "dev/samples/art/icon-cartographer.svg",
+    "time": 1775000000,
+    "percent": 12.4,
+    "store": "steam",
+    "app": "12",
+    "tier": "silver",
+    "game": "Glasswing"
+   },
+   {
+    "name": "Shoreline",
+    "icon": "dev/samples/art/icon-shoreline.svg",
+    "time": 1775000000,
+    "percent": 21.0,
+    "store": "steam",
+    "app": "12",
+    "tier": "silver",
+    "game": "Glasswing"
    }
   ],
   "month": [
@@ -310,5 +343,23 @@
   "silver": 398,
   "gold": 169
  },
- "completion": 47
+ "completion": 47,
+ "started": 61,
+ "playtime": {
+  "total": 187320,
+  "recent": 2046
+ },
+ "favorite": {
+  "store": "steam",
+  "app": "2",
+  "unlocked": 40,
+  "total": 40,
+  "game": "Lanterns of Aster",
+  "header": "dev/samples/art/lanterns-of-aster-header.svg",
+  "played": 1792827200,
+  "platinum": 1792827200,
+  "latest": [],
+  "minutes": 17700,
+  "rare": 9
+ }
 }

@@ -15,7 +15,8 @@ import qs.Commons as Commons
 // next toast. Bones shimmer in place of what's still loading.
 //
 // Sections, in order, each under a "// ---- Name" banner: State, Helpers,
-// Files and processes, Building blocks, Tab strip, Now, Games, Settings.
+// Files and processes, Building blocks, Tab strip, Now, Profile, Games,
+// Settings.
 Column {
   id: root
   spacing: Commons.Style.space(8)
@@ -136,6 +137,12 @@ Column {
     if (root[property] === value) return
     root[property] = value
     runner.exec(["python3", helperPath, "set", key, value])
+  }
+
+  // Minutes as whole hours, "552 h"; under an hour, "42 min".
+  function hours(minutes) {
+    if (minutes < 60) return minutes + " min"
+    return Math.round(minutes / 60).toLocaleString(Qt.locale(), "f", 0) + " h"
   }
 
   // The rows of a list whose game isn't hidden.
@@ -367,6 +374,8 @@ Column {
     property real value: -1
     property string label: ""
     property color tint: root.foreground
+    // Put after the number ("%").
+    property string suffix: ""
     property real shown: 0
     onValueChanged: if (value >= 0) shown = value
     Component.onCompleted: if (value >= 0) shown = value
@@ -374,7 +383,7 @@ Column {
     spacing: Commons.Style.space(1)
     Text {
       textFormat: Text.PlainText
-      text: stat.value < 0 ? "–" : Math.round(stat.shown).toLocaleString(Qt.locale(), "f", 0)
+      text: stat.value < 0 ? "–" : Math.round(stat.shown).toLocaleString(Qt.locale(), "f", 0) + stat.suffix
       color: parent.tint
       font.family: Commons.Style.font.family
       font.pixelSize: Commons.Style.font.display
@@ -693,7 +702,7 @@ Column {
   // and the Games tab's sort buttons below them as controls.
   Item {
     id: tabStrip
-    readonly property var tabs: [{ value: "now", label: "Now" }, { value: "games", label: "Games" }, { value: "settings", label: "Settings" }]
+    readonly property var tabs: [{ value: "now", label: "Now" }, { value: "profile", label: "Profile" }, { value: "games", label: "Games" }, { value: "settings", label: "Settings" }]
     readonly property real tabWidth: width / tabs.length
     readonly property int current: Math.max(0, tabs.findIndex(function(t) { return t.value === root.tab }))
     width: root.width
@@ -1331,7 +1340,9 @@ Column {
             Caption {
               anchors.right: parent.right
               visible: !recentCard.platinum
-              text: root.ago(recentCard.modelData.played)
+              // Hours on record first, when the store keeps them.
+              text: (recentCard.modelData.minutes > 0 ? root.hours(recentCard.modelData.minutes) + " · " : "")
+                    + root.ago(recentCard.modelData.played)
             }
           }
         }
@@ -1627,6 +1638,254 @@ Column {
           delegate: Bone { width: shelfGrid.tileWidth; height: Math.round(width * 215 / 460) }
         }
       }
+    }
+  }
+
+  // ---------------------------------------------------------------- Profile
+
+  // The library at a glance, in tiles taken from Steam's profile
+  // showcases: the game you play most, your rarest trophies, what you've
+  // finished, and how long you've played. Every number is local data.
+  TabPage {
+    id: profileTab
+    visible: root.tab === "profile"
+    width: root.width
+    spacing: root.spacing
+
+    // ------------------------------------------------ favorite game
+
+    PanelSectionHeader {
+      visible: favorite.game !== null
+      text: "MOST PLAYED"
+      foreground: root.foreground
+    }
+
+    Rectangle {
+      id: favorite
+      readonly property var game: root.cabinet && root.cabinet.favorite ? root.cabinet.favorite : null
+      visible: game !== null
+      width: root.width
+      height: favoriteBody.height + Commons.Style.space(20)
+      radius: Commons.Style.cornerRadius
+      color: favoriteHit.containsMouse ? Commons.Style.hoverFill : Qt.alpha(root.foreground, 0.04)
+      border.width: 1
+      border.color: Qt.alpha(root.foreground, 0.12)
+      Behavior on color { ColorAnimation { duration: 120 } }
+      Hit { id: favoriteHit; game: favorite.game }
+      Column {
+        id: favoriteBody
+        x: Commons.Style.space(10)
+        y: Commons.Style.space(10)
+        width: parent.width - Commons.Style.space(20)
+        spacing: Commons.Style.space(10)
+        Row {
+          spacing: Commons.Style.space(12)
+          Art {
+            id: favoriteArt
+            width: Math.round(favoriteBody.width * 0.45)
+            height: Math.round(width * 215 / 460)
+            source: favorite.game ? favorite.game.header || "" : ""
+            label: favorite.game ? favorite.game.game : ""
+            zoom: favoriteHit.containsMouse ? 1.05 : 1
+          }
+          Column {
+            anchors.verticalCenter: parent.verticalCenter
+            width: favoriteBody.width - favoriteArt.width - Commons.Style.space(12)
+            spacing: Commons.Style.space(6)
+            Text {
+              textFormat: Text.PlainText
+              width: parent.width
+              text: favorite.game ? favorite.game.game : ""
+              color: root.foreground
+              font.family: Commons.Style.font.family
+              font.pixelSize: Commons.Style.font.body
+              font.bold: true
+              elide: Text.ElideRight
+            }
+            Row {
+              spacing: Commons.Style.space(16)
+              Stat { value: favorite.game ? Math.round(favorite.game.minutes / 60) : -1; label: "HOURS" }
+              Stat { value: favorite.game ? favorite.game.rare : -1; label: "RARE"; tint: root.metalColors.gold }
+            }
+          }
+        }
+        Item {
+          width: parent.width
+          height: favoriteCount.height
+          Caption {
+            id: favoriteCount
+            text: favorite.game ? favorite.game.unlocked + " / " + favorite.game.total + " trophies" : ""
+          }
+          Caption {
+            anchors.right: parent.right
+            visible: favorite.game !== null && favorite.game.platinum > 0
+            text: "Platinum"
+            color: root.metalColors.platinum
+          }
+        }
+        Bar {
+          width: parent.width
+          fraction: favorite.game ? favorite.game.unlocked / favorite.game.total : 0
+          fill: favorite.game && favorite.game.platinum > 0 ? root.metalColors.platinum : Commons.Color.accent
+        }
+      }
+    }
+
+    // ------------------------------------------------ showcase
+
+    PanelSectionHeader {
+      visible: showcase.count > 0
+      text: "SHOWCASE · RAREST EVER"
+      foreground: root.foreground
+    }
+
+    // Your six rarest trophies as icons, each framed in its metal; a click
+    // opens it in the tracker.
+    Row {
+      id: showcaseRow
+      visible: showcase.count > 0
+      spacing: Commons.Style.space(6)
+      readonly property real tile: (root.width - spacing * 5) / 6
+      Repeater {
+        id: showcase
+        model: root.cabinet && root.cabinet.rarest ? root.unhidden(root.cabinet.rarest.ever).slice(0, 6) : []
+        delegate: Rectangle {
+          id: showTile
+          required property var modelData
+          required property int index
+          width: showcaseRow.tile
+          height: width
+          radius: Commons.Style.cornerRadius
+          color: Qt.alpha(root.metalColors[modelData.tier], showHit.containsMouse ? 0.22 : 0.1)
+          border.width: 1
+          border.color: Qt.alpha(root.metalColors[modelData.tier], showHit.containsMouse ? 1 : 0.55)
+          property real rise: 0
+          opacity: 0
+          transform: Translate { y: showTile.rise }
+          FadeIn { item: showTile; order: showTile.index }
+          Accessible.role: Accessible.Button
+          Accessible.name: modelData.name + ", " + modelData.game + ", " + modelData.percent.toFixed(1) + " percent"
+          AchIcon {
+            anchors.fill: parent
+            anchors.margins: 4
+            source: showTile.modelData.icon
+            scale: showHit.containsMouse ? 1.06 : 1
+            Behavior on scale { NumberAnimation { duration: 140 } }
+          }
+          Hit { id: showHit; game: showTile.modelData }
+          PanelToolTip {
+            visible: showHit.containsMouse
+            text: showTile.modelData.name + " · " + showTile.modelData.game + " · " + showTile.modelData.percent.toFixed(1) + "%"
+          }
+        }
+      }
+    }
+
+    Row {
+      visible: root.cabinet !== null
+      spacing: Commons.Style.space(16)
+      Stat { value: root.cabinet ? root.cabinet.trophies : -1; label: "TROPHIES" }
+      Stat { value: root.cabinet && root.cabinet.metals ? root.cabinet.metals.gold : -1; label: "RARE"; tint: root.metalColors.gold }
+    }
+
+    // ------------------------------------------------ completionist
+
+    PanelSectionHeader {
+      visible: root.cabinet !== null
+      text: "COMPLETIONIST"
+      foreground: root.foreground
+    }
+
+    // The two newest platinums, as the shelf draws them but bigger.
+    Row {
+      id: newestPlatinums
+      readonly property var games: root.cabinet ? root.unhidden(root.cabinet.shelf).slice(0, 2) : []
+      visible: games.length > 0
+      spacing: Commons.Style.space(6)
+      Repeater {
+        model: newestPlatinums.games
+        delegate: Rectangle {
+          id: newestCard
+          required property var modelData
+          width: (root.width - Commons.Style.space(6)) / 2
+          height: Math.round(width * 215 / 460)
+          radius: Commons.Style.cornerRadius
+          color: "transparent"
+          border.width: 1
+          border.color: Qt.alpha(root.metalColors.platinum, newestHit.containsMouse ? 1 : 0.45)
+          Art {
+            anchors.fill: parent
+            anchors.margins: 1
+            source: newestCard.modelData.header || ""
+            label: newestCard.modelData.game
+            zoom: newestHit.containsMouse ? 1.06 : 1
+          }
+          Rectangle {
+            // Top corner: the art's own name label sits along the bottom.
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.margins: 4
+            width: newestRow.width + 10
+            height: newestRow.height + 4
+            radius: height / 2
+            color: Qt.alpha(Commons.Color.popups.background, 0.85)
+            Row {
+              id: newestRow
+              anchors.centerIn: parent
+              spacing: 4
+              Thumb { style: root.iconSet; metal: "platinum"; width: 14; height: 14; anchors.verticalCenter: parent.verticalCenter }
+              Text {
+                textFormat: Text.PlainText
+                anchors.verticalCenter: parent.verticalCenter
+                text: newestCard.modelData.total + " trophies"
+                color: root.foreground
+                font.family: Commons.Style.font.family
+                font.pixelSize: 10
+                font.bold: true
+              }
+            }
+          }
+          Hit { id: newestHit; game: newestCard.modelData }
+          PanelToolTip {
+            visible: newestHit.containsMouse
+            text: newestCard.modelData.game + " · platinum " + root.day(newestCard.modelData.platinum)
+          }
+        }
+      }
+    }
+
+    Row {
+      visible: root.cabinet !== null
+      spacing: Commons.Style.space(16)
+      Stat { value: root.cabinet ? root.cabinet.platinums : -1; label: "COMPLETED"; tint: root.metalColors.platinum }
+      Stat { value: root.cabinet && root.cabinet.started !== undefined ? root.cabinet.started : -1; label: "STARTED" }
+      Stat { value: root.cabinet && root.cabinet.completion !== undefined ? root.cabinet.completion : -1; label: "AVG COMPLETION"; suffix: "%" }
+    }
+
+    // ------------------------------------------------ playtime
+
+    PanelSectionHeader {
+      visible: playtimeRow.visible
+      text: "PLAYTIME"
+      foreground: root.foreground
+    }
+
+    Row {
+      id: playtimeRow
+      readonly property var minutes: root.cabinet && root.cabinet.playtime ? root.cabinet.playtime : null
+      visible: minutes !== null && minutes.total > 0
+      spacing: Commons.Style.space(16)
+      Stat { value: playtimeRow.minutes ? Math.round(playtimeRow.minutes.recent / 60) : -1; label: "HOURS · 2 WEEKS" }
+      Stat { value: playtimeRow.minutes ? Math.round(playtimeRow.minutes.total / 60) : -1; label: "HOURS IN ALL" }
+    }
+
+    Caption {
+      visible: root.cabinet !== null && !favorite.visible && !playtimeRow.visible && showcase.count === 0
+      width: root.width
+      wrapMode: Text.WordWrap
+      elide: Text.ElideNone
+      opacity: 0.5
+      text: "Play a game with achievements and your profile fills in here."
     }
   }
 

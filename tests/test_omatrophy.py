@@ -369,6 +369,11 @@ class Played(unittest.TestCase):
     def test_last_played_newest_first_without_never_played(self):
         self.assertEqual(steam.last_played(LOCALCONFIG), [(1800000000, '20'), (1700000000, '10')])
 
+    def test_playtimes_in_minutes_with_no_two_week_figure_as_zero(self):
+        text = ('"apps" { "10" { "LastPlayed" "1" "Playtime" "120" "Playtime2wks" "30" }'
+                ' "20" { "Playtime" "45" } "30" { "LastPlayed" "1" } "../x" { "Playtime" "9" } }')
+        self.assertEqual(steam.playtimes(text), {'10': {'total': 120, 'recent': 30}, '20': {'total': 45, 'recent': 0}})
+
     def test_store_reads_its_accounts_localconfig(self):
         sd = SteamDir(['First'])
         self.addCleanup(sd.close)
@@ -531,6 +536,21 @@ class NowTab(unittest.TestCase):
         achs = [ach('a', True, 1), ach('b', True, 0), ach('c', True, 2), ach('d', True, 3), ach('e')]
         self.assertEqual(omatrophy.metal_tally([(Fake(), '1', achs)]), {'bronze': 2, 'silver': 1, 'gold': 1})
 
+    def test_playtime_totals_skip_unknown_two_week_figures(self):
+        playtime = {('steam', '1'): {'total': 120, 'recent': 30}, ('gog', '2'): {'total': 60, 'recent': None}}
+        self.assertEqual(omatrophy.playtime_totals(playtime), {'total': 180, 'recent': 30})
+        self.assertEqual(omatrophy.playtime_totals({}), {'total': 0, 'recent': 0})
+
+    def test_favorite_game_is_the_most_played_not_hidden(self):
+        class Fake:
+            id = 'steam'
+        s = Fake()
+        lib = [(s, '1', []), (s, '2', []), (s, '3', [])]
+        playtime = {('steam', '1'): {'total': 50}, ('steam', '2'): {'total': 90}, ('steam', '4'): {'total': 999}}
+        self.assertEqual(omatrophy.favorite_game(lib, playtime)[1], '2')
+        self.assertEqual(omatrophy.favorite_game(lib, playtime, hidden={'steam:2'})[1], '1')
+        self.assertIsNone(omatrophy.favorite_game(lib, {}))
+
     def test_rarest_unlocks_rarest_first_ties_to_the_newest(self):
         unlocks = [{'name': 'a', 'percent': 30.0, 'time': 5}, {'name': 'b', 'percent': 2.0, 'time': 6},
                    {'name': 'c', 'percent': 2.0, 'time': 9}, {'name': 'd', 'percent': None, 'time': 9}]
@@ -683,6 +703,14 @@ class PanelJson(unittest.TestCase):
         # ACH_0 is 50% (bronze) and ACH_1 5% (gold) in both started games.
         self.assertEqual(now['metals'], {'bronze': 2, 'silver': 0, 'gold': 2})
         self.assertEqual(now['completion'], 75)
+
+    def test_now_without_playtime_has_no_favorite(self):
+        with FakeLibrary():
+            now = omatrophy.now()
+        self.assertIsNone(now['favorite'])
+        self.assertEqual(now['playtime'], {'total': 0, 'recent': 0})
+        self.assertEqual(now['started'], 2)
+        self.assertEqual([c['minutes'] for c in now['recent']], [0, 0])
 
     def test_game_detail_for_the_tracker(self):
         with FakeLibrary(running={'game': '20', 'since': 0}):

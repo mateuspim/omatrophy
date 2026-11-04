@@ -20,6 +20,7 @@ Subclass `stores.base.Store` in `stores/<id>.py`:
 | `game_name(game)` | Display name. Cache it if it costs a request. |
 | `percents(game)` | `{api: share of players}`, or `{}`. Cache it: the panel and tracker ask often. `{}` makes every unlock bronze. `percent(game, api)` reads from it. |
 | `known_percents(game)` | Optional: the rarity already on this machine, with no request, at any age; `{}` before the first fetch. The panel's rarest unlocks read every game through it. Defaults to `percents`, right for a store whose rarity is local; override it when `percents` can go to the network. |
+| `playtime()` | Optional: `{game id: {'total': minutes, 'recent': minutes in the past two weeks or None}}` from the launcher's own files, for the panel's Profile tab and hours on recent games. Steam reads `localconfig.vdf`'s `Playtime`/`Playtime2wks`; GOG, Heroic's `timestamp.json` `totalPlayed`. |
 | `art(game)` | `{'hero', 'header'}` image URLs for the platinum card, panel and tracker, or `""`. |
 | `running()` | `{'game': id, 'since': unix seconds}` for the game being played now, or `None`. Optional; the panel's now-playing card needs it. |
 | `recent()` | `[(unix seconds, game id)]` last played, newest first. Optional; the panel's recent games need it. |

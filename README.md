@@ -94,6 +94,12 @@ Type (or press `/`) to filter by name; Enter opens the first match. Hover a
 game and click **Hide** to set aside one you won't finish: it leaves
 Closest and dims in the other sorts until you click **Show**.
 
+The **Profile** tab shows your library at a glance, in tiles after Steam's
+profile showcases: your most played game with its hours and rare
+trophies, your six rarest trophies, your two newest platinums with games
+completed, started and average completion, and hours played in the past
+two weeks and in all. Playtime comes from the launchers' own files.
+
 On multiple monitors, each trophy button opens its own panel. Direct IPC
 (`omarchy-shell pym.omatrophy toggle`, also `open` or `close`) controls the
 panel on the first screen in Quickshell's screen list.

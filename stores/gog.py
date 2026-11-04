@@ -349,6 +349,18 @@ class Gog(Store):
         rows = {game: max(played.get(game, 0), int(db_token(db))) for game, db in self.databases().items()}
         return sorted(((t, g) for g, t in rows.items() if t > 0), reverse=True)
 
+    def playtime(self):
+        """Heroic's totalPlayed (minutes) per game; Heroic keeps no
+        two-week figure, so `recent` is None."""
+        out = {}
+        for heroic in self.heroic:
+            stamps = read_json(f'{heroic}/store/timestamp.json', {})
+            for game, row in (stamps.items() if isinstance(stamps, dict) else ()):
+                minutes = row.get('totalPlayed') if isinstance(row, dict) else None
+                if gog_id(game) and isinstance(minutes, int) and minutes >= 0:
+                    out[game] = {'total': max(minutes, out.get(game, {}).get('total', 0)), 'recent': None}
+        return out
+
     def running(self):
         installs = [pair for heroic in self.heroic for pair in installed_games(heroic)]
         return running_install(installs) if installs else None

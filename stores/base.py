@@ -57,6 +57,12 @@ class Store:
         """[(unix seconds, game id)] last played, newest first; [] when the store doesn't say."""
         return []
 
+    def playtime(self):
+        """{game id: {'total': minutes played, 'recent': minutes in the past
+        two weeks, or None when the store doesn't say}}; {} when it keeps
+        no playtime. Optional; the panel's Profile tab sums it."""
+        return {}
+
     def game_name(self, game):
         return f'{self.name} {game}'
 

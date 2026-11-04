@@ -41,7 +41,8 @@ the next read names them locally. The command itself exits at once.
 {"games": 126, "trophies": 1779, "platinums": 12,
  "playing": {...card, "hero": "...", "since": 1793065549, "session": [...], "next": [...]} | null,
  "recent": [card, ...], "shelf": [card, ...],
- "metals": {"bronze", "silver", "gold"}, "completion": 40,
+ "metals": {"bronze", "silver", "gold"}, "completion": 40, "started": 80,
+ "playtime": {"total": 752100, "recent": 2343}, "favorite": {...card, "minutes", "rare"} | null,
  "nearest": [card, ...], "stores": [{"id", "name", "found", "games"}, ...],
  "rarest": {"ever": [unlock, ...], "month": [unlock, ...], "platinum": [unlock, ...]}}
 ```
@@ -61,17 +62,25 @@ the next read names them locally. The command itself exits at once.
   cached rarity (an unknown rarity counts as bronze, as its toast would);
   `completion`: the average share unlocked, in whole percent, over games
   with at least one unlock.
+- `started`: games with at least one unlock. `playtime`: minutes played
+  over every game a store keeps playtime for (achievements or not), in
+  all and in the past two weeks (stores without a two-week figure add
+  nothing to `recent`). `favorite`: the most played game with
+  achievements, hidden ones aside, with its `minutes` and `rare` (its
+  gold-tier unlocks); `null` when no store keeps playtime. Cards in
+  `recent` carry `minutes` too (`0` when unknown).
 - `stores`: every store OmaTrophy knows (`stores.STORES` order), whether
   it was found on this machine, and how many of its games have
   achievements; Settings shows one card per store.
 - `nearest`: the six started, unfinished games closest to 100%, ties to
   the one with fewer left, with `latest` empty; the panel fills the
   platinum shelf's empty slots with them. Hidden games are left out.
-- `rarest`: the five unlocks fewest players have across the library,
+- `rarest`: the eight unlocks fewest players have across the library,
   ever, since the first of this month (local time) and from finished
   games only (`platinum`), rarest first, ties to the newest; hidden
-  games are left out. The panel shows three; the
-  spares let it drop a game hidden since the read. An **unlock** is
+  games are left out. The Now tab shows three
+  and the Profile showcase six; the spares let it drop a game hidden
+  since the read. An **unlock** is
   `{name, icon, time, api, percent, tier, store, app, game}`. Rarity is read from the cache only, so `now` makes
   no request for it; unlocks of games with no cached rarity are left out.
   The watcher fetches the missing ones once after `ready`.
