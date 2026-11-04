@@ -8,7 +8,7 @@ fills the cache locally, with no key and no rate limit (ADR 13). Steam's
 window moves page to page while it runs, so only the owner starts it,
 never the watcher.
 """
-import json, os, shutil, subprocess, time
+import json, os, re, shutil, subprocess, time
 
 from .base import CACHE, read_json, write_json
 from .steam_community import app_id
@@ -37,6 +37,12 @@ MAIN_TITLE = 'Steam'
 # settled as none and doesn't count toward a new streak, so a library
 # that has one can't stop every load.
 TIMEOUT_STREAK = 15
+# Steam's logs/connection_log.txt starts most lines with the client's
+# connection state: "[2026-11-03 20:01:14] [Logged On, 4, 23] ...". Seen
+# on 2026-11-04: Connecting, Connected, Logging On, Logged On, Logging
+# Off, Logged Off. Only Logged On loads stats.
+CONNECTION_STATE = re.compile(r'^\[[^\]]*\] \[([A-Za-z ]+), ')
+CONNECTION_TAIL = 64 * 1024
 # The panel's progress strip shows this many of the latest results.
 RECENT_KEPT = 6
 
@@ -123,6 +129,24 @@ def steam_running(proc='/proc'):
         except OSError:
             continue
     return False
+
+
+def signed_in(log):
+    """True when Steam's connection log last said Logged On, False for any
+    other state (offline, still signing in), None when it can't tell (no
+    log, or a format we don't know): then the timeout streak decides."""
+    try:
+        with open(log, 'rb') as f:
+            f.seek(0, os.SEEK_END)
+            f.seek(max(0, f.tell() - CONNECTION_TAIL))
+            lines = f.read().decode('utf8', 'replace').splitlines()
+    except OSError:
+        return None
+    for line in reversed(lines):
+        m = CONNECTION_STATE.match(line)
+        if m:
+            return m.group(1) == 'Logged On'
+    return None
 
 
 def open_page(app):
@@ -268,14 +292,15 @@ def wait_for(has_stats, app, wait, poll, clock, sleep):
 
 def load(todo, has_stats, busy, opener=open_page, running=steam_running, say=None,
          wait=WAIT_SECONDS, poll=POLL_SECONDS, clock=time.time, sleep=time.sleep, window=None,
-         everything=False, describe=None, prepare=None):
+         everything=False, describe=None, prepare=None, online=lambda: None):
     """Open each app's page in turn and wait for its stats file. Stops when
     Steam closes, a game starts (`busy()`: Steam's window must not jump
     over a game) or a stop is requested. Each tried game goes into
     checked.json at once, so a stopped run resumes at the next game.
     `describe(app)` gives {name, art} for the panel's progress strip,
     from what is already on disk; `prepare(app)` is told the next game
-    while the current one loads (the store warms its name). Returns
+    while the current one loads (the store warms its name); `online()` is
+    signed_in() for this Steam. Returns
     {loaded, none, state}."""
     clear_stop()
     tried = checked()
@@ -312,7 +337,7 @@ def load(todo, has_stats, busy, opener=open_page, running=steam_running, say=Non
     report('', 'running', 0)
     try:
         return run(todo, has_stats, busy, opener, running, wait, poll, clock, sleep, window, tried, counts, report, end,
-                   prepare or (lambda app: None))
+                   prepare or (lambda app: None), online)
     except BaseException:
         # A kill or a bug: the panel would show a live run until the status
         # went stale; say it ended.
@@ -322,7 +347,8 @@ def load(todo, has_stats, busy, opener=open_page, running=steam_running, say=Non
         window.restore()
 
 
-def run(todo, has_stats, busy, opener, running, wait, poll, clock, sleep, window, tried, counts, report, end, prepare):
+def run(todo, has_stats, busy, opener, running, wait, poll, clock, sleep, window, tried, counts, report, end, prepare,
+        online):
     """load()'s loop, with Steam's window kept out of sight."""
     retried = {app for app in todo if unsure(tried, app)}
     streak = []
@@ -334,6 +360,11 @@ def run(todo, has_stats, busy, opener, running, wait, poll, clock, sleep, window
             return end('stopped: Steam is not running; start it and load again', 'failed', i)
         if busy():
             return end('stopped: a game is running; load again after it closes', 'failed', i)
+        # Offline or still signing in, a page loads nothing and every game
+        # would pass for one without achievements.
+        if online() is False:
+            return end('stopped: Steam is not signed in (offline, or still signing in); load again once it is',
+                       'failed', i)
         try:
             opener(app)
         except OSError as e:

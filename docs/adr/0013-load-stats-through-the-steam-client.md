@@ -33,9 +33,12 @@ client's own cache needs none of that.
   the moment it is done, with whether a stats file came: the checkpoint. A
   game in it is never tried again, so a stopped run resumes at the next
   game and a later load only takes games played since. A game whose page
-  opened without a file has no achievements, as far as we can tell,
-  except after 15 such games in a row: Steam offline or still signing in
-  loads nothing, so the run stops there and keeps those games unsure
+  opened without a file has no achievements, as far as we can tell. A
+  page loads nothing while Steam is offline or still signing in, so the
+  run checks the client's own `logs/connection_log.txt` before each game:
+  its lines start with the connection state, and anything but
+  `Logged On` stops the run. When the log can't be read, a streak of 15
+  timeouts in a row stops it instead, and the run and keeps those games unsure
   (`found: null`), first in line for the next load. One that times out
   again then counts as none and starts no new streak, so a library with
   15 games without achievements in a row can't stop every load. Only

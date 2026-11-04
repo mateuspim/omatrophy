@@ -115,6 +115,33 @@ class Load(LoaderCache):
         status = steam_loader.status()
         self.assertEqual((status['done'], status['total'], status['state']), (3, 3, 'done'))
 
+    def test_stops_when_steam_is_not_signed_in(self):
+        states = iter([True, False])
+        clock = FakeClock()
+        result = steam_loader.load(['1', '2'], lambda app: False, lambda: False, opener=lambda app: None,
+                                   running=lambda: True, clock=clock.time, sleep=clock.sleep, window=NoWindow(),
+                                   online=lambda: next(states))
+        self.assertEqual(result, {'loaded': 0, 'none': 1, 'state': 'failed'})
+        self.assertIn('not signed in', steam_loader.status()['line'])
+        # The game it didn't get to stays untried.
+        self.assertNotIn('2', steam_loader.checked())
+
+    def test_reads_the_last_connection_state(self):
+        with tempfile.TemporaryDirectory() as d:
+            log = os.path.join(d, 'connection_log.txt')
+            self.assertIsNone(steam_loader.signed_in(log))
+            with open(log, 'w') as f:
+                f.write('[2026-11-03 20:01:01] [Logging On, 4, 23] [U:1:1] Using JWT\n'
+                        '[2026-11-03 20:01:14] [Logged On, 4, 23] [U:1:1] processing complete\n'
+                        '[2026-11-03 20:31:43] CClientJobGetClientUpdateHosts: cached version not expired\n')
+            self.assertTrue(steam_loader.signed_in(log))
+            with open(log, 'a') as f:
+                f.write('[2026-11-03 21:00:00] [Logged Off, 4, 0] [U:1:1] lost connection\n')
+            self.assertFalse(steam_loader.signed_in(log))
+            with open(log, 'w') as f:
+                f.write('a format we have never seen\n')
+            self.assertIsNone(steam_loader.signed_in(log))
+
     def test_a_timeout_streak_stops_and_keeps_those_games_unsure(self):
         # Steam offline: every game times out. Before, all of them were
         # filed as "no achievements" and never tried again.

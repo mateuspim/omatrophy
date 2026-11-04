@@ -6,9 +6,10 @@ Fixes left open from the Load from Steam review (PR #5). Toasts and the
 loader run in the watcher and CLI: one `omarchy restart shell` for the
 running watcher.
 
-- Load from Steam stops after 15 games in a row give no stats (Steam
-  offline or still signing in) and tries those games first next time,
-  instead of filing them all as games without achievements.
+- Load from Steam stops when Steam isn't signed in (offline, or still
+  signing in; read from Steam's own connection log), and after 15 games
+  in a row give no stats, trying those games first next time, instead of
+  filing them all as games without achievements.
 - A game that first shows up while the watcher runs (just cached by a
   load, or first played) no longer toasts its old unlocks that Steam
   stored without a time.
