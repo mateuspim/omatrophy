@@ -1,0 +1,16 @@
+{
+  "format": 2,
+  "generated": 1792990000,
+  "order": ["Last Lantern", "Star Counter", "Quiet Hours"],
+  "items": {
+    "Last Lantern": {"name": "Last Lantern", "api": "ACH_LANTERN", "phase": "missable", "difficulty": 2,
+      "time": "~20 min", "minutes": [15, 25], "missable": true,
+      "missable_note": "Before chapter 4 ends", "counter": null, "combine_with": [],
+      "tips": "Keep the lantern lit and skip the side paths.", "cites": [], "unverified": ["time"]},
+    "Star Counter": {"name": "Star Counter", "api": "ACH_STARS", "phase": "grind", "difficulty": 1,
+      "time": "~30 min", "minutes": [25, 35], "missable": false,
+      "counter": {"target": 50, "label": "stars"}, "combine_with": [], "tips": "Look up at night."},
+    "Quiet Hours": {"name": "Quiet Hours", "phase": "quick", "difficulty": 3, "missable": false}
+  },
+  "sections": {"overview": "Short and gentle.", "route": "Lantern first, then stars."}
+}

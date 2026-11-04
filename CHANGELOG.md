@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- `omatrophy.py guide [store app]` reads a game's 100% guide (Markdown
+  notes, checklist and `.plan.json`) as JSON, and `guide import <folder>`
+  copies guide files in from another folder without touching it. Nothing
+  shows it yet (docs/specs/guides.md, slice b).
+
 ## 0.5.2 - 2026-11-04
 
 Fixes left open from the Load from Steam review (PR #5). Toasts and the

@@ -1,15 +1,14 @@
 # 100% guides
 
-Status: **design** (slice a, 2026-11-04). Nothing here is built yet; the
-slices below build it in order, and each one updates this page to match
-the code. Why it works this way: [ADR 14](../adr/0014-generate-guides-through-the-users-agent.md).
+Status: **design**, with slice b (the reader) built. The slices below
+build it in order, and each one updates this page to match the code. Why it works this way: [ADR 14](../adr/0014-generate-guides-through-the-users-agent.md).
 
 ## Slices
 
 | Slice | Delivers |
 | --- | --- |
 | a | This spec, ADR 14, the stage contracts. |
-| b | Reader: `guide <store> <app>`, `guide import`, file parsing, tests, a made-up sample in `dev/samples/`. |
+| b (built) | Reader: `guide <store> <app>`, `guide import`, file parsing, tests, a made-up sample in `dev/samples/`. |
 | c | Maker: gather, the four agent adapters, prompts, verify, `guide make/stop/status`, tests with a fake agent. |
 | d | Tracker Guide view (`TrackerView.qml`, hot-reloads): route, phases, missables first, next up, Make guide button; `dev/render.sh guide`. |
 | e | Now tab "Up next" from the plan. |
@@ -117,11 +116,11 @@ OmaTrophy doesn't know survive a rewrite.
 - Format 1 is the games app's plan: no `format`, no `api`, no `minutes`,
   no `cites`. The reader accepts it.
 
-## Command line (slices b, c)
+## Command line (slice b: `guide`, `guide import`; the rest is slice c)
 
 | Command | Does |
 | --- | --- |
-| `guide [store app]` | Prints the guide as JSON for the tracker: `{store, app, file, generated, order, items: {api: item}, sections, notes, ticks: [api], next: [api]}`, or `{}` when there is none. `next` is the first three open items in `order`, missables first. Without arguments, the game running now, else the last one played. |
+| `guide [store app]` | Prints the guide as JSON for the tracker: `{store, app, file, generated, order, items: {api: item}, sections, notes, ticks: [api], next: [api]}`, or `{}` when there is none. The reader is `guides.py`. `items` holds only the plan items that match a store achievement (by `api`, then name); `ticks` are the `api`s of hand ticks; `ticks` and the store's unlocks both count as done for `next`. `next` is the first three open items in `order`, missables first. Without arguments, the game running now, else the last one played. |
 | `guide import <folder>` | Copies every `*-<app>.md` with its `.plan.json` and `.sources.json` from another folder (the games app's `games/`), skipping files we already have (`--replace` overwrites). Read-only on `<folder>`. Prints `imported N, skipped M`. |
 | `guide agents` | Every agent with its models and picks (see Settings). |
 | `guide model <agent> <model> [effort]`, `guide model <agent> default` | Sets or clears that agent's pick in `guide-models`. |
