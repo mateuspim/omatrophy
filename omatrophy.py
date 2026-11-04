@@ -21,6 +21,10 @@ Usage:
   omatrophy.py sync                   run that backfill now, with progress
   omatrophy.py hide <store> <game>    keep a game you won't finish out of "closest to platinum"
   omatrophy.py unhide <store> <game>  bring it back
+  omatrophy.py favorite <store> <game>|clear
+                                      the Profile tab's favorite game
+  omatrophy.py completionist add|remove <store> <game>
+                                      pin a finished game to the Profile's completionist tile
   omatrophy.py showcase add|remove <store> <game> [api]
                                       pin a trophy (or, with no api, the game's platinum) to the Profile showcase
 
@@ -460,15 +464,15 @@ def playtime_totals(playtime):
             'recent': sum(v['recent'] or 0 for v in playtime.values())}
 
 
-def favorite_game(lib, playtime, hidden=()):
-    """(store, game, achievements) of the most played game with
-    achievements, hidden ones aside; None when no store keeps playtime."""
-    best, most = None, 0
-    for s, g, achs in lib:
-        minutes = playtime.get((s.id, g), {}).get('total', 0)
-        if minutes > most and game_key(s.id, g) not in hidden:
-            best, most = (s, g, achs), minutes
-    return best
+def favorite_card(s, game, achs, minutes, n=6):
+    """The Profile tab's favorite game: its card, hours, how many of its
+    unlocks are rare (gold), and its n rarest unlocks, rarest first."""
+    pcts = s.known_percents(game)
+    unlocked = [dict(brief(a), api=a['api'], percent=pcts.get(a['api']), tier=tier(pcts.get(a['api'])),
+                     store=s.id, app=game) for a in achs if a['unlocked']]
+    ranked = sorted((u for u in unlocked if u['percent'] is not None), key=lambda u: (u['percent'], -u['time']))
+    return dict(game_card(s, game, achs), minutes=minutes, rarest=ranked[:n],
+                rare=sum(1 for u in unlocked if u['tier'] == 'gold'))
 
 
 def recent_games(played, owned, skip, n):
@@ -531,12 +535,10 @@ def now(recent_n=3, rarest_n=8, nearest_n=4):
     # The rarest list shows three and the Profile showcase six.
     hidden = hidden_games()
     favorite = None
-    best = favorite_game(lib, playtime, hidden)
-    if best:
-        s, g, achs = best
-        pcts = s.known_percents(g)
-        rare = sum(1 for a in achs if a['unlocked'] and tier(pcts.get(a['api'])) == 'gold')
-        favorite = dict(game_card(s, g, achs), minutes=minutes((s.id, g)), rare=rare)
+    store_id, _, game = favorite_key().partition(':')
+    if (store_id, game) in by_key:
+        s, achs = by_key[(store_id, game)]
+        favorite = favorite_card(s, game, achs, minutes((store_id, game)))
     nearest = []
     for r in nearest_platinum(rows, nearest_n + 2, hidden):
         s, achs = by_key[(r['store'], r['app'])]
@@ -544,6 +546,7 @@ def now(recent_n=3, rarest_n=8, nearest_n=4):
     return dict(totals(rows), metals=metal_tally(lib), completion=average_completion(rows),
                 started=sum(1 for r in rows if r['unlocked']), playtime=playtime_totals(playtime),
                 favorite=favorite, showcase=showcase_items(showcase_keys(), by_key),
+                completionist=completionist_cards(completionist_keys(), by_key),
                 playing=playing, recent=recent, shelf=shelf, nearest=nearest,
                 stores=store_rows(stores.STORES, found, lib),
                 rarest=rarest_cards(lib, rarest_n, time.time(), hidden))
@@ -767,6 +770,29 @@ def set_hidden(store_id, game, hide):
     print(f'{"hidden" if hide else "shown"}: {game_key(store_id, game)}')
 
 
+def favorite_key():
+    """The owner's favorite game as "store:game", or "" when none is set."""
+    key = read_json(config_path(), {}).get('favorite', '')
+    return key if isinstance(key, str) else ''
+
+
+def set_favorite(store_id, game):
+    """Make one game the Profile tab's favorite; no game clears it."""
+    if store_id == 'clear' and not game:
+        key = ''
+    elif store_id in [cls.id for cls in stores.STORES] and game and ':' not in game:
+        key = game_key(store_id, game)
+    else:
+        raise SystemExit('usage: omatrophy.py favorite '
+                         f'{"|".join(cls.id for cls in stores.STORES)} <game id>\n'
+                         '       omatrophy.py favorite clear')
+    path = config_path()
+    cfg = read_json(path, {})
+    cfg['favorite'] = key
+    write_json(path, cfg, indent=2)
+    print(f'favorite: {key or "none"}')
+
+
 # The Profile tab's showcase holds as many picks as one row of tiles.
 SHOWCASE_MAX = 6
 
@@ -778,14 +804,14 @@ def showcase_keys():
     return [k for k in keys if isinstance(k, str)] if isinstance(keys, list) else []
 
 
-def with_showcase(keys, key, add):
-    """The showcase list with `key` added at the end or removed; None when
-    adding to a full showcase, so the caller can say so."""
+def with_showcase(keys, key, add, limit=SHOWCASE_MAX):
+    """A pin list (showcase, completionist) with `key` added at the end or
+    removed; None when adding to a full list, so the caller can say so."""
     # A hand-edited list can be anything; a string would read letter by letter.
     out = [k for k in keys if isinstance(k, str) and k != key] if isinstance(keys, list) else []
     if not add:
         return out
-    if len(out) >= SHOWCASE_MAX:
+    if len(out) >= limit:
         return None
     return out + [key]
 
@@ -804,6 +830,45 @@ def set_showcase(store_id, game, api, add):
     cfg['showcase'] = keys
     write_json(path, cfg, indent=2)
     print(f'{"pinned" if add else "unpinned"}: {key}')
+
+
+# The completionist tile shows finished games two to a row, two rows.
+COMPLETIONIST_MAX = 4
+
+
+def completionist_keys():
+    """The finished games the owner pinned to the completionist tile, as
+    "store:game", in the order pinned."""
+    keys = read_json(config_path(), {}).get('completionist', [])
+    return [k for k in keys if isinstance(k, str)] if isinstance(keys, list) else []
+
+
+def set_completionist(store_id, game, add):
+    """Pin or unpin one finished game on the completionist tile."""
+    if store_id not in [cls.id for cls in stores.STORES] or not game or ':' in game:
+        raise SystemExit('usage: omatrophy.py completionist add|remove '
+                         f'{"|".join(cls.id for cls in stores.STORES)} <game id>')
+    key = game_key(store_id, game)
+    path = config_path()
+    cfg = read_json(path, {})
+    keys = with_showcase(cfg.get('completionist', []), key, add, COMPLETIONIST_MAX)
+    if keys is None:
+        raise SystemExit(f'The completionist tile is full ({COMPLETIONIST_MAX}); remove one first: '
+                         'omatrophy.py completionist remove ...')
+    cfg['completionist'] = keys
+    write_json(path, cfg, indent=2)
+    print(f'{"pinned" if add else "unpinned"}: {key}')
+
+
+def completionist_cards(keys, by_key):
+    """The pinned games still at 100%, as shelf cards; others are skipped."""
+    out = []
+    for key in keys:
+        store_id, _, game = key.partition(':')
+        found = by_key.get((store_id, game))
+        if found and platinum_time(found[1]):
+            out.append(dict(game_card(found[0], game, found[1]), key=key, latest=[]))
+    return out
 
 
 def showcase_items(keys, by_key):
@@ -855,6 +920,10 @@ def main(argv):
         set_option(argv[2], argv[3])
     elif cmd == 'sync':
         sync()
+    elif cmd == 'favorite' and len(argv) in (3, 4):
+        set_favorite(argv[2], argv[3] if len(argv) == 4 else '')
+    elif cmd == 'completionist' and len(argv) == 5 and argv[2] in ('add', 'remove'):
+        set_completionist(argv[3], argv[4], argv[2] == 'add')
     elif cmd == 'showcase' and len(argv) in (5, 6) and argv[2] in ('add', 'remove'):
         set_showcase(argv[3], argv[4], argv[5] if len(argv) == 6 else '', argv[2] == 'add')
     elif cmd in ('hide', 'unhide') and len(argv) == 4:

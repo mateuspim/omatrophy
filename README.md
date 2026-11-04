@@ -95,12 +95,19 @@ game and click **Hide** to set aside one you won't finish: it leaves
 Closest and dims in the other sorts until you click **Show**.
 
 The **Profile** tab shows your library at a glance, in tiles after Steam's
-profile showcases: your most played game with its hours and rare
-trophies, a showcase of six trophies you pick (click ☆ on any earned
-trophy in the tracker, or beside a finished game's platinum; until you
-do, your rarest stand in), your two newest platinums with games
-completed, started and average completion, and hours played in the past
-two weeks and in all. Playtime comes from the launchers' own files.
+profile showcases, each one yours to pick from the tracker:
+
+- **Favorite game**: click **♡ Favorite** in a game's tracker. Shows its
+  art, hours, trophies and your six rarest unlocks from it.
+- **Showcase**: click ☆ on up to six earned trophies. Until you do, your
+  rarest stand in.
+- **Completionist**: click ☆ beside **Platinum** on up to four finished
+  games. Until you do, your two newest platinums stand in. Below it:
+  games completed, started and average completion.
+- **Playtime**: hours in the past two weeks and in all, from the
+  launchers' own files.
+
+Hover a pinned tile for **×** to take it off.
 
 On multiple monitors, each trophy button opens its own panel. Direct IPC
 (`omarchy-shell pym.omatrophy toggle`, also `open` or `close`) controls the

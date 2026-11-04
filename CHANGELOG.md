@@ -13,12 +13,14 @@
   games show "+N" after their latest unlock icons.
 - Clicking a rarest unlock opens the tracker on that achievement,
   highlighted and revealed. Needs a shell restart (Panel.qml).
-- A Profile tab, after Steam's profile showcases: most played game
-  (hours, rare trophies, progress), a showcase of six trophies you pin
-  with ☆ in the tracker (a game's platinum too; your rarest until you
-  pin any; `omatrophy.py showcase add|remove`), your two newest platinums with games completed, started and
-  average completion, and hours played in two weeks and in all. Stores
-  gain an optional `playtime()`: Steam's localconfig.vdf and Heroic's
+- A Profile tab, after Steam's profile showcases, picked from the
+  tracker: a favorite game (♡ Favorite: hours, trophies, its six rarest
+  unlocks), a showcase of six trophies (☆; your rarest until you pin
+  any), a completionist tile of up to four finished games (☆ beside
+  Platinum; your two newest until you pin any) with games completed,
+  started and average completion, and hours played in two weeks and in
+  all. New commands `favorite`, `showcase`, `completionist`. Stores gain
+  an optional `playtime()`: Steam's localconfig.vdf and Heroic's
   timestamp.json. Recent games on the Now tab show their hours.
 - The panel remembers the Games sort and the rarest list you picked last
   (`games-sort`, `rarest`), so it opens on the same view.

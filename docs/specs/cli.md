@@ -22,6 +22,8 @@ installed.
 | `set now-metals\|now-recent\|now-rarest\|now-shelf on\|off` | Shows or hides that section of the panel's Now tab. |
 | `set community on\|off` | The opt-in backfill of games that never ran on this machine from your public Steam profile ([ADR 11](../adr/0011-backfill-from-the-community-profile.md)). With it on, the watcher fetches in the background after `ready`. |
 | `sync` | Runs that backfill now, one line per game (`steam: 3/444 1903340: 55 achievements`), at most the run's page budget (15 to start; halved after a 429, five more after a run that used it all, between 5 and 30), ending `paused: N fetched, M left for later runs` when more are due, then `fetched N`; "stopped early" after any error (a 429 rate limit, offline, private profile), and the next run picks up where it stopped. The watcher runs the same backfill every hour. Exits non-zero while `community` is off. |
+| `favorite <store> <game>`, `favorite clear` | Sets or clears the Profile tab's favorite game (config.json's `favorite`). Exits non-zero for an unknown store. |
+| `completionist add\|remove <store> <game>` | Pins or unpins a finished game on the Profile's completionist tile (config.json's `completionist`). Exits non-zero for an unknown store, or when adding to a full tile (four). |
 | `showcase add\|remove <store> <game> [api]` | Pins or unpins one achievement (with no `api`, the game's platinum) on the Profile showcase, in config.json's `showcase`. Exits non-zero for an unknown store, or when adding to a full showcase (six). |
 | `hide <store> <game>` | Adds `"store:game"` to `hidden` in config.json: the game leaves `cabinet`'s `nearest`, the Games tab's Closest sort and the panel's platinum shelf (`now` still lists it in `shelf`; the panel filters). Exits non-zero for an unknown store. |
 | `unhide <store> <game>` | Takes it back out. |
@@ -43,7 +45,8 @@ the next read names them locally. The command itself exits at once.
  "playing": {...card, "hero": "...", "since": 1793065549, "session": [...], "next": [...]} | null,
  "recent": [card, ...], "shelf": [card, ...],
  "metals": {"bronze", "silver", "gold"}, "completion": 40, "started": 80,
- "playtime": {"total": 752100, "recent": 2343}, "favorite": {...card, "minutes", "rare"} | null,
+ "playtime": {"total": 752100, "recent": 2343}, "favorite": {...card, "minutes", "rare", "rarest": [unlock, ...]} | null,
+ "completionist": [card + {"key"}, ...],
  "showcase": [{"key", "store", "app", "api", "name", "icon", "time", "percent", "tier", "game"}, ...],
  "nearest": [card, ...], "stores": [{"id", "name", "found", "games"}, ...],
  "rarest": {"ever": [unlock, ...], "month": [unlock, ...], "platinum": [unlock, ...]}}
@@ -67,9 +70,10 @@ the next read names them locally. The command itself exits at once.
 - `started`: games with at least one unlock. `playtime`: minutes played
   over every game a store keeps playtime for (achievements or not), in
   all and in the past two weeks (stores without a two-week figure add
-  nothing to `recent`). `favorite`: the most played game with
-  achievements, hidden ones aside, with its `minutes` and `rare` (its
-  gold-tier unlocks); `null` when no store keeps playtime. Cards in
+  nothing to `recent`). `favorite`: the game set with `favorite`, with
+  its `minutes`, `rare` (its gold-tier unlocks) and `rarest`, its six
+  rarest unlocks, rarest first; `null` when none is set or it is gone.
+  `completionist`: the pinned games still at 100%, in pin order. Cards in
   `recent` carry `minutes` too (`0` when unknown).
 - `showcase`: the pinned trophies still earned, in pin order; a
   platinum pick has `api` `""`, `name` `"Platinum"`, tier `platinum` and

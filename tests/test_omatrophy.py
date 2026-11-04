@@ -541,15 +541,19 @@ class NowTab(unittest.TestCase):
         self.assertEqual(omatrophy.playtime_totals(playtime), {'total': 180, 'recent': 30})
         self.assertEqual(omatrophy.playtime_totals({}), {'total': 0, 'recent': 0})
 
-    def test_favorite_game_is_the_most_played_not_hidden(self):
+    def test_favorite_card_lists_its_rarest_unlocks(self):
         class Fake:
             id = 'steam'
-        s = Fake()
-        lib = [(s, '1', []), (s, '2', []), (s, '3', [])]
-        playtime = {('steam', '1'): {'total': 50}, ('steam', '2'): {'total': 90}, ('steam', '4'): {'total': 999}}
-        self.assertEqual(omatrophy.favorite_game(lib, playtime)[1], '2')
-        self.assertEqual(omatrophy.favorite_game(lib, playtime, hidden={'steam:2'})[1], '1')
-        self.assertIsNone(omatrophy.favorite_game(lib, {}))
+            def known_percents(self, game):
+                return {'a': 40.0, 'b': 3.0, 'c': 9.0, 'd': 1.0}
+            def game_name(self, game):
+                return 'Fav'
+            def art(self, game):
+                return {'header': 'h.jpg', 'hero': ''}
+        achs = [ach('a', True, 1), ach('b', True, 2), ach('c', True, 3), ach('d'), ach('e', True, 4)]
+        card = omatrophy.favorite_card(Fake(), '7', achs, 90, n=2)
+        self.assertEqual([u['api'] for u in card['rarest']], ['b', 'c'])
+        self.assertEqual((card['game'], card['minutes'], card['rare'], card['unlocked']), ('Fav', 90, 2, 4))
 
     def test_rarest_unlocks_rarest_first_ties_to_the_newest(self):
         unlocks = [{'name': 'a', 'percent': 30.0, 'time': 5}, {'name': 'b', 'percent': 2.0, 'time': 6},
@@ -704,10 +708,14 @@ class PanelJson(unittest.TestCase):
         self.assertEqual(now['metals'], {'bronze': 2, 'silver': 0, 'gold': 2})
         self.assertEqual(now['completion'], 75)
 
-    def test_now_without_playtime_has_no_favorite(self):
+    def test_now_has_no_favorite_until_one_is_set(self):
         with FakeLibrary():
             now = omatrophy.now()
+            with redirect_stdout(io.StringIO()):
+                omatrophy.set_favorite('steam', '20')
+            favorite = omatrophy.now()['favorite']
         self.assertIsNone(now['favorite'])
+        self.assertEqual((favorite['app'], [u['name'] for u in favorite['rarest']]), ('20', ['Half Game 1', 'Half Game 0']))
         self.assertEqual(now['playtime'], {'total': 0, 'recent': 0})
         self.assertEqual(now['started'], 2)
         self.assertEqual([c['minutes'] for c in now['recent']], [0, 0])
@@ -721,6 +729,13 @@ class PanelJson(unittest.TestCase):
         self.assertEqual([(i['key'], i['name'], i['tier']) for i in items],
                          [('steam:20:ACH_1', 'Half Game 1', 'gold'), ('steam:10', 'Platinum', 'platinum')])
         self.assertEqual(items[1]['game'], 'Done Game')
+
+    def test_completionist_shows_pinned_games_still_finished(self):
+        with FakeLibrary():
+            store = steam.Steam()
+            by_key = {('steam', g): (store, store.achievements(g)) for g in ('10', '20')}
+            cards = omatrophy.completionist_cards(['steam:20', 'steam:10', 'steam:99'], by_key)
+        self.assertEqual([(c['key'], c['game']) for c in cards], [('steam:10', 'Done Game')])
 
     def test_game_detail_for_the_tracker(self):
         with FakeLibrary(running={'game': '20', 'since': 0}):
@@ -1123,6 +1138,27 @@ class Settings(unittest.TestCase):
                 self.assertEqual(json.load(f)['showcase'], ['steam:35140:ACH_BATMAN', 'gog:1413291984'])
             with self.assertRaises(SystemExit):
                 omatrophy.set_showcase('epic', '1', 'A', True)
+
+    def test_favorite_command_sets_and_clears(self):
+        with tempfile.TemporaryDirectory() as home, mock.patch.dict(os.environ, {'HOME': home}):
+            with redirect_stdout(io.StringIO()):
+                omatrophy.set_favorite('steam', '35140')
+                self.assertEqual(omatrophy.favorite_key(), 'steam:35140')
+                omatrophy.set_favorite('clear', '')
+            self.assertEqual(omatrophy.favorite_key(), '')
+            with self.assertRaises(SystemExit):
+                omatrophy.set_favorite('epic', '1')
+
+    def test_completionist_command_pins_up_to_four(self):
+        with tempfile.TemporaryDirectory() as home, mock.patch.dict(os.environ, {'HOME': home}):
+            with redirect_stdout(io.StringIO()):
+                for game in ('1', '2', '3', '4'):
+                    omatrophy.set_completionist('steam', game, True)
+            with self.assertRaises(SystemExit):
+                omatrophy.set_completionist('steam', '5', True)
+            with redirect_stdout(io.StringIO()):
+                omatrophy.set_completionist('steam', '2', False)
+            self.assertEqual(omatrophy.completionist_keys(), ['steam:1', 'steam:3', 'steam:4'])
 
 class BackfillLoop(unittest.TestCase):
     def test_wait_doubles_after_failures_up_to_a_cap(self):

@@ -360,7 +360,69 @@
   "platinum": 1792827200,
   "latest": [],
   "minutes": 17700,
-  "rare": 9
+  "rare": 4,
+  "rarest": [
+   {
+    "name": "Untouchable",
+    "icon": "dev/samples/art/icon-untouchable.svg",
+    "time": 1781222400,
+    "percent": 0.6,
+    "store": "steam",
+    "app": "2",
+    "tier": "gold",
+    "game": "Lanterns of Aster"
+   },
+   {
+    "name": "Pacifist Run",
+    "icon": "dev/samples/art/icon-pacifist-run.svg",
+    "time": 1789000000,
+    "percent": 1.9,
+    "store": "steam",
+    "app": "2",
+    "tier": "gold",
+    "game": "Lanterns of Aster"
+   },
+   {
+    "name": "Starfall",
+    "icon": "dev/samples/art/icon-starfall.svg",
+    "time": 1775000000,
+    "percent": 3.4,
+    "store": "steam",
+    "app": "2",
+    "tier": "gold",
+    "game": "Lanterns of Aster"
+   },
+   {
+    "name": "Collector",
+    "icon": "dev/samples/art/icon-collector.svg",
+    "time": 1775000000,
+    "percent": 6.1,
+    "store": "steam",
+    "app": "2",
+    "tier": "gold",
+    "game": "Lanterns of Aster"
+   },
+   {
+    "name": "Cartographer",
+    "icon": "dev/samples/art/icon-cartographer.svg",
+    "time": 1775000000,
+    "percent": 12.4,
+    "store": "steam",
+    "app": "2",
+    "tier": "silver",
+    "game": "Lanterns of Aster"
+   },
+   {
+    "name": "Shoreline",
+    "icon": "dev/samples/art/icon-shoreline.svg",
+    "time": 1775000000,
+    "percent": 21.0,
+    "store": "steam",
+    "app": "2",
+    "tier": "silver",
+    "game": "Lanterns of Aster"
+   }
+  ]
  },
  "showcase": [
   {
@@ -376,18 +438,6 @@
    "api": "UNTOUCHABLE"
   },
   {
-   "key": "steam:2",
-   "store": "steam",
-   "app": "2",
-   "api": "",
-   "name": "Platinum",
-   "icon": "dev/samples/art/lanterns-of-aster-header.svg",
-   "time": 1792827200,
-   "percent": null,
-   "tier": "platinum",
-   "game": "Lanterns of Aster"
-  },
-  {
    "name": "Cartographer",
    "icon": "dev/samples/art/icon-cartographer.svg",
    "time": 1775000000,
@@ -398,18 +448,44 @@
    "game": "Glasswing",
    "key": "steam:12:CART",
    "api": "CART"
+  }
+ ],
+ "completionist": [
+  {
+   "store": "steam",
+   "app": "12",
+   "unlocked": 30,
+   "total": 30,
+   "game": "Glasswing",
+   "header": "dev/samples/art/glasswing-header.svg",
+   "played": 0,
+   "platinum": 1785224000,
+   "latest": [],
+   "key": "steam:12"
   },
   {
-   "key": "steam:11",
    "store": "steam",
-   "app": "11",
-   "api": "",
-   "name": "Platinum",
-   "icon": "dev/samples/art/moss-iron-header.svg",
-   "time": 1790000000,
-   "percent": null,
-   "tier": "platinum",
-   "game": "Moss & Iron"
+   "app": "14",
+   "unlocked": 30,
+   "total": 30,
+   "game": "Hollow Choir",
+   "header": "dev/samples/art/hollow-choir-header.svg",
+   "played": 0,
+   "platinum": 1780040000,
+   "latest": [],
+   "key": "steam:14"
+  },
+  {
+   "store": "steam",
+   "app": "10",
+   "unlocked": 30,
+   "total": 30,
+   "game": "Lanterns of Aster",
+   "header": "dev/samples/art/lanterns-of-aster-header.svg",
+   "played": 0,
+   "platinum": 1790408000,
+   "latest": [],
+   "key": "steam:10"
   }
  ]
 }

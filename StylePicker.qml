@@ -149,11 +149,12 @@ Column {
   // rebuilding the whole tab.
   property var unpinned: ({})
 
-  function unpin(pick) {
+  // `list` is "showcase" or "completionist", the omatrophy.py command.
+  function unpin(pick, list) {
     var gone = Object.assign({}, unpinned)
-    gone[pick.key] = true
+    gone[list + "/" + pick.key] = true
     unpinned = gone
-    var args = ["python3", helperPath, "showcase", "remove", String(pick.store), String(pick.app)]
+    var args = ["python3", helperPath, list, "remove", String(pick.store), String(pick.app)]
     runner.exec(pick.api ? args.concat([pick.api]) : args)
   }
 
@@ -1656,8 +1657,8 @@ Column {
   // ---------------------------------------------------------------- Profile
 
   // The library at a glance, in tiles taken from Steam's profile
-  // showcases: the game you play most, your rarest trophies, what you've
-  // finished, and how long you've played. Every number is local data.
+  // showcases: your favorite game, trophies and finished games you pick,
+  // and how long you've played. Every number is local data.
   TabPage {
     id: profileTab
     visible: root.tab === "profile"
@@ -1666,9 +1667,11 @@ Column {
 
     // ------------------------------------------------ favorite game
 
+    // The game you set with ♥ in the tracker, like Steam's favorite game:
+    // its art, hours and trophies, then your rarest unlocks from it.
     PanelSectionHeader {
-      visible: favorite.game !== null
-      text: "MOST PLAYED"
+      visible: root.cabinet !== null
+      text: "FAVORITE GAME"
       foreground: root.foreground
     }
 
@@ -1679,19 +1682,18 @@ Column {
       width: root.width
       height: favoriteBody.height + Commons.Style.space(20)
       radius: Commons.Style.cornerRadius
-      color: favoriteHit.containsMouse ? Commons.Style.hoverFill : Qt.alpha(root.foreground, 0.04)
+      color: Qt.alpha(root.foreground, 0.04)
       border.width: 1
       border.color: Qt.alpha(root.foreground, 0.12)
-      Behavior on color { ColorAnimation { duration: 120 } }
-      Hit { id: favoriteHit; game: favorite.game }
       Column {
         id: favoriteBody
         x: Commons.Style.space(10)
         y: Commons.Style.space(10)
         width: parent.width - Commons.Style.space(20)
         spacing: Commons.Style.space(10)
-        Row {
-          spacing: Commons.Style.space(12)
+        Item {
+          width: parent.width
+          height: favoriteArt.height
           Art {
             id: favoriteArt
             width: Math.round(favoriteBody.width * 0.45)
@@ -1699,10 +1701,13 @@ Column {
             source: favorite.game ? favorite.game.header || "" : ""
             label: favorite.game ? favorite.game.game : ""
             zoom: favoriteHit.containsMouse ? 1.05 : 1
+            Hit { id: favoriteHit; game: favorite.game }
           }
           Column {
+            anchors.left: favoriteArt.right
+            anchors.leftMargin: Commons.Style.space(12)
+            anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            width: favoriteBody.width - favoriteArt.width - Commons.Style.space(12)
             spacing: Commons.Style.space(6)
             Text {
               textFormat: Text.PlainText
@@ -1716,8 +1721,39 @@ Column {
             }
             Row {
               spacing: Commons.Style.space(16)
-              Stat { value: favorite.game ? Math.round(favorite.game.minutes / 60) : -1; label: "HOURS" }
+              Stat {
+                visible: favorite.game !== null && favorite.game.minutes > 0
+                value: favorite.game ? Math.round(favorite.game.minutes / 60) : -1
+                label: "HOURS"
+              }
+              Stat { value: favorite.game ? favorite.game.unlocked : -1; label: "TROPHIES" }
               Stat { value: favorite.game ? favorite.game.rare : -1; label: "RARE"; tint: root.metalColors.gold }
+            }
+          }
+        }
+        // Its rarest unlocks, each framed in its metal; a click opens it.
+        Row {
+          id: favoriteRare
+          visible: favorite.game !== null && favorite.game.rarest.length > 0
+          spacing: Commons.Style.space(6)
+          readonly property real tile: (favoriteBody.width - spacing * 5) / 6
+          Repeater {
+            model: favorite.game ? favorite.game.rarest : []
+            delegate: Rectangle {
+              id: favTile
+              required property var modelData
+              width: favoriteRare.tile
+              height: width
+              radius: Commons.Style.cornerRadius
+              color: Qt.alpha(root.metalColors[modelData.tier], favHit.containsMouse ? 0.22 : 0.1)
+              border.width: 1
+              border.color: Qt.alpha(root.metalColors[modelData.tier], favHit.containsMouse ? 1 : 0.55)
+              AchIcon { anchors.fill: parent; anchors.margins: 4; source: favTile.modelData.icon }
+              Hit { id: favHit; game: favTile.modelData }
+              PanelToolTip {
+                visible: favHit.containsMouse
+                text: favTile.modelData.name + " · " + favTile.modelData.percent.toFixed(1) + "%"
+              }
             }
           }
         }
@@ -1743,6 +1779,27 @@ Column {
       }
     }
 
+    // No favorite yet: where to set one.
+    Rectangle {
+      visible: root.cabinet !== null && favorite.game === null
+      width: root.width
+      height: favoriteHint.height + Commons.Style.space(24)
+      radius: Commons.Style.cornerRadius
+      color: "transparent"
+      border.width: 1
+      border.color: Qt.alpha(root.foreground, 0.12)
+      Caption {
+        id: favoriteHint
+        anchors.centerIn: parent
+        width: parent.width - Commons.Style.space(24)
+        horizontalAlignment: Text.AlignHCenter
+        wrapMode: Text.WordWrap
+        elide: Text.ElideNone
+        opacity: 0.5
+        text: "Open a game in the tracker and click ♡ beside its name to make it your favorite."
+      }
+    }
+
     // ------------------------------------------------ showcase
 
     // Up to six trophies you pin with ☆ in the tracker (a game's platinum
@@ -1751,7 +1808,7 @@ Column {
     Item {
       id: showcaseHeader
       readonly property var picks: root.cabinet && root.cabinet.showcase
-        ? root.cabinet.showcase.filter(function(p) { return !root.unpinned[p.key] }) : []
+        ? root.cabinet.showcase.filter(function(p) { return !root.unpinned["showcase/" + p.key] }) : []
       readonly property bool picked: picks.length > 0
       readonly property var tiles: picked ? picks
         : (root.cabinet && root.cabinet.rarest ? root.unhidden(root.cabinet.rarest.ever).slice(0, 6) : [])
@@ -1857,7 +1914,7 @@ Column {
               anchors.margins: -2
               hoverEnabled: true
               cursorShape: Qt.PointingHandCursor
-              onClicked: root.unpin(showTile.modelData)
+              onClicked: root.unpin(showTile.modelData, "showcase")
             }
           }
         }
@@ -1899,11 +1956,17 @@ Column {
       foreground: root.foreground
     }
 
-    // The two newest platinums, as the shelf draws them but bigger.
-    Row {
+    // Up to four finished games you pin with ☆ beside "Platinum" in the
+    // tracker, like Steam's completionist showcase; until you pin one,
+    // your two newest platinums stand in.
+    Grid {
       id: newestPlatinums
-      readonly property var games: root.cabinet ? root.unhidden(root.cabinet.shelf).slice(0, 2) : []
+      readonly property var picks: root.cabinet && root.cabinet.completionist
+        ? root.cabinet.completionist.filter(function(p) { return !root.unpinned["completionist/" + p.key] }) : []
+      readonly property bool picked: picks.length > 0
+      readonly property var games: picked ? picks : (root.cabinet ? root.unhidden(root.cabinet.shelf).slice(0, 2) : [])
       visible: games.length > 0
+      columns: 2
       spacing: Commons.Style.space(6)
       Repeater {
         model: newestPlatinums.games
@@ -1950,11 +2013,45 @@ Column {
           }
           Hit { id: newestHit; game: newestCard.modelData }
           PanelToolTip {
-            visible: newestHit.containsMouse
+            visible: newestHit.containsMouse && !unpinGameHit.containsMouse
             text: newestCard.modelData.game + " · platinum " + root.day(newestCard.modelData.platinum)
+          }
+          Rectangle {
+            visible: newestPlatinums.picked && (newestHit.containsMouse || unpinGameHit.containsMouse)
+            anchors.left: parent.left
+            anchors.top: parent.top
+            anchors.margins: 4
+            width: 16
+            height: 16
+            radius: 8
+            color: unpinGameHit.containsMouse ? Commons.Color.accent : Qt.alpha(Commons.Color.popups.background, 0.85)
+            Accessible.role: Accessible.Button
+            Accessible.name: "Take " + newestCard.modelData.game + " off the completionist tile"
+            Text {
+              textFormat: Text.PlainText
+              anchors.centerIn: parent
+              text: "×"
+              color: unpinGameHit.containsMouse ? Commons.Color.popups.background : root.foreground
+              font.pixelSize: 12
+              font.bold: true
+            }
+            MouseArea {
+              id: unpinGameHit
+              anchors.fill: parent
+              anchors.margins: -2
+              hoverEnabled: true
+              cursorShape: Qt.PointingHandCursor
+              onClicked: root.unpin(newestCard.modelData, "completionist")
+            }
           }
         }
       }
+    }
+
+    Caption {
+      visible: newestPlatinums.visible && !newestPlatinums.picked
+      opacity: 0.45
+      text: "Your newest platinums · ☆ beside Platinum in the tracker picks your own"
     }
 
     Row {
