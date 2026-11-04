@@ -13,6 +13,10 @@ Usage:
   omatrophy.py guide [store app]      the 100% guide of one game, as JSON ({} when none; docs/specs/guides.md)
   omatrophy.py guide import <folder> [--replace]
                                       copy guide files in from another folder (read-only on it)
+  omatrophy.py guide make <store> <app> [--no-web] [--agent a] [--model m] [--effort e]
+                                      make a guide through your agent (ADR 14); guide stop|status|agents
+  omatrophy.py guide model <agent> <model> [effort]|default
+  omatrophy.py set guide-agent default|claude|...   set guide-web on|off
   omatrophy.py set position <where>   top-center, top-left or top-right (applies live)
   omatrophy.py set glass <look>       clear, frosted or solid toast background
   omatrophy.py set sound on|off|omatrophy|classic
@@ -809,6 +813,8 @@ def guide(args):
         imported, skipped = guides.import_guides(args[1], replace=len(args) == 3)
         print(f'imported {imported}, skipped {skipped}')
         return
+    if args[:1] in (['make'], ['stop'], ['status'], ['agents'], ['model']):
+        return guide_job(args)
     found = found_stores()
     if not args:
         store, app = pick_game(found)
@@ -816,8 +822,70 @@ def guide(args):
         store, app = next(s for s in found if s.id == args[0]), args[1]
     else:
         raise SystemExit(f'usage: omatrophy.py guide [{"|".join(s.id for s in found)} <game id>]\n'
-                         '       omatrophy.py guide import <folder> [--replace]')
+                         '       omatrophy.py guide import <folder> [--replace]\n'
+                         '       omatrophy.py guide make <store> <app> [--no-web] [--agent a] [--model m] [--effort e]\n'
+                         '       omatrophy.py guide stop|status|agents\n'
+                         '       omatrophy.py guide model <agent> <model> [effort] | default')
     print(json.dumps(guides.guide_answer(store.id, app, store.achievements(app))))
+
+
+def guide_job(args):
+    """`guide make/stop/status/agents/model` (docs/specs/guides.md, ADR 14)."""
+    import guide_agents, guide_maker
+    cmd = args[0]
+    cfg = read_json(config_path(), {})
+    cfg = cfg if isinstance(cfg, dict) else {}
+    if cmd == 'stop':
+        guide_maker.request_stop()
+        print('stop requested')
+    elif cmd == 'status':
+        print(json.dumps(guide_maker.status()))
+    elif cmd == 'agents':
+        print(json.dumps(guide_agents.listing(cfg)))
+    elif cmd == 'model' and len(args) in (3, 4) and args[1] in guide_agents.BY_ID:
+        models = guide_agents.picks(cfg)
+        if args[2] == 'default':
+            models.pop(args[1], None)
+        else:
+            models[args[1]] = {'model': args[2], 'effort': args[3] if len(args) == 4 else ''}
+        cfg['guide-models'] = models
+        write_json(config_path(), cfg, indent=2)
+        print(f'{args[1]}: {args[2]}' + (f' ({args[3]})' if len(args) == 4 else ''))
+    elif cmd == 'make' and len(args) >= 3:
+        guide_make(args[1], args[2], args[3:], cfg)
+    else:
+        raise SystemExit('usage: omatrophy.py guide make <store> <app> [--no-web] [--agent a] [--model m] [--effort e]\n'
+                         '       omatrophy.py guide model <agent> <model> [effort] | default')
+
+
+def guide_make(store_id, app, flags, cfg):
+    import guide_agents, guide_maker
+    opts, web, i = {}, cfg.get('guide-web', True) is not False, 0
+    while i < len(flags):
+        if flags[i] == '--no-web':
+            web, i = False, i + 1
+        elif flags[i] in ('--agent', '--model', '--effort') and i + 1 < len(flags):
+            opts[flags[i][2:]], i = flags[i + 1], i + 2
+        else:
+            raise SystemExit(f'omatrophy: guide make: unknown option {flags[i]}')
+    adapter = guide_agents.resolve(opts.get('agent', cfg.get('guide-agent') or ''))
+    pick = guide_agents.picks(cfg).get(adapter.id, {})
+    if guide_maker.busy():
+        raise SystemExit('omatrophy: guide: another guide is being made; stop it with: omatrophy.py guide stop')
+    found = found_stores()
+    store = next((s for s in found if s.id == store_id), None)
+    if not store:
+        raise SystemExit(f'usage: omatrophy.py guide make {"|".join(s.id for s in found)} <game id>')
+    pcts = store.percents(app)
+    achs = [dict(a, percent=pcts.get(a['api'])) for a in store.achievements(app)]
+    if not achs:
+        raise SystemExit(f'{store.name} has no achievements cached for {app}; launch it once in {store.name}')
+    minutes = library_playtime([store]).get((store.id, app), {}).get('total', 0)
+    job = guide_maker.Job(store.id, app, store.game_name(app), achs, adapter, model=opts.get('model', pick.get('model', '')),
+                          effort=opts.get('effort', pick.get('effort', '')), web=web, minutes=minutes,
+                          say=lambda line: print(line, flush=True))
+    if guide_maker.make(job)['state'] == 'failed':
+        raise SystemExit(1)
 
 
 def config_path():
@@ -833,18 +901,24 @@ SETTINGS = {'position': ('top-center', 'top-left', 'top-right'),
             # The panel's last picks, so the next open shows the same view.
             'games-sort': ('recent', 'closest', 'name'),
             'rarest': ('ever', 'month', 'platinum'),
-            'community': ('on', 'off')}
+            'community': ('on', 'off'),
+            'guide-web': ('on', 'off')}
 # The Now tab's sections, each shown unless switched off in Settings.
 NOW_SECTIONS = ('metals', 'recent', 'rarest', 'shelf')
 SETTINGS.update({f'now-{name}': ('on', 'off') for name in NOW_SECTIONS})
 # Settings stored as true/false rather than the word given.
-SWITCHES = {'community'} | {f'now-{name}' for name in NOW_SECTIONS}
+SWITCHES = {'community', 'guide-web'} | {f'now-{name}' for name in NOW_SECTIONS}
 
 
 def set_option(key, value):
     """Write one setting to ~/.config/omatrophy/config.json; the shell picks it up live.
     `sound` takes on/off, or a chime set, which also turns sound on."""
-    if value not in SETTINGS.get(key, ()):
+    if key == 'guide-agent':
+        import guide_agents
+        if value != 'default' and value not in guide_agents.BY_ID:
+            raise SystemExit(f'usage: omatrophy.py set guide-agent default|{"|".join(guide_agents.BY_ID)}')
+        value = '' if value == 'default' else value
+    elif value not in SETTINGS.get(key, ()):
         raise SystemExit(f'usage: omatrophy.py set position {"|".join(SETTINGS["position"])}\n'
                          f'       omatrophy.py set sound {"|".join(SETTINGS["sound"])}\n'
                          f'       omatrophy.py set icons {"|".join(SETTINGS["icons"])}\n'
