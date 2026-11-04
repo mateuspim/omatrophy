@@ -24,6 +24,8 @@ POLL_SECONDS = 0.25
 HIDDEN_WORKSPACE = 'special:omatrophy'
 # hyprctl answers in milliseconds; a hung compositor shouldn't hang a load.
 HYPRCTL_SECONDS = 4
+# The panel's progress strip shows this many of the latest results.
+RECENT_KEPT = 6
 
 
 def cache_dir():
@@ -213,20 +215,31 @@ def wait_for(has_stats, app, wait, poll, clock, sleep):
 
 def load(todo, has_stats, busy, opener=open_page, running=steam_running, say=None,
          wait=WAIT_SECONDS, poll=POLL_SECONDS, clock=time.time, sleep=time.sleep, window=None,
-         everything=False):
+         everything=False, describe=None):
     """Open each app's page in turn and wait for its stats file. Stops when
     Steam closes, a game starts (`busy()`: Steam's window must not jump
     over a game) or a stop is requested. Each tried game goes into
     checked.json at once, so a stopped run resumes at the next game.
-    Returns {loaded, none, state}."""
+    `describe(app)` gives {name, art} for the panel's progress strip,
+    from what is already on disk. Returns {loaded, none, state}."""
     clear_stop()
     tried = checked()
     counts = {'loaded': 0, 'none': 0}
+    describe = describe or (lambda app: {'name': '', 'art': ''})
+    started = int(clock())
+    recent = []
+    # Whether Steam's window waits out of sight, so the panel can say so.
+    hidden = [False]
 
-    def report(line, state, done, app=''):
+    def report(line, state, done, app='', found=None):
+        if found is not None:
+            recent.insert(0, dict(describe(app), app=app, found=found))
+            del recent[RECENT_KEPT:]
+            app = ''
         write_json(f'{cache_dir()}/status.json', dict(
-            counts, time=int(clock()), line=line, done=done, total=len(todo), app=app,
-            everything=everything, state=state))
+            counts, time=int(clock()), started=started, line=line, done=done, total=len(todo), app=app,
+            current=dict(describe(app), app=app) if app else None, recent=recent,
+            everything=everything, hidden=hidden[0], state=state))
         if say and line:
             say(line)
 
@@ -239,6 +252,7 @@ def load(todo, has_stats, busy, opener=open_page, running=steam_running, say=Non
     window = window or SteamWindow()
     # Before the first page, so a window already open never shows it.
     window.hide()
+    hidden[0] = bool(getattr(window, 'enabled', False))
     # The panel's bar shows up before the first game is done.
     report('', 'running', 0)
     try:
@@ -272,5 +286,6 @@ def run(todo, has_stats, busy, opener, running, wait, poll, clock, sleep, window
         counts['loaded' if found == 'loaded' else 'none'] += 1
         tried[app] = {'time': int(clock()), 'found': found == 'loaded'}
         write_json(f'{cache_dir()}/checked.json', tried)
-        report(f"{i + 1}/{len(todo)} {app}: " + ('loaded' if found == 'loaded' else 'no stats'), 'running', i + 1)
+        report(f"{i + 1}/{len(todo)} {app}: " + ('loaded' if found == 'loaded' else 'no stats'), 'running', i + 1,
+               app, found == 'loaded')
     return end(f"done: {counts['loaded']} loaded, {counts['none']} without achievements", 'done', len(todo))

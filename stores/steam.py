@@ -343,7 +343,21 @@ class Steam(Store):
         """Open each missing game's library page so the client caches its
         stats. Only the owner starts this."""
         stats = lambda app: os.path.exists(f'{self.stats}/UserGameStats_{self.uid}_{app}.bin')
-        return steam_loader.load(self.missing(everything), stats, busy, say=say, everything=everything)
+        return steam_loader.load(self.missing(everything), stats, busy, say=say, everything=everything,
+                                 describe=self.describe_for_load)
+
+    def describe_for_load(self, app):
+        """{name, art} for the load's progress strip, never waiting on the
+        network: the name from the cache, else looked up in the background
+        while the page loads (so the next report has it); the header Steam
+        just fetched for the library page."""
+        with NAMES_LOCK:
+            name = read_json(NAMES, {}).get(app, '')
+        naming = self.__dict__.setdefault('naming', set())
+        if not name and app not in naming:
+            naming.add(app)
+            threading.Thread(target=self.game_name, args=(app,), daemon=True).start()
+        return {'name': name, 'art': self.library_art(app, 'header.jpg') or ''}
 
     def remember_names(self):
         """Copy game names from cached profile pages into the name cache,

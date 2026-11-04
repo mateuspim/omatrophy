@@ -11,7 +11,10 @@
   `steam-load all` retries everything. `steam-load stop` (immediate) and
   `steam-load status` go with it. In the panel: Load from Steam and
   Check all again in Settings' Steam card, a Load button on the Games
-  tab, and a progress bar with Stop under the tabs while it runs.
+  tab, and a progress strip under the tabs while it runs: the game being
+  checked with its cover, found and empty counts on a split bar, time
+  left, the latest results as covers, Stop, and a note that Steam is
+  hidden only until the load ends, with Peek to look at it.
 
 ## 0.4.0 - 2026-11-04
 

@@ -188,8 +188,9 @@ omatrophy.py steam-load all      # try every played game without stats again
 ```
 
 On Hyprland, Steam's window waits on a hidden workspace while it runs, and
-comes back where it was afterwards; the panel shows a progress bar on
-every tab. It takes about a second per game with achievements and 8 s for
+comes back where it was afterwards (Peek shows it meanwhile); the panel
+shows the progress on every tab: the game being checked, what was found,
+and time left. It takes about a second per game with achievements and 8 s for
 one without. Each game is remembered once tried, so a stopped load picks
 up where it ended and later loads only take games you played since; only
 `all` goes over the whole library again. It stops by itself when a game

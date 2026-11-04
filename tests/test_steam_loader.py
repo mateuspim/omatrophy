@@ -133,6 +133,19 @@ class Load(LoaderCache):
         self.run_load(['1', '2'], ready={'1', '2'})
         self.assertEqual(self.window.calls, ['hide', 'hide', 'hide', 'restore'])
 
+    def test_status_lists_the_latest_results_newest_first(self):
+        describe = lambda app: {'name': f'Game {app}', 'art': f'file:///art/{app}.jpg'}
+        clock = FakeClock()
+        steam_loader.load([str(a) for a in range(1, 9)], lambda app: app != '8', lambda: False,
+                          opener=lambda app: None, running=lambda: True, window=NoWindow(),
+                          clock=clock.time, sleep=clock.sleep, describe=describe)
+        status = steam_loader.status()
+        self.assertEqual([r['app'] for r in status['recent']], ['8', '7', '6', '5', '4', '3'])
+        self.assertEqual(status['recent'][0], {'name': 'Game 8', 'art': 'file:///art/8.jpg', 'app': '8', 'found': False})
+        self.assertIsNone(status['current'])
+        self.assertIn('started', status)
+        self.assertFalse(status['hidden'])
+
     def test_status_says_which_kind_of_run(self):
         steam_loader.load(['1'], lambda app: True, lambda: False, opener=lambda app: None,
                           running=lambda: True, window=NoWindow(), everything=True)

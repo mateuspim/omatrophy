@@ -340,6 +340,29 @@ Column {
     steamLoad = Object.assign({}, steamLoad, { state: "stopped" })
   }
 
+  // Load from Steam's progress as a whole percent.
+  function steamLoadPercent() {
+    var l = steamLoad
+    return l.total ? Math.floor(100 * (l.done || 0) / l.total) : 0
+  }
+
+  // Time left at the pace so far; "" until a few games set the pace.
+  function steamLoadLeft() {
+    var l = steamLoad
+    if (!l.started || !l.total || (l.done || 0) < 3) return ""
+    var each = (clock - l.started) / l.done
+    var minutes = Math.round(each * (l.total - l.done) / 60)
+    if (minutes < 1) return "under a minute left"
+    if (minutes < 60) return "about " + minutes + " min left"
+    return "about " + Math.floor(minutes / 60) + " h " + (minutes % 60) + " min left"
+  }
+
+  // Shows or hides Steam's hidden workspace (the loader's
+  // HIDDEN_WORKSPACE); a second click hides it again.
+  function peekSteam() {
+    Quickshell.execDetached(["hyprctl", "dispatch", "hl.dsp.workspace.toggle_special(\"omatrophy\")"])
+  }
+
   // A game's name for the progress strip, from the panel's own lists.
   function steamGameName(app) {
     var all = (games || []).concat(cabinet && cabinet.recent ? cabinet.recent : [])
@@ -941,42 +964,94 @@ Column {
   }
 
   // Load from Steam's progress, on every tab while it runs: it works out of
-  // sight, so this is the only sign it is going.
+  // sight, so this is the only sign it is going. The game being checked,
+  // a bar split into found and empty, what is left, the latest results as
+  // covers, and why Steam's window is gone.
   Rectangle {
     id: steamLoadStrip
+    readonly property var load: root.steamLoad
+    // A run started before `current` existed names only its app.
+    readonly property var current: load.current || (load.app ? { app: load.app, name: "", art: "" } : null)
+    readonly property int done: load.done || 0
+    readonly property int total: load.total || 0
+    readonly property int found: load.loaded || 0
+    readonly property int empty: load.none || 0
     width: root.width
-    height: visible ? stripBody.height + Commons.Style.space(16) : 0
+    height: visible ? stripBody.height + Commons.Style.space(20) : 0
     visible: root.steamLoading
     radius: Commons.Style.cornerRadius
-    color: Qt.alpha(root.foreground, 0.04)
+    color: Qt.alpha(Commons.Color.accent, 0.05)
     border.width: 1
-    border.color: Qt.alpha(root.foreground, 0.08)
+    border.color: Qt.alpha(Commons.Color.accent, 0.22)
+
     Column {
       id: stripBody
       x: Commons.Style.space(10)
-      y: Commons.Style.space(8)
+      y: Commons.Style.space(10)
       width: parent.width - Commons.Style.space(20)
-      spacing: Commons.Style.space(6)
+      spacing: Commons.Style.space(8)
+
+      // Title, percent and time left.
       Item {
         width: parent.width
-        height: Math.max(stripLabel.implicitHeight, stripStop.height)
+        height: stripTitle.implicitHeight
+        MiniLabel {
+          id: stripTitle
+          text: steamLoadStrip.load.everything ? "CHECKING ALL STEAM GAMES" : "LOADING FROM STEAM"
+          color: Commons.Color.accent
+        }
+        Caption {
+          textFormat: Text.PlainText
+          anchors.right: parent.right
+          anchors.verticalCenter: stripTitle.verticalCenter
+          opacity: 0.6
+          text: root.steamLoadPercent() + "%" + (root.steamLoadLeft() ? " · " + root.steamLoadLeft() : "")
+        }
+      }
+
+      // The game being checked now, and Stop.
+      Item {
+        width: parent.width
+        height: Commons.Style.space(40)
+        Art {
+          id: stripArt
+          width: Math.round(height * 460 / 215)
+          height: parent.height
+          source: steamLoadStrip.current ? steamLoadStrip.current.art : ""
+          label: ""
+          // A soft breathing while Steam opens the page.
+          SequentialAnimation on opacity {
+            running: steamLoadStrip.visible
+            loops: Animation.Infinite
+            NumberAnimation { to: 0.6; duration: 700; easing.type: Easing.InOutSine }
+            NumberAnimation { to: 1; duration: 700; easing.type: Easing.InOutSine }
+          }
+        }
         Column {
-          id: stripLabel
-          anchors.left: parent.left
+          anchors.left: stripArt.right
+          anchors.leftMargin: Commons.Style.space(10)
           anchors.right: stripStop.left
           anchors.rightMargin: Commons.Style.space(8)
           anchors.verticalCenter: parent.verticalCenter
           spacing: Commons.Style.space(2)
-          MiniLabel {
-            text: (root.steamLoad.everything ? "CHECKING ALL" : "LOADING FROM STEAM")
-                  + " · " + root.steamLoad.done + " / " + root.steamLoad.total
+          Text {
+            textFormat: Text.PlainText
+            width: parent.width
+            text: steamLoadStrip.current
+                  ? (steamLoadStrip.current.name || root.steamGameName(steamLoadStrip.current.app))
+                  : "Starting…"
+            color: root.foreground
+            font.family: Commons.Style.font.family
+            font.pixelSize: Commons.Style.font.bodySmall
+            font.bold: true
+            elide: Text.ElideRight
           }
           Caption {
             textFormat: Text.PlainText
             width: parent.width
             opacity: 0.5
-            text: (root.steamLoad.app ? root.steamGameName(root.steamLoad.app) + " · " : "")
-                  + (root.steamLoad.loaded || 0) + " found, " + (root.steamLoad.none || 0) + " without achievements"
+            text: "Game " + Math.min(steamLoadStrip.done + 1, steamLoadStrip.total) + " of " + steamLoadStrip.total
+                  + " · looking for achievements"
           }
         }
         PillButton {
@@ -987,17 +1062,114 @@ Column {
           onClicked: root.stopSteamLoad()
         }
       }
+
+      // Found in the accent, empty in a quiet tone, the rest still to go.
       Rectangle {
         width: parent.width
-        height: 3
-        radius: 1.5
-        color: Qt.alpha(root.foreground, 0.1)
-        Rectangle {
-          width: parent.width * (root.steamLoad.total ? root.steamLoad.done / root.steamLoad.total : 0)
+        height: 4
+        radius: 2
+        color: Qt.alpha(root.foreground, 0.08)
+        clip: true
+        Row {
           height: parent.height
-          radius: parent.radius
-          color: Commons.Color.accent
-          Behavior on width { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
+          Rectangle {
+            width: steamLoadStrip.total ? parent.parent.width * steamLoadStrip.found / steamLoadStrip.total : 0
+            height: parent.height
+            color: Commons.Color.accent
+            Behavior on width { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
+          }
+          Rectangle {
+            width: steamLoadStrip.total ? parent.parent.width * steamLoadStrip.empty / steamLoadStrip.total : 0
+            height: parent.height
+            color: Qt.alpha(root.foreground, 0.3)
+            Behavior on width { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
+          }
+        }
+      }
+
+      Row {
+        spacing: Commons.Style.space(12)
+        Repeater {
+          model: [
+            { dot: Commons.Color.accent, text: steamLoadStrip.found + " found" },
+            { dot: Qt.alpha(root.foreground, 0.3), text: steamLoadStrip.empty + " without achievements" },
+            { dot: Qt.alpha(root.foreground, 0.1), text: Math.max(0, steamLoadStrip.total - steamLoadStrip.done) + " to go" }
+          ]
+          delegate: Row {
+            required property var modelData
+            spacing: Commons.Style.space(4)
+            Rectangle {
+              width: 6; height: 6; radius: 3
+              anchors.verticalCenter: parent.verticalCenter
+              color: parent.modelData.dot
+            }
+            Caption {
+              textFormat: Text.PlainText
+              opacity: 0.55
+              text: parent.modelData.text
+            }
+          }
+        }
+      }
+
+      // The latest results, newest first: found games in full colour,
+      // games without achievements faded.
+      Row {
+        id: stripRecent
+        readonly property real tile: (parent.width - spacing * 5) / 6
+        visible: (steamLoadStrip.load.recent || []).length > 0
+        spacing: Commons.Style.space(4)
+        Repeater {
+          model: steamLoadStrip.load.recent || []
+          delegate: Art {
+            required property var modelData
+            width: stripRecent.tile
+            height: Math.round(width * 215 / 460)
+            source: modelData.art || ""
+            label: modelData.name || ""
+            opacity: modelData.found ? 1 : 0.3
+            Rectangle {
+              visible: parent.modelData.found
+              anchors.right: parent.right
+              anchors.bottom: parent.bottom
+              anchors.margins: 3
+              width: 12; height: 12; radius: 6
+              color: Commons.Color.accent
+              Text {
+                textFormat: Text.PlainText
+                anchors.centerIn: parent
+                text: "✓"
+                color: Commons.Color.popups.background
+                font.pixelSize: 8
+                font.bold: true
+              }
+            }
+          }
+        }
+      }
+
+      // Why Steam's window is gone, and a way to look at it.
+      Item {
+        width: parent.width
+        height: Math.max(hiddenNote.implicitHeight, peekButton.height)
+        visible: !!steamLoadStrip.load.hidden
+        Caption {
+          textFormat: Text.PlainText
+          id: hiddenNote
+          anchors.left: parent.left
+          anchors.right: peekButton.left
+          anchors.rightMargin: Commons.Style.space(8)
+          anchors.verticalCenter: parent.verticalCenter
+          wrapMode: Text.WordWrap
+          opacity: 0.45
+          text: "Steam is hidden for now so its pages can open without taking over your screen. It comes back where it was when this ends."
+        }
+        PillButton {
+          id: peekButton
+          anchors.right: parent.right
+          anchors.verticalCenter: parent.verticalCenter
+          label: "Peek"
+          onClicked: root.peekSteam()
         }
       }
     }
