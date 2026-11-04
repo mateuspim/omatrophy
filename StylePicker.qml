@@ -149,6 +149,18 @@ Column {
   // rebuilding the whole tab.
   property var unpinned: ({})
 
+  // The showcase's order after a drag, until the next read carries it.
+  property var showcaseOrder: []
+
+  // `rows` sorted by their place in `order` (keys); rows not in it last.
+  function ordered(rows, order) {
+    if (!order.length) return rows
+    return rows.slice().sort(function(a, b) {
+      var i = order.indexOf(a.key), j = order.indexOf(b.key)
+      return (i < 0 ? 999 : i) - (j < 0 ? 999 : j)
+    })
+  }
+
   // `list` is "showcase" or "completionist", the omatrophy.py command.
   function unpin(pick, list) {
     var gone = Object.assign({}, unpinned)
@@ -1808,7 +1820,8 @@ Column {
     Item {
       id: showcaseHeader
       readonly property var picks: root.cabinet && root.cabinet.showcase
-        ? root.cabinet.showcase.filter(function(p) { return !root.unpinned["showcase/" + p.key] }) : []
+        ? root.ordered(root.cabinet.showcase.filter(function(p) { return !root.unpinned["showcase/" + p.key] }),
+                       root.showcaseOrder) : []
       readonly property bool picked: picks.length > 0
       readonly property var tiles: picked ? picks
         : (root.cabinet && root.cabinet.rarest ? root.unhidden(root.cabinet.rarest.ever).slice(0, 6) : [])
@@ -1824,119 +1837,219 @@ Column {
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
         opacity: 0.45
-        text: "☆ a trophy in the tracker to pin it"
+        text: showcaseHeader.picked ? "drag to reorder · ☆ in the tracker adds" : "☆ a trophy in the tracker to pin it"
       }
     }
 
-    // Each pick framed in its metal; a click opens it in the tracker, the
-    // × takes it off. Empty slots say how to fill them.
-    Row {
-      id: showcaseRow
+    // Each pick framed in its metal; a click opens it in the tracker, a
+    // drag sideways moves it (the others slide aside, the order is saved
+    // on release), and the × takes it off. Empty slots say how to fill
+    // them. The rarest that stand in before any pick don't move.
+    ListModel { id: showcaseModel }
+
+    Item {
+      id: showcaseBox
       visible: showcaseHeader.visible
-      spacing: Commons.Style.space(6)
-      readonly property real tile: (root.width - spacing * 5) / 6
-      Repeater {
-        id: showcase
-        model: showcaseHeader.tiles
-        delegate: Rectangle {
-          id: showTile
-          required property var modelData
-          required property int index
-          readonly property bool platinum: modelData.tier === "platinum"
-          width: showcaseRow.tile
-          height: width
-          radius: Commons.Style.cornerRadius
-          color: Qt.alpha(root.metalColors[modelData.tier], showHit.containsMouse ? 0.22 : 0.1)
-          border.width: 1
-          border.color: Qt.alpha(root.metalColors[modelData.tier], showHit.containsMouse ? 1 : 0.55)
-          clip: true
-          property real rise: 0
-          opacity: 0
-          transform: Translate { y: showTile.rise }
-          FadeIn { item: showTile; order: showTile.index }
-          Accessible.role: Accessible.Button
-          Accessible.name: modelData.name + ", " + modelData.game
-          AchIcon {
-            visible: !showTile.platinum
-            anchors.fill: parent
-            anchors.margins: 4
-            source: showTile.modelData.icon
-            scale: showHit.containsMouse ? 1.06 : 1
-            Behavior on scale { NumberAnimation { duration: 140 } }
-          }
-          // A platinum: the game's art, dimmed, under the platinum trophy.
-          Art {
-            visible: showTile.platinum
-            anchors.fill: parent
-            anchors.margins: 1
-            source: showTile.platinum ? showTile.modelData.icon || "" : ""
-            label: ""
-            opacity: 0.45
-          }
-          Thumb {
-            visible: showTile.platinum
-            anchors.centerIn: parent
-            style: root.iconSet
-            metal: "platinum"
-            width: parent.width * 0.55
+      width: root.width
+      height: showcaseRow.tile
+      // The key being dragged, and the tile's centre under the pointer.
+      property string dragKey: ""
+      property real dragX: 0
+      readonly property var byKey: {
+        var map = {}
+        showcaseHeader.tiles.forEach(function(t) { map[t.key || (t.store + ":" + t.app + ":" + t.api)] = t })
+        return map
+      }
+
+      function sync() {
+        if (dragKey !== "") return
+        showcaseModel.clear()
+        showcaseHeader.tiles.forEach(function(t) { showcaseModel.append({ key: t.key || (t.store + ":" + t.app + ":" + t.api) }) })
+      }
+      Connections {
+        target: showcaseHeader
+        function onTilesChanged() { showcaseBox.sync() }
+      }
+      Component.onCompleted: sync()
+
+      // The slot index under a point along the row.
+      function slotAt(x) {
+        var step = showcaseRow.tile + showcaseRow.spacing
+        return Math.max(0, Math.min(showcaseModel.count - 1, Math.floor(x / step)))
+      }
+
+      function indexOf(key) {
+        for (var i = 0; i < showcaseModel.count; i++) if (showcaseModel.get(i).key === key) return i
+        return -1
+      }
+
+      function finishDrag() {
+        if (dragKey === "") return
+        dragKey = ""
+        var order = []
+        for (var i = 0; i < showcaseModel.count; i++) order.push(showcaseModel.get(i).key)
+        root.showcaseOrder = order
+        runner.exec(["python3", helperPath, "showcase", "order"].concat(order))
+      }
+
+      Row {
+        id: showcaseRow
+        spacing: Commons.Style.space(6)
+        readonly property real tile: (root.width - spacing * 5) / 6
+        move: Transition { NumberAnimation { properties: "x"; duration: 160; easing.type: Easing.OutCubic } }
+        Repeater {
+          id: showcase
+          model: showcaseModel
+          delegate: Rectangle {
+            id: showTile
+            required property string key
+            required property int index
+            readonly property var pick: showcaseBox.byKey[key] || ({ tier: "bronze", name: "", game: "", icon: "", store: "", app: "", api: "" })
+            readonly property bool platinum: pick.tier === "platinum"
+            readonly property bool lifted: showcaseBox.dragKey === key
+            width: showcaseRow.tile
             height: width
-            scale: showHit.containsMouse ? 1.08 : 1
-            Behavior on scale { NumberAnimation { duration: 140 } }
-          }
-          Hit { id: showHit; game: showTile.modelData }
-          PanelToolTip {
-            visible: showHit.containsMouse && !unpinHit.containsMouse
-            text: showTile.modelData.name + " · " + showTile.modelData.game
-                  + (showTile.modelData.percent !== null && showTile.modelData.percent !== undefined ? " · " + showTile.modelData.percent.toFixed(1) + "%" : "")
-          }
-          Rectangle {
-            visible: showcaseHeader.picked && (showHit.containsMouse || unpinHit.containsMouse)
-            anchors.left: parent.left
-            anchors.top: parent.top
-            anchors.margins: 2
-            width: 16
-            height: 16
-            radius: 8
-            color: unpinHit.containsMouse ? Commons.Color.accent : Qt.alpha(Commons.Color.popups.background, 0.85)
+            radius: Commons.Style.cornerRadius
+            color: Qt.alpha(root.metalColors[pick.tier], tileHit.containsMouse ? 0.22 : 0.1)
+            border.width: 1
+            border.color: Qt.alpha(root.metalColors[pick.tier], tileHit.containsMouse ? 1 : 0.55)
+            // The lifted tile leaves a faint gap where it will land.
+            opacity: lifted ? 0.25 : 1
+            clip: true
             Accessible.role: Accessible.Button
-            Accessible.name: "Take " + showTile.modelData.name + " off the showcase"
+            Accessible.name: pick.name + ", " + pick.game
+            AchIcon {
+              visible: !showTile.platinum
+              anchors.fill: parent
+              anchors.margins: 4
+              source: showTile.pick.icon
+              scale: tileHit.containsMouse && !showTile.lifted ? 1.06 : 1
+              Behavior on scale { NumberAnimation { duration: 140 } }
+            }
+            // A platinum: the game's art, dimmed, under the platinum trophy.
+            Art {
+              visible: showTile.platinum
+              anchors.fill: parent
+              anchors.margins: 1
+              source: showTile.platinum ? showTile.pick.icon || "" : ""
+              label: ""
+              opacity: 0.45
+            }
+            Thumb {
+              visible: showTile.platinum
+              anchors.centerIn: parent
+              style: root.iconSet
+              metal: "platinum"
+              width: parent.width * 0.55
+              height: width
+            }
+            MouseArea {
+              id: tileHit
+              anchors.fill: parent
+              hoverEnabled: true
+              cursorShape: showcaseHeader.picked ? (pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor) : Qt.PointingHandCursor
+              property real pressX: 0
+              function boxX(mouse) { return mapToItem(showcaseBox, mouse.x, mouse.y).x }
+              onPressed: mouse => pressX = boxX(mouse)
+              onPositionChanged: mouse => {
+                if (!pressed || !showcaseHeader.picked) return
+                var x = boxX(mouse)
+                if (showcaseBox.dragKey === "" && Math.abs(x - pressX) < 6) return
+                showcaseBox.dragKey = showTile.key
+                showcaseBox.dragX = x
+                var from = showcaseBox.indexOf(showTile.key)
+                var to = showcaseBox.slotAt(x)
+                if (from >= 0 && to !== from) showcaseModel.move(from, to, 1)
+              }
+              onReleased: {
+                if (showcaseBox.dragKey !== "") showcaseBox.finishDrag()
+                else root.track(showTile.pick.store, showTile.pick.app, showTile.pick.api || "")
+              }
+              onCanceled: showcaseBox.finishDrag()
+            }
+            PanelToolTip {
+              visible: tileHit.containsMouse && !unpinHit.containsMouse && showcaseBox.dragKey === ""
+              text: showTile.pick.name + " · " + showTile.pick.game
+                    + (showTile.pick.percent !== null && showTile.pick.percent !== undefined ? " · " + showTile.pick.percent.toFixed(1) + "%" : "")
+                    + (showcaseHeader.picked ? " · drag to move" : "")
+            }
+            Rectangle {
+              visible: showcaseHeader.picked && showcaseBox.dragKey === "" && (tileHit.containsMouse || unpinHit.containsMouse)
+              anchors.left: parent.left
+              anchors.top: parent.top
+              anchors.margins: 2
+              width: 16
+              height: 16
+              radius: 8
+              color: unpinHit.containsMouse ? Commons.Color.accent : Qt.alpha(Commons.Color.popups.background, 0.85)
+              Accessible.role: Accessible.Button
+              Accessible.name: "Take " + showTile.pick.name + " off the showcase"
+              Text {
+                textFormat: Text.PlainText
+                anchors.centerIn: parent
+                text: "×"
+                color: unpinHit.containsMouse ? Commons.Color.popups.background : root.foreground
+                font.pixelSize: 12
+                font.bold: true
+              }
+              MouseArea {
+                id: unpinHit
+                anchors.fill: parent
+                anchors.margins: -2
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.unpin(showTile.pick, "showcase")
+              }
+            }
+          }
+        }
+        // The slots still open once you've pinned something.
+        Repeater {
+          model: showcaseHeader.picked ? 6 - showcaseHeader.picks.length : 0
+          delegate: Rectangle {
+            width: showcaseRow.tile
+            height: width
+            radius: Commons.Style.cornerRadius
+            color: "transparent"
+            border.width: 1
+            border.color: Qt.alpha(root.foreground, 0.12)
             Text {
               textFormat: Text.PlainText
               anchors.centerIn: parent
-              text: "×"
-              color: unpinHit.containsMouse ? Commons.Color.popups.background : root.foreground
-              font.pixelSize: 12
-              font.bold: true
-            }
-            MouseArea {
-              id: unpinHit
-              anchors.fill: parent
-              anchors.margins: -2
-              hoverEnabled: true
-              cursorShape: Qt.PointingHandCursor
-              onClicked: root.unpin(showTile.modelData, "showcase")
+              text: "+"
+              color: root.foreground
+              opacity: 0.3
+              font.pixelSize: Commons.Style.font.title
             }
           }
         }
       }
-      // The slots still open once you've pinned something.
-      Repeater {
-        model: showcaseHeader.picked ? 6 - showcaseHeader.picks.length : 0
-        delegate: Rectangle {
-          width: showcaseRow.tile
+
+      // The lifted tile, following the pointer above the row.
+      Rectangle {
+        readonly property var pick: showcaseBox.byKey[showcaseBox.dragKey] || null
+        visible: pick !== null
+        x: Math.max(0, Math.min(showcaseBox.width - width, showcaseBox.dragX - width / 2))
+        width: showcaseRow.tile
+        height: width
+        z: 2
+        scale: 1.1
+        radius: Commons.Style.cornerRadius
+        color: pick ? Qt.alpha(root.metalColors[pick.tier], 0.3) : "transparent"
+        border.width: 1
+        border.color: pick ? root.metalColors[pick.tier] : "transparent"
+        AchIcon {
+          anchors.fill: parent
+          anchors.margins: 4
+          source: parent.pick && parent.pick.tier !== "platinum" ? parent.pick.icon : ""
+        }
+        Thumb {
+          visible: parent.pick !== null && parent.pick.tier === "platinum"
+          anchors.centerIn: parent
+          style: root.iconSet
+          metal: "platinum"
+          width: parent.width * 0.55
           height: width
-          radius: Commons.Style.cornerRadius
-          color: "transparent"
-          border.width: 1
-          border.color: Qt.alpha(root.foreground, 0.12)
-          Text {
-            textFormat: Text.PlainText
-            anchors.centerIn: parent
-            text: "+"
-            color: root.foreground
-            opacity: 0.3
-            font.pixelSize: Commons.Style.font.title
-          }
         }
       }
     }

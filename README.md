@@ -107,7 +107,8 @@ profile showcases, each one yours to pick from the tracker:
 - **Playtime**: hours in the past two weeks and in all, from the
   launchers' own files.
 
-Hover a pinned tile for **×** to take it off.
+Hover a pinned tile for **×** to take it off; drag a showcase trophy
+sideways to move it.
 
 On multiple monitors, each trophy button opens its own panel. Direct IPC
 (`omarchy-shell pym.omatrophy toggle`, also `open` or `close`) controls the

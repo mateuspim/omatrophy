@@ -19,7 +19,8 @@
   any), a completionist tile of up to four finished games (☆ beside
   Platinum; your two newest until you pin any) with games completed,
   started and average completion, and hours played in two weeks and in
-  all. New commands `favorite`, `showcase`, `completionist`. Stores gain
+  all. Drag showcase trophies to reorder them. New commands `favorite`,
+  `showcase`, `completionist` (each pin list also takes `order`). Stores gain
   an optional `playtime()`: Steam's localconfig.vdf and Heroic's
   timestamp.json. Recent games on the Now tab show their hours.
 - The panel remembers the Games sort and the rarest list you picked last

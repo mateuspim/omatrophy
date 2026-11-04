@@ -1160,6 +1160,20 @@ class Settings(unittest.TestCase):
                 omatrophy.set_completionist('steam', '2', False)
             self.assertEqual(omatrophy.completionist_keys(), ['steam:1', 'steam:3', 'steam:4'])
 
+    def test_pins_reorder_only_as_a_permutation(self):
+        self.assertEqual(omatrophy.reordered(['a', 'b', 'c'], ['c', 'a', 'b']), ['c', 'a', 'b'])
+        self.assertIsNone(omatrophy.reordered(['a', 'b'], ['a']))
+        self.assertIsNone(omatrophy.reordered(['a', 'b'], ['a', 'b', 'x']))
+        self.assertIsNone(omatrophy.reordered(['a', 'b'], ['a', 'a']))
+        with tempfile.TemporaryDirectory() as home, mock.patch.dict(os.environ, {'HOME': home}):
+            with redirect_stdout(io.StringIO()):
+                omatrophy.set_showcase('steam', '1', 'A', True)
+                omatrophy.set_showcase('steam', '2', 'B', True)
+                omatrophy.set_pin_order('showcase', ['steam:2:B', 'steam:1:A'])
+            self.assertEqual(omatrophy.showcase_keys(), ['steam:2:B', 'steam:1:A'])
+            with self.assertRaises(SystemExit):
+                omatrophy.set_pin_order('showcase', ['steam:2:B'])
+
 class BackfillLoop(unittest.TestCase):
     def test_wait_doubles_after_failures_up_to_a_cap(self):
         wait = omatrophy.BACKFILL_WAIT

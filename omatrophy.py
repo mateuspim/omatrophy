@@ -25,6 +25,8 @@ Usage:
                                       the Profile tab's favorite game
   omatrophy.py completionist add|remove <store> <game>
                                       pin a finished game to the Profile's completionist tile
+  omatrophy.py showcase|completionist order <key>...
+                                      save a new order for the pins (every key once)
   omatrophy.py showcase add|remove <store> <game> [api]
                                       pin a trophy (or, with no api, the game's platinum) to the Profile showcase
 
@@ -871,6 +873,26 @@ def completionist_cards(keys, by_key):
     return out
 
 
+def reordered(keys, order):
+    """`order` when it holds exactly the pins in `keys`, else None: a
+    reorder never adds or drops one."""
+    current = [k for k in keys if isinstance(k, str)] if isinstance(keys, list) else []
+    return list(order) if sorted(order) == sorted(current) and len(set(order)) == len(order) else None
+
+
+def set_pin_order(name, order):
+    """Save a new order for the `showcase` or `completionist` pins."""
+    path = config_path()
+    cfg = read_json(path, {})
+    keys = reordered(cfg.get(name, []), order)
+    if keys is None:
+        raise SystemExit(f'omatrophy.py {name} order: give every pinned key once, in the new order '
+                         f'(now: {" ".join(cfg.get(name, [])) or "none"})')
+    cfg[name] = keys
+    write_json(path, cfg, indent=2)
+    print(f'{name}: {" ".join(keys)}')
+
+
 def showcase_items(keys, by_key):
     """The picks still earned, as tiles: an unlocked achievement with its
     rarity, or a finished game's platinum with its art. Picks whose game
@@ -922,6 +944,8 @@ def main(argv):
         sync()
     elif cmd == 'favorite' and len(argv) in (3, 4):
         set_favorite(argv[2], argv[3] if len(argv) == 4 else '')
+    elif cmd in ('showcase', 'completionist') and len(argv) >= 3 and argv[2] == 'order':
+        set_pin_order(cmd, argv[3:])
     elif cmd == 'completionist' and len(argv) == 5 and argv[2] in ('add', 'remove'):
         set_completionist(argv[3], argv[4], argv[2] == 'add')
     elif cmd == 'showcase' and len(argv) in (5, 6) and argv[2] in ('add', 'remove'):
