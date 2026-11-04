@@ -642,6 +642,8 @@ class PanelJson(unittest.TestCase):
                           ('Half Game 0', 50.0, 'bronze', 'Half Game')])
         # The fake unlocks are from 1970, long before this month.
         self.assertEqual(rarest['month'], [])
+        # Only Done Game is finished.
+        self.assertEqual([u['name'] for u in rarest['platinum']], ['Done Game 1', 'Done Game 0'])
 
     def test_hidden_games_leave_the_rarest_unlocks_and_the_nearest(self):
         with FakeLibrary(hidden=['steam:20']):

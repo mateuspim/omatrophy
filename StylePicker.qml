@@ -56,7 +56,8 @@ Column {
   // From `omatrophy.py games`, read the first time the Games tab opens.
   property var games: null
   property string sort: "recent"
-  // Which rarest unlocks the Now tab lists: "ever" or "month".
+  // Which rarest unlocks the Now tab lists: "ever", "month" or "platinum"
+  // (from finished games only).
   property string rarestRange: "ever"
   // Typed into the Games tab's filter field; matches game names.
   property string gameFilter: ""
@@ -1240,6 +1241,7 @@ Column {
       // couple spare unlocks so three still show.
       readonly property var ever: lists ? root.unhidden(lists.ever).slice(0, 3) : []
       readonly property var month: lists ? root.unhidden(lists.month).slice(0, 3) : []
+      readonly property var platinum: lists && lists.platinum ? root.unhidden(lists.platinum).slice(0, 3) : []
       visible: ever.length > 0
       width: root.width
       height: rarestChips.height
@@ -1254,7 +1256,8 @@ Column {
         anchors.right: parent.right
         options: [
           { value: "ever", label: "Ever" },
-          { value: "month", label: "This month" }
+          { value: "month", label: "This month" },
+          { value: "platinum", label: "Platinums" }
         ]
         value: root.rarestRange
         onPicked: value => root.rarestRange = value
@@ -1321,7 +1324,7 @@ Column {
         visible: rarestHeader[root.rarestRange].length === 0
         width: parent.width
         opacity: 0.5
-        text: "Nothing unlocked yet this month."
+        text: root.rarestRange === "platinum" ? "No platinum yet." : "Nothing unlocked yet this month."
       }
     }
 

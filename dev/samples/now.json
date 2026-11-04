@@ -267,6 +267,28 @@
     "tier": "silver",
     "game": "Lanterns of Aster"
    }
+  ],
+  "platinum": [
+   {
+    "name": "Pacifist Run",
+    "icon": "dev/samples/art/icon-pacifist-run.svg",
+    "time": 1789000000,
+    "percent": 1.9,
+    "store": "steam",
+    "app": "2",
+    "tier": "gold",
+    "game": "Lanterns of Aster"
+   },
+   {
+    "name": "All Lit",
+    "icon": "dev/samples/art/icon-all-lit.svg",
+    "time": 1792827200,
+    "percent": 14.8,
+    "store": "steam",
+    "app": "2",
+    "tier": "silver",
+    "game": "Lanterns of Aster"
+   }
   ]
  },
  "stores": [

@@ -40,7 +40,7 @@ the next read names them locally. The command itself exits at once.
  "playing": {...card, "hero": "...", "since": 1793065549, "session": [...], "next": [...]} | null,
  "recent": [card, ...], "shelf": [card, ...],
  "nearest": [card, ...], "stores": [{"id", "name", "found", "games"}, ...],
- "rarest": {"ever": [unlock, ...], "month": [unlock, ...]}}
+ "rarest": {"ever": [unlock, ...], "month": [unlock, ...], "platinum": [unlock, ...]}}
 ```
 
 - A **card** is a `status` row plus `game`, `header`, `played` (last
@@ -61,8 +61,9 @@ the next read names them locally. The command itself exits at once.
   the one with fewer left, with `latest` empty; the panel fills the
   platinum shelf's empty slots with them. Hidden games are left out.
 - `rarest`: the five unlocks fewest players have across the library,
-  ever and since the first of this month (local time), rarest first, ties
-  to the newest; hidden games are left out. The panel shows three; the
+  ever, since the first of this month (local time) and from finished
+  games only (`platinum`), rarest first, ties to the newest; hidden
+  games are left out. The panel shows three; the
   spares let it drop a game hidden since the read. An **unlock** is `{name, icon, time, percent, tier,
   store, app, game}`. Rarity is read from the cache only, so `now` makes
   no request for it; unlocks of games with no cached rarity are left out.

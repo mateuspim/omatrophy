@@ -2,8 +2,8 @@
 
 ## Unreleased
 
-- The Now tab lists your rarest unlocks across every game, ever or this
-  month, each opening its game in the tracker; hidden games stay out. Rarity comes from the
+- The Now tab lists your rarest unlocks across every game, ever, this
+  month or from platinumed games only, each opening its game in the tracker; hidden games stay out. Rarity comes from the
   cache, so the panel makes no extra requests; the watcher fetches it
   once for games that have none.
 - Before any game has achievements, the Now tab says where they come

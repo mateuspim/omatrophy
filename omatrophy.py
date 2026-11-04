@@ -390,13 +390,17 @@ def library_unlocks(lib, hidden=()):
 
 
 def rarest_cards(lib, n, now_time, hidden=()):
-    """The panel's rarest unlocks, ever and this month, each named with its game."""
+    """The panel's rarest unlocks, ever, this month and from finished games only,
+    each named with its game."""
     unlocks = library_unlocks(lib, hidden)
     stores_by_id = {s.id: s for s, _, _ in lib}
     def card(u):
         return dict(u, tier=tier(u['percent']), game=stores_by_id[u['store']].game_name(u['app']))
+    finished = {(s.id, g) for s, g, achs in lib if platinum_time(achs)}
+    platinum = [u for u in unlocks if (u['store'], u['app']) in finished]
     return {'ever': [card(u) for u in rarest_unlocks(unlocks, n)],
-            'month': [card(u) for u in rarest_unlocks(unlocks, n, month_start(now_time))]}
+            'month': [card(u) for u in rarest_unlocks(unlocks, n, month_start(now_time))],
+            'platinum': [card(u) for u in rarest_unlocks(platinum, n)]}
 
 
 def store_rows(classes, found, lib):
