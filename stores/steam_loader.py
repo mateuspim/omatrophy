@@ -28,6 +28,15 @@ HYPRCTL_SECONDS = 4
 # during the load (Steam sat in the tray); any other new window (Friends,
 # a sign-in dialog) is the user's and comes back to their workspace.
 MAIN_TITLE = 'Steam'
+# Steam offline or still signing in loads nothing, and every game would
+# time out and pass for one without achievements. After this many
+# timeouts in a row the load stops and keeps those games unsure, to try
+# first next time. Most played go first, so a real run that long is rare
+# (180 of 313 games had none on the owner's library, and 0.57^15 is about
+# 1 in 4500 per position); an unsure game that times out again is
+# settled as none and doesn't count toward a new streak, so a library
+# that has one can't stop every load.
+TIMEOUT_STREAK = 15
 # The panel's progress strip shows this many of the latest results.
 RECENT_KEPT = 6
 
@@ -40,9 +49,21 @@ def checked():
     """{app: {time, found}} of every game a load has tried: the checkpoint.
     A tried game is never tried again unless the owner asks for the whole
     library (`steam-load all`), so a later load only sees games played
-    since, and a stopped one picks up where it ended."""
+    since, and a stopped one picks up where it ended. `found` is None for
+    a game left unsure by a timeout streak, tried again by the next load."""
     found = read_json(f'{cache_dir()}/checked.json', {})
     return found if isinstance(found, dict) else {}
+
+
+def settled(tried, app):
+    """True when a load has tried `app` and its answer stands."""
+    entry = tried.get(app)
+    return isinstance(entry, dict) and entry.get('found') is not None
+
+
+def unsure(tried, app):
+    entry = tried.get(app)
+    return isinstance(entry, dict) and 'found' in entry and entry['found'] is None
 
 
 def status():
@@ -81,8 +102,10 @@ def missing(playtimes, local, tried, everything=False):
     with a stats file, `tried` checked()."""
     rows = [(p.get('total', 0), app) for app, p in playtimes.items()
             if app_id(app) and p.get('total', 0) > 0 and app not in local
-            and (everything or app not in tried)]
-    return [app for _, app in sorted(rows, key=lambda r: (-r[0], int(r[1])))]
+            and (everything or not settled(tried, app))]
+    # Unsure games first: they were next in line when the streak stopped.
+    return [app for _, _, app in sorted(((not unsure(tried, app), -t, app) for t, app in rows),
+                                        key=lambda r: (r[0], r[1], int(r[2])))]
 
 
 def steam_running(proc='/proc'):
@@ -301,6 +324,8 @@ def load(todo, has_stats, busy, opener=open_page, running=steam_running, say=Non
 
 def run(todo, has_stats, busy, opener, running, wait, poll, clock, sleep, window, tried, counts, report, end, prepare):
     """load()'s loop, with Steam's window kept out of sight."""
+    retried = {app for app in todo if unsure(tried, app)}
+    streak = []
     for i, app in enumerate(todo):
         if stop_requested():
             clear_stop()
@@ -325,6 +350,17 @@ def run(todo, has_stats, busy, opener, running, wait, poll, clock, sleep, window
             return end(f'stopped: {i} of {len(todo)} done', 'stopped', i)
         counts['loaded' if found == 'loaded' else 'none'] += 1
         tried[app] = {'time': int(clock()), 'found': found == 'loaded'}
+        if found == 'loaded':
+            streak.clear()
+        elif app not in retried:
+            streak.append(app)
+        if len(streak) >= TIMEOUT_STREAK:
+            for a in streak:
+                tried[a]['found'] = None
+            write_json(f'{cache_dir()}/checked.json', tried)
+            counts['none'] -= len(streak)
+            return end(f'stopped: {len(streak)} games in a row gave no stats; Steam may be offline or still '
+                       'signing in. Load again once it is online', 'failed', i + 1)
         write_json(f'{cache_dir()}/checked.json', tried)
         report(f"{i + 1}/{len(todo)} {app}: " + ('loaded' if found == 'loaded' else 'no stats'), 'running', i + 1,
                app, found == 'loaded')

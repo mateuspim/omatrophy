@@ -314,7 +314,7 @@ def steam_load_status():
     steam = steam_store()
     played = steam.missing(everything=True)
     tried = steam_loader.checked()
-    print(json.dumps({'missing': len(played), 'unchecked': len([a for a in played if a not in tried]),
+    print(json.dumps({'missing': len(played), 'unchecked': len([a for a in played if not steam_loader.settled(tried, a)]),
                       'status': steam_loader.status()}))
 
 

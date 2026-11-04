@@ -105,6 +105,38 @@ class Load(LoaderCache):
         status = steam_loader.status()
         self.assertEqual((status['done'], status['total'], status['state']), (3, 3, 'done'))
 
+    def test_a_timeout_streak_stops_and_keeps_those_games_unsure(self):
+        # Steam offline: every game times out. Before, all of them were
+        # filed as "no achievements" and never tried again.
+        n = steam_loader.TIMEOUT_STREAK
+        todo = [str(i) for i in range(1, n + 3)]
+        result, opened, _ = self.run_load(todo)
+        self.assertEqual(len(opened), n)
+        self.assertEqual(result, {'loaded': 0, 'none': 0, 'state': 'failed'})
+        self.assertIn('Steam may be offline', steam_loader.status()['line'])
+        tried = steam_loader.checked()
+        self.assertTrue(all(tried[a]['found'] is None for a in todo[:n]))
+        playtimes = {a: {'total': 100 - int(a)} for a in todo}
+        playtimes['99'] = {'total': 1000}
+        # Unsure games come back first, ahead of a more played new one.
+        self.assertEqual(steam_loader.missing(playtimes, set(), tried), todo[:n] + ['99'] + todo[n:])
+
+    def test_unsure_games_that_time_out_again_are_settled(self):
+        n = steam_loader.TIMEOUT_STREAK
+        todo = [str(i) for i in range(1, n + 1)]
+        self.run_load(todo)
+        result, opened, _ = self.run_load(todo + ['50'], ready={'50'})
+        self.assertEqual(result, {'loaded': 1, 'none': n, 'state': 'done'})
+        tried = steam_loader.checked()
+        self.assertTrue(all(tried[a]['found'] is False for a in todo))
+        self.assertTrue(steam_loader.settled(tried, '50'))
+
+    def test_a_loaded_game_breaks_the_streak(self):
+        n = steam_loader.TIMEOUT_STREAK
+        todo = [str(i) for i in range(1, 2 * n)]
+        result, _, _ = self.run_load(todo, ready={str(n)})
+        self.assertEqual(result['state'], 'done')
+
     def test_a_game_without_stats_waits_only_the_timeout(self):
         _, _, clock = self.run_load(['2'])
         self.assertLessEqual(clock.now - 1_800_000_000, steam_loader.WAIT_SECONDS + steam_loader.POLL_SECONDS)

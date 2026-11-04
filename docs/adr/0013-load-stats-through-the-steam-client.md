@@ -33,7 +33,12 @@ client's own cache needs none of that.
   the moment it is done, with whether a stats file came: the checkpoint. A
   game in it is never tried again, so a stopped run resumes at the next
   game and a later load only takes games played since. A game whose page
-  opened without a file has no achievements, as far as we can tell. Only
+  opened without a file has no achievements, as far as we can tell,
+  except after 15 such games in a row: Steam offline or still signing in
+  loads nothing, so the run stops there and keeps those games unsure
+  (`found: null`), first in line for the next load. One that times out
+  again then counts as none and starts no new streak, so a library with
+  15 games without achievements in a row can't stop every load. Only
   `steam-load all` (Check all again in the panel) tries every played game
   without stats again: whole-library passes happen only when the owner
   asks.
