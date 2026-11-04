@@ -31,16 +31,16 @@
 <text x="495" y="602" font-family="JetBrains Mono,JetBrainsMono Nerd Font,DejaVu Sans Mono,monospace" font-size="205" font-weight="600" letter-spacing="-11" fill="#eff4f7">Oma<tspan fill="#e9bd55">Trophy</tspan></text>
 <g font-family="JetBrains Mono,JetBrainsMono Nerd Font,DejaVu Sans Mono,monospace">
   <text x="208" y="805" font-size="82" font-weight="700" fill="#eff4f7">Trophies over your games.</text>
-  <g font-size="48" fill="#9ca9b4"><text x="208" y="943">Steam unlocks as toasts over fullscreen games.</text><text x="208" y="1021">Bronze to platinum, no API key.</text></g>
+  <g font-size="48" fill="#9ca9b4"><text x="208" y="943">Steam and GOG unlocks as toasts over fullscreen games.</text><text x="208" y="1021">Bronze to platinum, no API key.</text></g>
   <g fill="#101b22" stroke="#35454d" stroke-width="4">
     <rect x="208" y="1112" width="480" height="100"/><rect x="710" y="1112" width="435" height="100"/><rect x="1167" y="1112" width="470" height="100"/>
     <rect x="208" y="1234" width="510" height="100"/><rect x="740" y="1234" width="300" height="100"/><rect x="1062" y="1234" width="485" height="100"/>
-    <rect x="208" y="1356" width="370" height="100"/>
+    <rect x="208" y="1356" width="370" height="100"/><rect x="600" y="1356" width="400" height="100"/>
   </g>
   <g font-size="43" fill="#eff4f7">
-    <g fill="#e9bd55"><circle cx="249" cy="1162" r="10"/><circle cx="751" cy="1162" r="10"/><circle cx="1208" cy="1162" r="10"/><circle cx="249" cy="1284" r="10"/><circle cx="781" cy="1284" r="10"/><circle cx="1103" cy="1284" r="10"/><circle cx="249" cy="1406" r="10"/></g>
+    <g fill="#e9bd55"><circle cx="249" cy="1162" r="10"/><circle cx="751" cy="1162" r="10"/><circle cx="1208" cy="1162" r="10"/><circle cx="249" cy="1284" r="10"/><circle cx="781" cy="1284" r="10"/><circle cx="1103" cy="1284" r="10"/><circle cx="249" cy="1406" r="10"/><circle cx="641" cy="1406" r="10"/></g>
     <text x="280" y="1177">Overlay toasts</text><text x="782" y="1177">Rarity tiers</text><text x="1239" y="1177">Platinum card</text>
-    <text x="280" y="1299">Trophy cabinet</text><text x="812" y="1299">Tracker</text><text x="1134" y="1299">Theme colours</text><text x="280" y="1421">No API key</text>
+    <text x="280" y="1299">Trophy cabinet</text><text x="812" y="1299">Tracker</text><text x="1134" y="1299">Theme colours</text><text x="280" y="1421">No API key</text><text x="672" y="1421">Steam + GOG</text>
   </g>
   <rect x="208" y="1534" width="1660" height="148" fill="#0e151b" stroke="#35454d" stroke-width="4"/>
   <text x="258" y="1626" font-size="48" fill="#e9bd55">$</text><text x="317" y="1626" font-size="48" fill="#eff4f7">omarchy plugin add github.com/mateuspim/omatrophy</text>
