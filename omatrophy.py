@@ -16,6 +16,8 @@ Usage:
   omatrophy.py guide make <store> <app> [--no-web] [--agent a] [--model m] [--effort e]
                                       make a guide through your agent (ADR 14); guide stop|status|agents
   omatrophy.py guide model <agent> <model> [effort] [@http://endpoint]|default
+  omatrophy.py guide check <agent> [model] [--jail]
+                                      check on a real run that the agent stays locked down; a pass enables it
   omatrophy.py guide bench <store> <app> <agent:model[:effort][@endpoint]>... [--no-web] [--jail] [--pick] [--keep]
                                       make one game's guide with each, side by side, and rank them
   omatrophy.py set guide-agent default|claude|...   set guide-web on|off   set guide-jail on|off
@@ -842,7 +844,7 @@ def guide(args):
         imported, skipped = guides.import_guides(args[1], replace=len(args) == 3)
         print(f'imported {imported}, skipped {skipped}')
         return
-    if args[:1] in (['make'], ['stop'], ['status'], ['agents'], ['model'], ['bench']):
+    if args[:1] in (['make'], ['stop'], ['status'], ['agents'], ['model'], ['bench'], ['check']):
         return guide_job(args)
     found = found_stores()
     if not args:
@@ -889,11 +891,52 @@ def guide_job(args):
         guide_make(args[1], args[2], args[3:], cfg)
     elif cmd == 'bench' and len(args) >= 4:
         guide_bench(args[1], args[2], args[3:], cfg)
+    elif cmd == 'check' and 2 <= len(args) <= 4 and args[1] in guide_agents.BY_ID:
+        guide_check(args[1], args[2:])
     else:
         raise SystemExit('usage: omatrophy.py guide make <store> <app> [--no-web] [--agent a] [--model m] [--effort e]\n'
                          '       omatrophy.py guide model <agent> <model> [effort] [@http://endpoint] | default\n'
                          '       omatrophy.py guide bench <store> <app> <agent:model[:effort][@endpoint]>... '
-                         '[--no-web] [--jail] [--pick] [--keep]')
+                         '[--no-web] [--jail] [--pick] [--keep]\n'
+                         '       omatrophy.py guide check <agent> [model] [--jail]')
+
+
+def guide_check(agent, words):
+    """`guide check <agent> [model] [--jail]`: the lock check on a real run;
+    a pass (without --jail) lets that agent make guides. The panel follows
+    it through guide/check.json."""
+    import guide_agents
+    adapter = guide_agents.BY_ID[agent]
+    jail = '--jail' in words
+    model = next((w for w in words if not w.startswith('--')), '')
+    if not adapter.installed():
+        raise SystemExit(f'omatrophy: guide check: {agent} not found; install it first')
+    if not guide_agents.headless(adapter):
+        raise SystemExit(f'omatrophy: guide check: OmaTrophy has no headless command for {agent} yet, so there is '
+                         'nothing to check (docs/specs/guides.md, Agent adapters)')
+    if jail and not guide_agents.jail_installed():
+        raise SystemExit('omatrophy: guide check: ai-jail not found')
+    path = guide_agents.check_status_path()
+    lines = []
+
+    def say(line):
+        lines.append(line)
+        print(line, flush=True)
+        write_json(path, {'agent': agent, 'state': 'running', 'lines': lines, 'time': int(time.time()), 'pid': os.getpid()})
+
+    say(f'checking {agent}' + (f' ({model})' if model else '') + ': asking it to write a file and run a command')
+    try:
+        result = guide_agents.check_lock(adapter, model=model, jail=jail, say=say)
+    except BaseException:
+        write_json(path, {'agent': agent, 'state': 'failed', 'lines': lines + ['interrupted'], 'time': int(time.time())})
+        raise
+    verdict = ('PASS: ' + (f'{agent} runs inside ai-jail' if jail else f'{agent} can make guides now')) if result['passed'] \
+        else f'FAIL: {agent} stays off'
+    say(verdict)
+    write_json(path, {'agent': agent, 'state': 'passed' if result['passed'] else 'failed', 'lines': lines,
+                      'time': int(time.time()), 'runs': result['runs']})
+    if not result['passed']:
+        raise SystemExit(1)
 
 
 def guide_target(store_id, app):

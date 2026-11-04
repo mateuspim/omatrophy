@@ -55,7 +55,9 @@
   "model": "sonnet",
   "effort": "medium",
   "source": "built-in aliases",
-  "jail": true
+  "jail": true,
+  "headless": true,
+  "relocked": false
  },
  {
   "agent": "codex",
@@ -68,12 +70,14 @@
   "model": "",
   "effort": "",
   "source": "",
-  "jail": true
+  "jail": true,
+  "headless": true,
+  "relocked": false
  },
  {
   "agent": "opencode",
   "name": "OpenCode",
-  "installed": false,
+  "installed": true,
   "supported": false,
   "default": false,
   "web": true,
@@ -81,6 +85,38 @@
   "model": "",
   "effort": "",
   "source": "",
-  "jail": true
+  "jail": true,
+  "headless": true,
+  "relocked": false
+ },
+ {
+  "agent": "gemini",
+  "name": "Gemini",
+  "installed": true,
+  "supported": false,
+  "default": false,
+  "web": false,
+  "models": [],
+  "model": "",
+  "effort": "",
+  "source": "",
+  "jail": true,
+  "headless": false,
+  "relocked": false
+ },
+ {
+  "agent": "pi",
+  "name": "Pi",
+  "installed": false,
+  "supported": false,
+  "default": false,
+  "web": false,
+  "models": [],
+  "model": "",
+  "effort": "",
+  "source": "",
+  "jail": true,
+  "headless": false,
+  "relocked": false
  }
 ]

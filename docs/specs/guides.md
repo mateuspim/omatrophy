@@ -127,6 +127,7 @@ OmaTrophy doesn't know survive a rewrite.
 | `guide agents` | Every agent with its models and picks (see Settings). |
 | `guide model <agent> <model> [effort] [@http://endpoint]`, `guide model <agent> default` | Sets or clears that agent's pick in `guide-models`; `@endpoint` points claude at a local Anthropic-compatible server (`ANTHROPIC_BASE_URL`) for that model. |
 | `guide bench <store> <app> <agent:model[:effort][@endpoint]>... [--no-web] [--jail] [--pick] [--keep]` | [Compares](#benchmark) agents and models on one game. |
+| `guide check <agent> [model] [--jail]` | The lock check on a real run (below); prints a line per run and `PASS`/`FAIL`, exits non-zero on a fail. Progress in `~/.cache/omatrophy/guide/check.json` (`{agent, state: running\|passed\|failed, lines, time, runs}`) for Settings > Guides' Check. |
 | `guide make <store> <app> [--no-web] [--notify] [--jail\|--no-jail] [--agent a] [--model m] [--effort e]` | Runs the job below; the flags override the settings for this run only. `--notify` (the tracker passes it) sends a desktop notification when the job is done or failed. `--jail` runs the agent inside ai-jail (see Settings). One line per stage, then `done: N items, M verified`, or `stopped`/`failed: <what to do>`. Exits non-zero with no agent, an unsupported agent, or another job running. |
 | `guide stop` | Stops the job within half a second (the agent's process group is killed); nothing is written, so the old guide stays. |
 | `guide status` | `status.json`: `{state, store, app, game, stage, done, total, line, started, time, agent, model, pid, web, open}` (`web`: the research stage runs; `open`: achievements the guide covers); `state` is `running`, `done`, `stopped` or `failed`, and a `running` job whose `pid` is gone reads as `failed`. `{}` before any job. `done`/`total` count steps: gather, research (with web), one per classify batch, route, verify. |
@@ -141,7 +142,7 @@ OmaTrophy doesn't know survive a rewrite.
 | `guide-jail` | `true`, `false`: run the agent inside [ai-jail](https://github.com/akitaonrails/ai-jail) (`ai-jail --exec ... --network -- <agent command>`): the job's empty folder read-write, the agent's own state dirs, the network, and only the environment variables it needs (its endpoint and key, when set). A second fence around the adapter's lock; an unchecked agent still never runs. Checked with `dev/check-lock.py --jail <agent>` (unverified as of 2026-11-04: written where ai-jail could not nest). `set guide-jail on\|off`. | `false` |
 
 `guide agents` prints `[{agent, name, installed, supported, default,
-web, models: [{id, name, efforts}], model, effort, source, jail}]` (`jail`: ai-jail is installed). It lists
+web, models: [{id, name, efforts}], model, effort, endpoint, source, jail, headless, relocked}]` (`supported`: its lock is checked, here or when written; `headless`: OmaTrophy has a command for it, so it can be checked; `relocked`: a check passed for an earlier binary; `jail`: ai-jail is installed). It lists
 every agent in the adapter table. `default` marks the one
 `omarchy-default-agent` names, and `model`/`effort` are the picks from
 `guide-models`. `models` comes from the source named in the table and is
@@ -245,9 +246,17 @@ openclaw, which only runs through its own gateway and terminal app.
 Each runs in a fresh, empty temporary folder, with the prompt
 on stdin or as an argument and a 25 min ceiling per stage. A row is
 **supported** once a real run has shown that its lock keeps shell and file
-tools off: `dev/check-lock.py <agent>` asks the agent, through the job's own
-command, to write a file and run a shell command, and passes when neither
-happened. Until then `guide agents` shows it as "not
+tools off: `guide check <agent>` (Settings > Guides' Check, or
+`dev/check-lock.py`) asks the agent, through the job's own command, to write
+a file and run a shell command, with no tools and with web tools, and
+passes when every run answered and neither happened. Claude's check was
+made when its adapter was written (`checked` in `guide_agents.py`); any
+other passes on the owner's machine and is recorded in
+`~/.local/state/omatrophy/guide-locks.json` as `{agent: {passed, binary,
+time, model}}`, where `binary` is the agent's real path, size and mtime: an
+update of the agent turns it off again until checked. A check inside
+ai-jail is never recorded (the agent's /tmp is its own there). Only rows
+with a headless command can be checked. Until then `guide agents` shows it as "not
 supported yet". No row ever falls back to an auto-approve flag. Flags come
 from each tool's `--help` on 2026-11-04; "unverified" means the help didn't
 show it or timed out.

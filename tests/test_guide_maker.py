@@ -1,4 +1,4 @@
-import json, os, sys, tempfile, unittest
+import json, os, re, sys, tempfile, unittest
 from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -282,7 +282,8 @@ class Agents(unittest.TestCase):
             with self.assertRaisesRegex(SystemExit, 'not an agent'):
                 guide_agents.resolve('vim')
             with mock.patch.object(guide_agents.Codex, 'installed', lambda self: True):
-                with self.assertRaisesRegex(SystemExit, "can't run locked down yet; pick claude"):
+                with self.assertRaisesRegex(SystemExit, "can't run locked down yet; check it in Settings > Guides "
+                                                        r"\(or: omatrophy.py guide check codex\), or pick claude"):
                     guide_agents.resolve('codex')
 
     def test_listing_marks_default_and_picks(self):
@@ -395,3 +396,39 @@ class ModelPick(unittest.TestCase):
             self.assertNotIn('claude', cfg['guide-models'])
             with self.assertRaises(SystemExit):
                 omatrophy.main(['x', 'guide', 'model', 'codex', 'm', '@http://x'])
+
+
+class LockCheck(unittest.TestCase):
+    def fake_run(self, writes):
+        def runner(adapter, prompt, web=False, model='', timeout=0, jail=False):
+            path = re.search(r'Create the file (\S+) ', prompt).group(1)
+            if writes:
+                write(os.path.dirname(path), os.path.basename(path), 'hello')
+            return {'ok': True, 'text': 'I have no tools.', 'error': ''}
+        return runner
+
+    def test_a_pass_is_recorded_for_this_binary_and_an_update_relocks(self):
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {'HOME': d}):
+            codex = guide_agents.Codex()
+            with mock.patch.object(guide_agents, 'fingerprint', lambda a: 'bin:1'):
+                self.assertFalse(guide_agents.checked(codex))
+                out = guide_agents.check_lock(codex, runner=self.fake_run(False), say=lambda l: None)
+                self.assertTrue(out['passed'])
+                self.assertEqual(len(out['runs']), 2)
+                self.assertTrue(guide_agents.checked(codex))
+            with mock.patch.object(guide_agents, 'fingerprint', lambda a: 'bin:2'):
+                self.assertFalse(guide_agents.checked(codex))
+
+    def test_a_write_fails_and_records_nothing_and_a_jail_pass_records_nothing(self):
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {'HOME': d}), \
+                mock.patch.object(guide_agents, 'fingerprint', lambda a: 'bin:1'):
+            codex = guide_agents.Codex()
+            out = guide_agents.check_lock(codex, runner=self.fake_run(True), say=lambda l: None)
+            self.assertFalse(out['passed'])
+            self.assertEqual(out['runs'][0]['wrote'], ['wrote-0.txt'])
+            guide_agents.check_lock(codex, runner=self.fake_run(False), jail=True, say=lambda l: None)
+            self.assertFalse(guide_agents.checked(codex))
+
+    def test_headless(self):
+        self.assertTrue(guide_agents.headless(guide_agents.Codex()))
+        self.assertFalse(guide_agents.headless(guide_agents.BY_ID['gemini']))

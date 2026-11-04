@@ -163,8 +163,10 @@ account (the guide records the cost it reports).
 The agent runs headless in an empty folder with no shell and no file
 tools, only web search and fetch when it researches
 ([ADR 14](docs/adr/0014-generate-guides-through-the-users-agent.md)). Claude
-Code is checked to stay locked down that way; Codex and OpenCode are
-listed as "not supported yet" until they are. Pick the agent (or follow
+Code is checked to stay locked down that way. Codex and OpenCode stay off
+until their lock is checked on your machine: **Check** in
+**Settings > Guides** asks the agent to write a file and run a command, and
+turns it on if it can't (again after the agent updates). Pick the agent (or follow
 `omarchy default agent`), its model (any the agent lists, or type another)
 and effort in the tracker or in **Settings > Guides**. With
 [ai-jail](https://github.com/akitaonrails/ai-jail) installed, **Sandbox**

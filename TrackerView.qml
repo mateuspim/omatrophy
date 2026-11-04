@@ -2206,7 +2206,7 @@ Item {
               visible: text !== ""
               text: {
                 var others = root.agents.filter(function(a) { return a.installed && !a.supported }).map(function(a) { return a.name })
-                return others.length ? others.join(", ") + ": not supported yet (their lock isn't checked)." : ""
+                return others.length ? others.join(", ") + ": off until checked; Check them in the panel's Settings > Guides." : ""
               }
               wrapMode: Text.Wrap
               elide: Text.ElideNone

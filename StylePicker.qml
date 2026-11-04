@@ -128,6 +128,8 @@ Column {
   ]
   property bool guideJail: false
   property var guideJob: ({})
+  // `guide check`'s progress, from guide/check.json, while a Check runs.
+  property var guideCheck: ({})
   // The agent a make uses now: the one picked, else Omarchy's default.
   readonly property var guideRow: guideAgents.find(function(a) { return guideAgent ? a.agent === guideAgent : a.default }) || null
   readonly property var guidePick: guideRow ? guideModels[guideRow.agent] || {} : {}
@@ -166,6 +168,14 @@ Column {
              + (community ? " · profile fill-in on" : "")
     }
     return ""
+  }
+
+  // A lock check runs detached (two short agent runs); its file says how
+  // it goes, and `guide agents` is read again when it ends.
+  function checkAgent(agent) {
+    if (guideCheck.state === "running") return
+    guideCheck = { agent: agent, state: "running", lines: ["Starting " + agent + "…"] }
+    Quickshell.execDetached(["python3", helperPath, "guide", "check", agent])
   }
 
   function guideEfforts() {
@@ -572,6 +582,28 @@ Column {
     stdout: StdioCollector {
       onStreamFinished: { try { root.guideAgents = JSON.parse(text) || [] } catch (e) {} }
     }
+  }
+
+  FileView {
+    id: guideCheckFile
+    path: root.live ? Quickshell.env("HOME") + "/.cache/omatrophy/guide/check.json" : ""
+    printErrors: false
+    onLoaded: {
+      var was = root.guideCheck
+      var now = {}
+      try { now = JSON.parse(text()) } catch (e) { return }
+      // An old result from before this Check started doesn't count.
+      if (was.state === "running" && was.agent && now.agent !== was.agent) return
+      root.guideCheck = now
+      if (was.state === "running" && now.state !== "running") guideAgentsReader.running = true
+    }
+  }
+
+  Timer {
+    interval: 1000
+    repeat: true
+    running: root.live && root.guideCheck.state === "running"
+    onTriggered: guideCheckFile.reload()
   }
 
   Process {
@@ -3798,24 +3830,120 @@ Column {
       spacing: root.spacing
       visible: root.settingsSection === "guides"
 
-      SettingRow {
-        label: "AGENT"
-        Flow {
-          width: root.width * 0.72
-          layoutDirection: Qt.RightToLeft
-          spacing: Commons.Style.space(2)
+      // Every installed agent, each with what it takes to use it: ready,
+      // a lock check to run (Check runs it here), or no headless mode yet.
+      // The ones not installed share a line at the end.
+      MiniLabel { text: "AGENT" }
+      Rectangle {
+        width: root.width
+        height: agentRows.height + Commons.Style.space(8)
+        radius: Commons.Style.cornerRadius
+        color: Qt.alpha(root.foreground, 0.03)
+        border.width: 1
+        border.color: Qt.alpha(root.foreground, 0.08)
+        Column {
+          id: agentRows
+          y: Commons.Style.space(4)
+          width: parent.width
           Repeater {
-            // Omarchy's default first, then each agent that can run locked.
-            model: [{ value: "default", label: "Omarchy default" }].concat(
-                     root.guideAgents.filter(function(a) { return a.installed && a.supported })
-                       .map(function(a) { return { value: a.agent, label: a.name } })).reverse()
-            delegate: Chips {
+            model: [{ agent: "", name: "Omarchy default", installed: true, supported: true, headless: true, omarchy: true }]
+                     .concat(root.guideAgents.filter(function(a) { return a.installed }))
+            delegate: Rectangle {
+              id: agentRow
               required property var modelData
-              options: [modelData]
-              value: root.guideAgent === "" ? "default" : root.guideAgent
-              onPicked: value => root.set("guide-agent", value)
+              readonly property var a: modelData
+              readonly property bool chosen: root.guideAgent === a.agent
+              readonly property bool usable: a.installed && a.supported
+              readonly property bool checking: root.guideCheck.state === "running" && root.guideCheck.agent === a.agent
+              readonly property bool failedCheck: root.guideCheck.state === "failed" && root.guideCheck.agent === a.agent
+              readonly property string defaultName: {
+                var d = root.guideAgents.find(function(x) { return x.default })
+                return d ? d.name : ""
+              }
+              width: agentRows.width
+              height: Math.max(agentName.implicitHeight + agentNote.implicitHeight, agentAction.height) + Commons.Style.space(16)
+              color: agentHit.containsMouse && usable ? Commons.Style.hoverFill : "transparent"
+              Accessible.role: Accessible.RadioButton
+              Accessible.name: a.name + ", " + agentNote.text
+              Accessible.checked: chosen
+              MouseArea {
+                id: agentHit
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: agentRow.usable ? Qt.PointingHandCursor : Qt.ArrowCursor
+                onClicked: if (agentRow.usable) root.set("guide-agent", agentRow.a.omarchy ? "default" : agentRow.a.agent)
+              }
+              Text {
+                textFormat: Text.PlainText
+                id: agentDot
+                x: Commons.Style.space(12)
+                anchors.verticalCenter: parent.verticalCenter
+                text: agentRow.chosen ? "◉" : "○"
+                color: agentRow.chosen ? Commons.Color.accent : root.foreground
+                opacity: agentRow.usable ? (agentRow.chosen ? 1 : 0.5) : 0.2
+                font.pixelSize: Commons.Style.font.body
+              }
+              Column {
+                anchors.left: agentDot.right
+                anchors.leftMargin: Commons.Style.space(10)
+                anchors.right: agentAction.left
+                anchors.rightMargin: Commons.Style.space(8)
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: Commons.Style.space(1)
+                Text {
+                  textFormat: Text.PlainText
+                  id: agentName
+                  width: parent.width
+                  text: agentRow.a.name + (agentRow.a.default ? "  ·  Omarchy's pick" : "")
+                  color: root.foreground
+                  opacity: agentRow.usable ? 1 : 0.6
+                  elide: Text.ElideRight
+                  font.family: Commons.Style.font.family
+                  font.pixelSize: Commons.Style.font.bodySmall
+                  font.bold: agentRow.chosen
+                }
+                Caption {
+                  id: agentNote
+                  width: parent.width
+                  wrapMode: Text.WordWrap
+                  elide: Text.ElideNone
+                  opacity: agentRow.failedCheck ? 0.9 : 0.5
+                  color: agentRow.failedCheck ? Commons.Color.accent : root.foreground
+                  text: {
+                    var a = agentRow.a
+                    if (a.omarchy) return agentRow.defaultName ? "Follows omarchy default agent: " + agentRow.defaultName
+                                                               : "Follows omarchy default agent (none picked yet)"
+                    if (agentRow.checking) return (root.guideCheck.lines || []).slice(-1)[0] || "Checking…"
+                    if (agentRow.failedCheck) return (root.guideCheck.lines || []).slice(-2).join(" · ")
+                    if (a.supported) return "Ready" + (a.models.length ? " · " + a.models.length + " models" : "")
+                    if (!a.headless) return "No headless mode in OmaTrophy yet"
+                    if (a.relocked) return "Updated since its lock check; check it again"
+                    return "Off until checked: Check makes sure it can't write files or run commands"
+                  }
+                }
+              }
+              PillButton {
+                id: agentAction
+                anchors.right: parent.right
+                anchors.rightMargin: Commons.Style.space(10)
+                anchors.verticalCenter: parent.verticalCenter
+                visible: !agentRow.a.omarchy && !agentRow.a.supported && agentRow.a.headless
+                label: agentRow.checking ? "Checking…" : agentRow.failedCheck ? "Check again" : "Check"
+                onClicked: root.checkAgent(agentRow.a.agent)
+              }
             }
           }
+        }
+      }
+      Caption {
+        width: root.width
+        visible: text !== ""
+        wrapMode: Text.WordWrap
+        elide: Text.ElideNone
+        opacity: 0.35
+        text: {
+          var missing = root.guideAgents.filter(function(a) { return !a.installed }).map(function(a) { return a.name })
+          return missing.length ? "Not installed: " + missing.join(", ") : ""
         }
       }
 
