@@ -38,7 +38,8 @@ the next read names them locally. The command itself exits at once.
 ```json
 {"games": 126, "trophies": 1779, "platinums": 12,
  "playing": {...card, "hero": "...", "since": 1793065549, "session": [...], "next": [...]} | null,
- "recent": [card, ...], "shelf": [card, ...]}
+ "recent": [card, ...], "shelf": [card, ...],
+ "rarest": {"ever": [unlock, ...], "month": [unlock, ...]}}
 ```
 
 - A **card** is a `status` row plus `game`, `header`, `played` (last
@@ -52,6 +53,12 @@ the next read names them locally. The command itself exits at once.
   hidden achievements and `progress` is as in [game](#game).
 - `recent`: the three games played last, minus the running one.
 - `shelf`: every complete game, newest platinum first, with `latest` empty.
+- `rarest`: the three unlocks fewest players have across the library,
+  ever and since the first of this month (local time), rarest first, ties
+  to the newest. An **unlock** is `{name, icon, time, percent, tier,
+  store, app, game}`. Rarity is read from the cache only, so `now` makes
+  no request for it; unlocks of games with no cached rarity are left out.
+  The watcher fetches the missing ones once after `ready`.
 
 ## games
 

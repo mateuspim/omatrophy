@@ -388,6 +388,12 @@ class Steam(Store):
         write_json(path, {'time': int(time.time()), 'percents': pcts})
         return pcts
 
+    def known_percents(self, app):
+        """The cached rarity at any age, {} before the first fetch."""
+        if not app_id(app):
+            return {}
+        return read_json(f'{CACHE}/rarity/{app}.json', {}).get('percents', {})
+
     def library_art(self, app, name):
         """Art Steam already keeps for its library view, if any (newer clients nest it in a hashed folder)."""
         root = f'{self.root}/appcache/librarycache'

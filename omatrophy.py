@@ -154,6 +154,19 @@ def warm_names(pairs, threads=8):
         list(pool.map(lookup, pairs))
 
 
+def warm_rarity(pairs, threads=8):
+    """Fetch rarity once for games that have none cached yet, so the
+    panel's rarest unlocks can read every game from the cache."""
+    def lookup(pair):
+        try:
+            if not pair[0].known_percents(pair[1]):
+                pair[0].percents(pair[1])
+        except Exception:
+            pass
+    with ThreadPoolExecutor(threads) as pool:
+        list(pool.map(lookup, pairs))
+
+
 # The backfill runs hourly, each run a small budget of pages. After a
 # failed run (most often Steam's 429) it waits BACKFILL_LIMITED_WAIT, then
 # doubles up to BACKFILL_MAX_WAIT: on 2026-10-27 a 429 lasted close to three
@@ -185,10 +198,11 @@ def backfill_once(found):
 
 
 def background(found, pairs, sleep=time.sleep):
-    """The watcher's slow chores, after `ready`: warm the name cache, then
+    """The watcher's slow chores, after `ready`: warm the name and rarity caches, then
     let each store backfill games it has no local data for, again and
     again for as long as the watcher runs."""
     warm_names(pairs)
+    warm_rarity(pairs)
     wait = BACKFILL_WAIT
     while True:
         wait = next_backfill_wait(backfill_once(found), wait)
@@ -343,6 +357,45 @@ def next_up(achs, pcts, n):
     return sorted(locked, key=lambda a: -(pcts.get(a['api']) or 0))[:n]
 
 
+def month_start(now):
+    """Unix time the local calendar month of `now` began."""
+    t = time.localtime(now)
+    return int(time.mktime((t.tm_year, t.tm_mon, 1, 0, 0, 0, 0, 0, -1)))
+
+
+def rarest_unlocks(unlocks, n, since=0):
+    """The n unlocks fewest players have (at or after `since`), rarest
+    first, ties to the newest. Each unlock is a dict with `percent` and
+    `time`; one with no known rarity can't rank and is left out."""
+    ranked = [u for u in unlocks if u['percent'] is not None and u['time'] >= since]
+    return sorted(ranked, key=lambda u: (u['percent'], -u['time']))[:n]
+
+
+def library_unlocks(lib):
+    """Every unlock with a date across the library, with its rarity from
+    the cache (no network) and where it came from."""
+    out = []
+    for s, g, achs in lib:
+        pcts = None
+        for a in achs:
+            if not (a['unlocked'] and a['time']):
+                continue
+            if pcts is None:
+                pcts = s.known_percents(g)
+            out.append(dict(brief(a), percent=pcts.get(a['api']), store=s.id, app=g))
+    return out
+
+
+def rarest_cards(lib, n, now_time):
+    """The panel's rarest unlocks, ever and this month, each named with its game."""
+    unlocks = library_unlocks(lib)
+    stores_by_id = {s.id: s for s, _, _ in lib}
+    def card(u):
+        return dict(u, tier=tier(u['percent']), game=stores_by_id[u['store']].game_name(u['app']))
+    return {'ever': [card(u) for u in rarest_unlocks(unlocks, n)],
+            'month': [card(u) for u in rarest_unlocks(unlocks, n, month_start(now_time))]}
+
+
 def recent_games(played, owned, skip, n):
     """The n most recently played games we hold achievements for, minus `skip`."""
     out = []
@@ -375,7 +428,7 @@ def playing_card(store, game, achs, since):
     return card
 
 
-def now(recent_n=3):
+def now(recent_n=3, rarest_n=3):
     """Everything the panel's Now tab shows, in one read of every store."""
     found = found_stores()
     lib = library(found)
@@ -395,7 +448,8 @@ def now(recent_n=3):
         recent.append(game_card(s, key[1], achs, when))
     shelf = sorted((dict(game_card(s, g, achs), latest=[]) for s, g, achs in lib if platinum_time(achs)),
                    key=lambda c: -c['platinum'])
-    return dict(totals(rows), playing=playing, recent=recent, shelf=shelf)
+    return dict(totals(rows), playing=playing, recent=recent, shelf=shelf,
+                rarest=rarest_cards(lib, rarest_n, time.time()))
 
 
 def games():

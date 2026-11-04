@@ -405,6 +405,17 @@ class Played(unittest.TestCase):
 
 
 class Rarity(unittest.TestCase):
+    def test_known_percents_reads_the_cache_at_any_age_and_never_the_network(self):
+        with tempfile.TemporaryDirectory() as cache, mock.patch.object(steam, 'CACHE', cache), \
+                mock.patch.object(steam, 'http_json', side_effect=AssertionError('network')):
+            store = steam.Steam.__new__(steam.Steam)
+            self.assertEqual(store.known_percents(APP), {})
+            os.makedirs(f'{cache}/rarity')
+            with open(f'{cache}/rarity/{APP}.json', 'w') as f:
+                json.dump({'time': 0, 'percents': {'ACH_0': 12.5}}, f)
+            self.assertEqual(store.known_percents(APP), {'ACH_0': 12.5})
+            self.assertEqual(store.known_percents('../x'), {})
+
     def test_cached_a_day_and_kept_when_offline(self):
         body = {'achievementpercentages': {'achievements': [{'name': 'ACH_0', 'percent': '12.5'}]}}
         with tempfile.TemporaryDirectory() as cache, mock.patch.object(steam, 'CACHE', cache):
@@ -493,6 +504,28 @@ class NowTab(unittest.TestCase):
         d = omatrophy.detail(ach('a', hidden=True, icon_locked='g.jpg'), {'a': 4.0})
         self.assertEqual((d['percent'], d['tier'], d['hidden'], d['icon_locked']), (4.0, 'gold', True, 'g.jpg'))
         self.assertEqual(omatrophy.detail(ach('b'), {})['tier'], 'bronze')
+
+    def test_rarest_unlocks_rarest_first_ties_to_the_newest(self):
+        unlocks = [{'name': 'a', 'percent': 30.0, 'time': 5}, {'name': 'b', 'percent': 2.0, 'time': 6},
+                   {'name': 'c', 'percent': 2.0, 'time': 9}, {'name': 'd', 'percent': None, 'time': 9}]
+        self.assertEqual([u['name'] for u in omatrophy.rarest_unlocks(unlocks, 2)], ['c', 'b'])
+        self.assertEqual([u['name'] for u in omatrophy.rarest_unlocks(unlocks, 5, since=7)], ['c'])
+        self.assertEqual(omatrophy.rarest_unlocks([], 3), [])
+
+    def test_month_start_is_the_first_local_midnight_of_the_month(self):
+        mid_march = time.mktime((2026, 3, 17, 15, 30, 0, 0, 0, -1))
+        start = time.localtime(omatrophy.month_start(mid_march))
+        self.assertEqual((start.tm_year, start.tm_mon, start.tm_mday, start.tm_hour, start.tm_min), (2026, 3, 1, 0, 0))
+
+    def test_library_unlocks_skip_locked_and_undated(self):
+        class Fake:
+            id = 'steam'
+            def known_percents(self, game):
+                return {'a': 4.0}
+        achs = [ach('a', True, 5), ach('b', True, 0), ach('c'), ach('d', True, 7)]
+        out = omatrophy.library_unlocks([(Fake(), '1', achs)])
+        self.assertEqual([(u['name'], u['percent'], u['store'], u['app']) for u in out],
+                         [('A', 4.0, 'steam', '1'), ('D', None, 'steam', '1')])
 
 
 class FakeLibrary:
@@ -587,6 +620,15 @@ class PanelJson(unittest.TestCase):
             now = omatrophy.now()
         self.assertIsNone(now['playing'])
         self.assertEqual([c['app'] for c in now['recent']], ['20', '10'])
+
+    def test_now_lists_the_rarest_unlocks_with_their_games(self):
+        with FakeLibrary():
+            rarest = omatrophy.now()['rarest']
+        self.assertEqual([(u['name'], u['percent'], u['tier'], u['game']) for u in rarest['ever']],
+                         [('Half Game 1', 5.0, 'gold', 'Half Game'), ('Done Game 1', 5.0, 'gold', 'Done Game'),
+                          ('Half Game 0', 50.0, 'bronze', 'Half Game')])
+        # The fake unlocks are from 1970, long before this month.
+        self.assertEqual(rarest['month'], [])
 
     def test_game_detail_for_the_tracker(self):
         with FakeLibrary(running={'game': '20', 'since': 0}):
@@ -978,7 +1020,8 @@ class BackfillLoop(unittest.TestCase):
             if len(waits) == 3:
                 raise Stop
 
-        with mock.patch.object(omatrophy, 'warm_names'), self.assertRaises(Stop):
+        with mock.patch.object(omatrophy, 'warm_names'), mock.patch.object(omatrophy, 'warm_rarity'), \
+                self.assertRaises(Stop):
             omatrophy.background([Store()], [], sleep=sleep)
         self.assertEqual(waits, [4, 8, 1])
 
@@ -1007,6 +1050,25 @@ class WarmNames(unittest.TestCase):
         fake = Fake()
         omatrophy.warm_names([(fake, '1'), (fake, 'bad'), (fake, '2')], threads=2)
         self.assertEqual(sorted(asked), ['1', '2', 'bad'])
+
+
+class WarmRarity(unittest.TestCase):
+    def test_fetches_only_games_with_nothing_cached_and_survives_failures(self):
+        fetched = []
+
+        class Fake:
+            def known_percents(self, game):
+                return {'a': 1.0} if game == 'cached' else {}
+
+            def percents(self, game):
+                fetched.append(game)
+                if game == 'bad':
+                    raise OSError('offline')
+                return {}
+
+        fake = Fake()
+        omatrophy.warm_rarity([(fake, 'cached'), (fake, 'bad'), (fake, 'new')], threads=2)
+        self.assertEqual(sorted(fetched), ['bad', 'new'])
 
 
 class PanelAnswer(unittest.TestCase):

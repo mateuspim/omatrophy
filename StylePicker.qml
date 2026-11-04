@@ -49,6 +49,8 @@ Column {
   // From `omatrophy.py games`, read the first time the Games tab opens.
   property var games: null
   property string sort: "recent"
+  // Which rarest unlocks the Now tab lists: "ever" or "month".
+  property string rarestRange: "ever"
   // Typed into the Games tab's filter field; matches game names.
   property string gameFilter: ""
   // "store:app" keys from config.json's `hidden`, kept live so a toggle
@@ -1058,6 +1060,98 @@ Column {
             }
           }
         }
+      }
+    }
+
+    // ------------------------------------------------ rarest unlocks
+
+    // The rarest trophies across the whole library, ever or this month.
+    // Rarity comes from the watcher's cache, so this costs no request.
+    Item {
+      id: rarestHeader
+      readonly property var lists: root.cabinet && root.cabinet.rarest ? root.cabinet.rarest : null
+      visible: lists !== null && lists.ever.length > 0
+      width: root.width
+      height: rarestChips.height
+      PanelSectionHeader {
+        anchors.left: parent.left
+        anchors.verticalCenter: parent.verticalCenter
+        text: "RAREST UNLOCKS"
+        foreground: root.foreground
+      }
+      Chips {
+        id: rarestChips
+        anchors.right: parent.right
+        options: [
+          { value: "ever", label: "Ever" },
+          { value: "month", label: "This month" }
+        ]
+        value: root.rarestRange
+        onPicked: value => root.rarestRange = value
+      }
+    }
+
+    Column {
+      visible: rarestHeader.visible
+      width: root.width
+      spacing: Commons.Style.space(6)
+      Repeater {
+        model: rarestHeader.lists ? rarestHeader.lists[root.rarestRange] : []
+        delegate: Item {
+          id: rareRow
+          required property var modelData
+          required property int index
+          property real rise: 0
+          opacity: 0
+          transform: Translate { y: rareRow.rise }
+          FadeIn { item: rareRow; order: rareRow.index }
+          width: parent.width
+          height: Math.max(32, rareText.height)
+          Accessible.role: Accessible.Button
+          Accessible.name: modelData.name + ", " + modelData.game + ", " + modelData.percent.toFixed(1) + " percent"
+          AchIcon { id: rareIcon; anchors.verticalCenter: parent.verticalCenter; source: rareRow.modelData.icon; width: 32; height: 32 }
+          Column {
+            id: rareText
+            anchors.left: rareIcon.right
+            anchors.leftMargin: Commons.Style.space(10)
+            anchors.right: rarePct.left
+            anchors.rightMargin: Commons.Style.space(10)
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: Commons.Style.space(2)
+            Text {
+              textFormat: Text.PlainText
+              width: parent.width
+              text: rareRow.modelData.name
+              color: root.foreground
+              font.family: Commons.Style.font.family
+              font.pixelSize: Commons.Style.font.bodySmall
+              elide: Text.ElideRight
+            }
+            Caption {
+              width: parent.width
+              elide: Text.ElideRight
+              text: rareRow.modelData.game + " · " + root.day(rareRow.modelData.time)
+            }
+          }
+          Text {
+            textFormat: Text.PlainText
+            id: rarePct
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            text: rareRow.modelData.percent.toFixed(1) + "%"
+            color: root.metalColors[rareRow.modelData.tier]
+            font.family: Commons.Style.font.family
+            font.pixelSize: Commons.Style.font.bodySmall
+            font.bold: true
+          }
+          Hit { game: rareRow.modelData }
+        }
+      }
+      Caption {
+        visible: rarestHeader.lists !== null && rarestHeader.lists[root.rarestRange].length === 0
+        width: parent.width
+        opacity: 0.5
+        text: "Nothing unlocked yet this month."
       }
     }
 

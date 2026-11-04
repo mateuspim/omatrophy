@@ -33,7 +33,7 @@ achievement list.
   progress through the game, filling in as you watch.
 - A trophy cabinet in the bar: the game you're playing with this session's
   unlocks and the likeliest next ones, or the last three games you played,
-  and a shelf of your platinums; every game, eight to a page, filtered as you
+  your rarest unlocks ever or this month, and a shelf of your platinums; every game, eight to a page, filtered as you
   type and sorted by recent, closest to platinum or name, with games you
   won't finish set aside, and platinums you'd rather not show taken off
   the shelf.
@@ -82,7 +82,8 @@ Click the trophy in the bar. The **Now** tab shows your totals, then the game
 you're playing: its art and progress, what you've unlocked this session and
 the three locked achievements most players have. With nothing running it
 shows the last three games you played instead (a finished one carries its
-platinum date). Below sits your platinum shelf. The **Games** tab lists every
+platinum date). Below them come your three rarest unlocks across every game,
+ever or this month, and your platinum shelf. The **Games** tab lists every
 game with its count, sorted by last played, closest to platinum or name.
 Type (or press `/`) to filter by name; Enter opens the first match. Hover a
 game and click **Hide** to set aside one you won't finish: it leaves
