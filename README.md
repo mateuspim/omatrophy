@@ -144,7 +144,9 @@ each tier with your settings. Each choice applies to the next toast.
 **Stores**, a card per store says whether OmaTrophy found it and how many
 games it has, or what to do when it didn't. In Steam's card, **Profile**
 fills in games this machine never ran from your public Steam profile (off
-by default). GOG has nothing to set. Steam also shows its own popup for each unlock; **Turn off in Steam** opens
+by default), and **Load from Steam** has the Steam client save the
+achievements of played games OmaTrophy can't see yet (it shows how many;
+the Games tab has the same button and the progress). GOG has nothing to set. Steam also shows its own popup for each unlock; **Turn off in Steam** opens
 Steam's Notifications settings: untick Show Toast (and Play Sound) on
 "When I unlock an achievement".
 

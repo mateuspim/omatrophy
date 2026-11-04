@@ -44,6 +44,15 @@ Column {
   // The Steam profile backfill's latest line, from its status.json
   // (stores/steam_community.py); {} before the first run.
   property var backfill: ({})
+  // Load from Steam (ADR 13): played Steam games with no stats here, from
+  // `steam-load status`, and the latest run, from steam-load/status.json.
+  property int steamMissing: 0
+  property var steamLoad: ({})
+  // A run rewrites its status every few seconds; one quiet for a minute
+  // died (omatrophy.py's STEAM_LOAD_STALE).
+  readonly property bool steamLoading: steamLoad.state === "running" && clock - steamLoad.time < 60
+  // Seconds, ticked while a load runs so a dead one stops looking alive.
+  property real clock: Date.now() / 1000
 
   // From `omatrophy.py now`; null until it answers. dev/render.sh turns
   // `live` off and sets `cabinet` to sample data.
@@ -297,6 +306,32 @@ Column {
     return "Last run " + at + " · " + b.line
   }
 
+  // What the Load from Steam row says: progress while it runs, why it
+  // stopped, or how many games it would load. Steam's window moving is
+  // said up front, since that is the surprise.
+  function steamLoadText() {
+    var l = steamLoad
+    if (steamLoading)
+      return "Loading " + l.done + " of " + l.total + " · " + l.loaded + " found. Steam's window moves while this runs."
+    if (l.state === "failed") return l.line.replace(/^stopped: /, "Stopped: ")
+    var left = steamMissing === 1 ? "1 played game isn't" : steamMissing + " played games aren't"
+    if (steamMissing > 0)
+      return left + " here yet. Load opens each one's page in Steam, so Steam saves its achievements on this machine; its window moves while it runs."
+    if (l.time) return "Every played game is here. Last load " + Qt.formatTime(new Date(l.time * 1000), "hh:mm") + "."
+    return "Every played game is here."
+  }
+
+  // Detached: the panel's content is rebuilt on every open, and a child
+  // process would end with it.
+  function startSteamLoad() {
+    steamLoad = { state: "running", time: Date.now() / 1000, done: 0, total: steamMissing, loaded: 0 }
+    Quickshell.execDetached(["python3", helperPath, "steam-load"])
+  }
+
+  function stopSteamLoad() {
+    runner.exec(["python3", helperPath, "steam-load", "stop"])
+  }
+
   // ---------------------------------------------------- Files and processes
   // What the panel reads (settings, the last answers, the backfill's
   // status) and the omatrophy.py calls that fill it.
@@ -357,6 +392,40 @@ Column {
     onLoaded: {
       try { root.backfill = JSON.parse(text()) } catch (e) {}
     }
+  }
+
+  FileView {
+    path: root.live ? Quickshell.env("HOME") + "/.cache/omatrophy/steam-load/status.json" : ""
+    watchChanges: true
+    printErrors: false
+    onFileChanged: {
+      reload()
+      // Each loaded game joins the Games tab as it lands.
+      if (root.games !== null && !gamesReader.running) gamesReader.running = true
+    }
+    onLoaded: {
+      var was = root.steamLoad.state
+      try { root.steamLoad = JSON.parse(text()) } catch (e) {}
+      if (was === "running" && root.steamLoad.state !== "running") steamLoadReader.running = true
+    }
+  }
+
+  Process {
+    id: steamLoadReader
+    running: root.live
+    command: ["python3", root.helperPath, "steam-load", "status"]
+    stdout: StdioCollector {
+      onStreamFinished: {
+        try { root.steamMissing = JSON.parse(text).missing || 0 } catch (e) {}
+      }
+    }
+  }
+
+  Timer {
+    interval: 5000
+    repeat: true
+    running: root.steamLoad.state === "running"
+    onTriggered: root.clock = Date.now() / 1000
   }
 
   Process { id: runner }
@@ -662,6 +731,39 @@ Column {
           onClicked: chips.picked(chip.modelData.value)
         }
       }
+    }
+  }
+
+  // A small outlined button: Load from Steam, Stop.
+  component PillButton: Rectangle {
+    id: pill
+    property string label: ""
+    signal clicked()
+    width: pillText.implicitWidth + Commons.Style.space(20)
+    height: pillText.implicitHeight + Commons.Style.space(10)
+    radius: height / 2
+    color: pillHit.containsMouse ? Commons.Style.hoverFill : "transparent"
+    border.width: 1
+    border.color: Qt.alpha(root.foreground, pillHit.containsMouse ? 0.35 : 0.18)
+    Accessible.role: Accessible.Button
+    Accessible.name: label
+    Behavior on color { ColorAnimation { duration: 120 } }
+    Text {
+      textFormat: Text.PlainText
+      id: pillText
+      anchors.centerIn: parent
+      text: pill.label
+      color: root.foreground
+      opacity: 0.8
+      font.family: Commons.Style.font.family
+      font.pixelSize: Commons.Style.font.caption
+    }
+    MouseArea {
+      id: pillHit
+      anchors.fill: parent
+      hoverEnabled: true
+      cursorShape: Qt.PointingHandCursor
+      onClicked: pill.clicked()
     }
   }
 
@@ -2415,6 +2517,33 @@ Column {
       Keys.onTabPressed: focus = false
     }
 
+    // Played Steam games OmaTrophy can't see yet, and the way to load
+    // them; also the progress while a load runs.
+    Item {
+      width: root.width
+      height: Math.max(steamLoadLine.implicitHeight, steamLoadButton.height)
+      visible: root.steamLoading || root.steamMissing > 0
+      Caption {
+        textFormat: Text.PlainText
+        id: steamLoadLine
+        anchors.left: parent.left
+        anchors.right: steamLoadButton.left
+        anchors.rightMargin: Commons.Style.space(8)
+        anchors.verticalCenter: parent.verticalCenter
+        opacity: 0.5
+        text: root.steamLoading
+              ? "Loading from Steam · " + root.steamLoad.done + " of " + root.steamLoad.total
+              : (root.steamMissing === 1 ? "1 Steam game isn't here yet" : root.steamMissing + " Steam games aren't here yet")
+      }
+      PillButton {
+        id: steamLoadButton
+        anchors.right: parent.right
+        anchors.verticalCenter: parent.verticalCenter
+        label: root.steamLoading ? "Stop" : "Load from Steam"
+        onClicked: root.steamLoading ? root.stopSteamLoad() : root.startSteamLoad()
+      }
+    }
+
     // ------------------------------------------------ game list
 
     Repeater {
@@ -2942,6 +3071,25 @@ Column {
         wrapMode: Text.WordWrap
         opacity: 0.4
         text: root.backfillText()
+      }
+
+      // Load from Steam (ADR 13): only ever started here or from the CLI,
+      // never by the watcher, because Steam's window moves.
+      SettingRow {
+        label: "LIBRARY"
+        PillButton {
+          label: root.steamLoading ? "Stop" : "Load from Steam"
+          visible: root.steamLoading || root.steamMissing > 0
+          onClicked: root.steamLoading ? root.stopSteamLoad() : root.startSteamLoad()
+        }
+      }
+
+      Caption {
+        textFormat: Text.PlainText
+        width: parent.width
+        wrapMode: Text.WordWrap
+        opacity: 0.4
+        text: root.steamLoadText()
       }
 
       // Steam shows its own popup for the same unlock. OmaTrophy only reads
