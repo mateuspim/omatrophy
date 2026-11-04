@@ -9,8 +9,7 @@ import qs.Commons as Commons
 // you got it, and filters (all, locked, unlocked, rare) plus type-to-search.
 // It changes nothing in a game; the only things it writes are your own
 // settings through omatrophy.py (its sort; trophies pinned to the Profile
-// showcase with ☆, finished games to its completionist tile, and the
-// favorite game with ♡). Built from its text by Tracker.qml (FreshObject.qml), so it must not use
+// showcase with ☆, finished games to its completionist tile). Built from its text by Tracker.qml (FreshObject.qml), so it must not use
 // other QML types from this folder. Tracker.qml calls load(); dev/render.sh
 // sets `game` to sample data instead.
 Item {
@@ -55,11 +54,9 @@ Item {
   // "store:game:api", or "store:game" for a game's platinum.
   property var showcaseKeys: []
   readonly property int showcaseMax: 6
-  // Finished games pinned to the Profile's completionist tile, and the
-  // favorite game, both "store:game".
+  // Finished games pinned to the Profile's completionist tile, "store:game".
   property var completionistKeys: []
   readonly property int completionistMax: 4
-  property string favoriteKey: ""
   // An achievement to highlight once the game loads, from the request.
   property string focusApi: ""
 
@@ -236,15 +233,6 @@ Item {
     saver.exec(["python3", helperPath, "completionist", add ? "add" : "remove", String(game.store), String(game.app)])
   }
 
-  // Makes this game the Profile's favorite, or clears it when it already is.
-  function toggleFavorite() {
-    var key = showcaseKey("")
-    var clear = favoriteKey === key
-    favoriteKey = clear ? "" : key
-    saver.exec(clear ? ["python3", helperPath, "favorite", "clear"]
-                     : ["python3", helperPath, "favorite", String(game.store), String(game.app)])
-  }
-
   // Move the highlighted row; the first key press lands on the first row.
   function moveTo(index) {
     if (list.count === 0) return
@@ -309,7 +297,6 @@ Item {
       if (c["tracker-sort"]) root.sortBy = c["tracker-sort"]
       if (Array.isArray(c.showcase)) root.showcaseKeys = c.showcase
       if (Array.isArray(c.completionist)) root.completionistKeys = c.completionist
-      if (typeof c.favorite === "string") root.favoriteKey = c.favorite
     }
   }
 
@@ -349,11 +336,7 @@ Item {
   component PinStar: Rectangle {
     id: pin
     property bool on: false
-    // The list it pins to: how full it is and what it is called.
-    property int count: root.showcaseKeys.length
-    property int max: root.showcaseMax
-    property string place: "showcase"
-    readonly property bool full: !on && count >= max
+    readonly property bool full: !on && root.showcaseKeys.length >= root.showcaseMax
     readonly property bool hovered: pinHit.containsMouse
     signal toggled()
     width: Commons.Style.space(26)
@@ -380,9 +363,9 @@ Item {
     }
     PanelToolTip {
       visible: pinHit.containsMouse
-      text: pin.on ? "On your " + pin.place + " · click to take it off"
-            : pin.full ? "Your " + pin.place + " is full (" + pin.max + ") · unpin one first"
-            : "Pin to your Profile's " + pin.place
+      text: pin.on ? "On your showcase · click to take it off"
+            : pin.full ? "Your showcase is full (6) · unpin one first"
+            : "Pin to your Profile's showcase"
     }
   }
 
@@ -678,50 +661,46 @@ Item {
               font.pixelSize: Commons.Style.font.bodySmall
               font.bold: true
             }
-            // A finished game can go on the completionist tile.
-            PinStar {
+            // A finished game can go on the Profile's completionist tile;
+            // labelled, so it doesn't read as one more star or favorite.
+            Rectangle {
+              id: completionistButton
+              readonly property bool on: root.game !== null && root.completionistKeys.indexOf(root.showcaseKey("")) >= 0
+              readonly property bool full: !on && root.completionistKeys.length >= root.completionistMax
               anchors.verticalCenter: parent.verticalCenter
-              on: root.game !== null && root.completionistKeys.indexOf(root.showcaseKey("")) >= 0
-              count: root.completionistKeys.length
-              max: root.completionistMax
-              place: "completionist tile"
-              onToggled: root.toggleCompletionist()
-            }
-          }
-          // Makes this the Profile's favorite game; one at a time.
-          Rectangle {
-            id: favoriteButton
-            readonly property bool on: root.game !== null && root.favoriteKey === root.showcaseKey("")
-            anchors.verticalCenter: parent.verticalCenter
-            width: favoriteText.implicitWidth + Commons.Style.space(14)
-            height: favoriteText.implicitHeight + Commons.Style.space(6)
-            radius: height / 2
-            color: on ? Qt.alpha(Commons.Color.accent, 0.25) : (favoriteHit.containsMouse ? Commons.Style.hoverFill : Qt.alpha(root.background, 0.5))
-            border.width: 1
-            border.color: on ? Commons.Color.accent : Qt.alpha(root.foreground, 0.25)
-            Accessible.role: Accessible.CheckBox
-            Accessible.name: "Favorite game"
-            Accessible.checked: on
-            Text {
-              textFormat: Text.PlainText
-              id: favoriteText
-              anchors.centerIn: parent
-              text: (favoriteButton.on ? "♥" : "♡") + " Favorite"
-              color: favoriteButton.on ? Commons.Color.accent : root.foreground
-              font.family: Commons.Style.font.family
-              font.pixelSize: Commons.Style.font.caption
-              font.bold: favoriteButton.on
-            }
-            MouseArea {
-              id: favoriteHit
-              anchors.fill: parent
-              hoverEnabled: true
-              cursorShape: Qt.PointingHandCursor
-              onClicked: root.toggleFavorite()
-            }
-            PanelToolTip {
-              visible: favoriteHit.containsMouse
-              text: favoriteButton.on ? "Your Profile's favorite game · click to clear" : "Make this your Profile's favorite game"
+              width: completionistText.implicitWidth + Commons.Style.space(14)
+              height: completionistText.implicitHeight + Commons.Style.space(6)
+              radius: height / 2
+              color: on ? Qt.alpha(Commons.Color.accent, 0.25) : (completionistHit.containsMouse && !full ? Commons.Style.hoverFill : Qt.alpha(root.background, 0.5))
+              border.width: 1
+              border.color: on ? Commons.Color.accent : Qt.alpha(root.foreground, 0.25)
+              opacity: full ? 0.5 : 1
+              Accessible.role: Accessible.CheckBox
+              Accessible.name: "On the Profile's completionist tile"
+              Accessible.checked: on
+              Text {
+                textFormat: Text.PlainText
+                id: completionistText
+                anchors.centerIn: parent
+                text: (completionistButton.on ? "★" : "☆") + " Completionist"
+                color: completionistButton.on ? Commons.Color.accent : root.foreground
+                font.family: Commons.Style.font.family
+                font.pixelSize: Commons.Style.font.caption
+                font.bold: completionistButton.on
+              }
+              MouseArea {
+                id: completionistHit
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: completionistButton.full ? Qt.ArrowCursor : Qt.PointingHandCursor
+                onClicked: if (!completionistButton.full) root.toggleCompletionist()
+              }
+              PanelToolTip {
+                visible: completionistHit.containsMouse
+                text: completionistButton.on ? "On your Profile's completionist tile · click to take it off"
+                      : completionistButton.full ? "The completionist tile is full (4) · unpin one first"
+                      : "Show this platinum on your Profile's completionist tile"
+              }
             }
           }
         }

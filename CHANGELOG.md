@@ -15,10 +15,9 @@
   highlighted and revealed. Needs a shell restart (Panel.qml).
 - A Profile tab, after Steam's profile showcases, picked from the
   tracker: a favorite game (+ Choose game on the tile searches your
-  games, or ♡ Favorite in the tracker: hours, trophies, its six rarest
-  unlocks), a showcase of six trophies (☆; your rarest until you pin
-  any), a completionist tile of up to four finished games (☆ beside
-  Platinum; your two newest until you pin any) with games completed,
+  games: hours, trophies, its six rarest unlocks), a showcase of six trophies (☆; your rarest until you pin
+  any), a completionist tile of up to four finished games (☆ Completionist
+  beside Platinum; your two newest until you pin any) with games completed,
   started and average completion, and hours played in two weeks and in
   all. Drag showcase trophies to reorder them. New commands `favorite`,
   `showcase`, `completionist` (each pin list also takes `order`). Stores gain

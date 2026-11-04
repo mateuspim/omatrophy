@@ -1969,7 +1969,7 @@ Column {
         wrapMode: Text.WordWrap
         elide: Text.ElideNone
         opacity: 0.5
-        text: "Choose game above, or click ♡ Favorite in a game's tracker."
+        text: "No favorite yet · + Choose game picks one."
       }
     }
 
@@ -2230,7 +2230,7 @@ Column {
       foreground: root.foreground
     }
 
-    // Up to four finished games you pin with ☆ beside "Platinum" in the
+    // Up to four finished games you pin with "☆ Completionist" in the
     // tracker, like Steam's completionist showcase; until you pin one,
     // your two newest platinums stand in.
     Grid {
@@ -2325,7 +2325,7 @@ Column {
     Caption {
       visible: newestPlatinums.visible && !newestPlatinums.picked
       opacity: 0.45
-      text: "Your newest platinums · ☆ beside Platinum in the tracker picks your own"
+      text: "Your newest platinums · ☆ Completionist in the tracker picks your own"
     }
 
     Row {
