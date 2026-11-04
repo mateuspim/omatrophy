@@ -4,7 +4,7 @@ Nothing here opens Steam or touches a real cache.
 
 Run from the repo root: python3 -m unittest discover -s tests
 """
-import os, sys, tempfile, unittest
+import json, os, sys, tempfile, unittest
 from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -29,28 +29,48 @@ class FakeClock:
         self.now += seconds
 
 
+class NoWindow:
+    """A SteamWindow stand-in that records calls."""
+
+    def __init__(self):
+        self.calls = []
+
+    def hide(self):
+        self.calls.append('hide')
+
+    def restore(self):
+        self.calls.append('restore')
+
+
 class LoaderCache(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
-        patch = mock.patch.object(steam_loader, 'CACHE', tmp.name)
-        patch.start()
-        self.addCleanup(patch.stop)
+        # A test on a Hyprland desktop must never move the real Steam window.
+        for name, value in (('CACHE', tmp.name),
+                            ('hyprctl', mock.Mock(side_effect=AssertionError('hyprctl in a test')))):
+            patch = mock.patch.object(steam_loader, name, value)
+            patch.start()
+            self.addCleanup(patch.stop)
 
 
 class Missing(unittest.TestCase):
     def test_played_without_stats_most_played_first(self):
         played = {'10': {'total': 5}, '20': {'total': 500}, '30': {'total': 50}, '40': {'total': 0}}
-        self.assertEqual(steam_loader.missing(played, {'30'}, {}, 0), ['20', '10'])
+        self.assertEqual(steam_loader.missing(played, {'30'}, {}), ['20', '10'])
 
-    def test_a_recent_none_waits_a_month(self):
-        now = 100 * DAY
+    def test_a_tried_game_is_never_tried_again(self):
+        played = {'10': {'total': 5}, '20': {'total': 9}, '30': {'total': 1}}
+        tried = {'10': {'time': 1, 'found': False}, '20': {'time': 1, 'found': True}}
+        self.assertEqual(steam_loader.missing(played, set(), tried), ['30'])
+
+    def test_everything_tries_them_all_again(self):
         played = {'10': {'total': 5}, '20': {'total': 9}}
-        nones = {'10': now - DAY, '20': now - 31 * DAY}
-        self.assertEqual(steam_loader.missing(played, set(), nones, now), ['20'])
+        tried = {'10': {'time': 1, 'found': False}}
+        self.assertEqual(steam_loader.missing(played, {'20'}, tried, everything=True), ['10'])
 
     def test_bad_ids_are_skipped(self):
-        self.assertEqual(steam_loader.missing({'../x': {'total': 9}, '7': {'total': 1}}, set(), {}, 0), ['7'])
+        self.assertEqual(steam_loader.missing({'../x': {'total': 9}, '7': {'total': 1}}, set(), {}), ['7'])
 
 
 class Load(LoaderCache):
@@ -70,16 +90,18 @@ class Load(LoaderCache):
             return app in files
 
         start = [clock.now]
-        real_sleep = clock.sleep
+        self.window = NoWindow()
         result = steam_loader.load(todo, has_stats, busy, opener=opener, running=running,
-                                   clock=clock.time, sleep=real_sleep)
+                                   clock=clock.time, sleep=clock.sleep, window=self.window)
         return result, opened, clock
 
     def test_loads_and_remembers_games_without_stats(self):
         result, opened, _ = self.run_load(['1', '2', '3'], ready={'1', '3'})
         self.assertEqual(opened, ['1', '2', '3'])
         self.assertEqual(result, {'loaded': 2, 'none': 1, 'state': 'done'})
-        self.assertEqual(set(steam_loader.none_index()), {'2'})
+        self.assertEqual(steam_loader.checked(), {'1': {'time': 1_800_000_000, 'found': True},
+                                                  '2': {'time': 1_800_000_008, 'found': False},
+                                                  '3': {'time': 1_800_000_008, 'found': True}})
         status = steam_loader.status()
         self.assertEqual((status['done'], status['total'], status['state']), (3, 3, 'done'))
 
@@ -99,12 +121,43 @@ class Load(LoaderCache):
         self.assertEqual(opened, [])
         self.assertEqual(result['state'], 'failed')
 
-    def test_stop_request_ends_after_the_current_game(self):
-        result, opened, _ = self.run_load(['1', '2', '3'], ready={'1', '2', '3'},
-                                          after=lambda app: steam_loader.request_stop())
+    def test_stop_acts_mid_wait(self):
+        result, opened, clock = self.run_load(['1', '2', '3'], after=lambda app: steam_loader.request_stop())
         self.assertEqual(opened, ['1'])
-        self.assertEqual(result, {'loaded': 1, 'none': 0, 'state': 'stopped'})
+        self.assertEqual(result, {'loaded': 0, 'none': 0, 'state': 'stopped'})
+        self.assertLess(clock.now - 1_800_000_000, 1)
         self.assertFalse(steam_loader.stop_requested())
+        self.assertEqual(steam_loader.status()['state'], 'stopped')
+
+    def test_the_window_is_hidden_then_put_back(self):
+        self.run_load(['1', '2'], ready={'1', '2'})
+        self.assertEqual(self.window.calls, ['hide', 'hide', 'hide', 'restore'])
+
+    def test_status_says_which_kind_of_run(self):
+        steam_loader.load(['1'], lambda app: True, lambda: False, opener=lambda app: None,
+                          running=lambda: True, window=NoWindow(), everything=True)
+        self.assertTrue(steam_loader.status()['everything'])
+
+    def test_the_window_comes_back_after_a_failure(self):
+        self.run_load(['1'], busy=lambda: True)
+        self.assertEqual(self.window.calls[-1], 'restore')
+
+    def test_a_stopped_run_resumes_at_the_next_game(self):
+        self.run_load(['1', '2', '3'], ready={'1', '2', '3'},
+                      after=lambda app: app == '2' and steam_loader.request_stop())
+        # 2's file came before the stop took effect, so it counts.
+        self.assertEqual(set(steam_loader.checked()), {'1', '2'})
+        played = {a: {'total': 10 - int(a)} for a in ('1', '2', '3')}
+        self.assertEqual(steam_loader.missing(played, set(), steam_loader.checked()), ['3'])
+
+    def test_progress_names_the_game_being_tried(self):
+        seen = []
+        real = steam_loader.write_json
+        with mock.patch.object(steam_loader, 'write_json',
+                               side_effect=lambda path, v: (seen.append(dict(v)) if path.endswith('status.json') else None, real(path, v))):
+            self.run_load(['1'], ready={'1'})
+        self.assertEqual([(v['state'], v['done'], v['app']) for v in seen],
+                         [('running', 0, ''), ('running', 0, '1'), ('running', 1, ''), ('done', 1, '')])
 
     def test_a_stale_stop_does_not_cancel_the_next_run(self):
         steam_loader.request_stop()
@@ -119,8 +172,75 @@ class Load(LoaderCache):
         def opener(app):
             raise OSError('neither steam nor xdg-open is on PATH')
         result = steam_loader.load(['1'], lambda app: False, lambda: False, opener=opener,
-                                   running=lambda: True, clock=FakeClock().time, sleep=FakeClock().sleep)
+                                   running=lambda: True, clock=FakeClock().time, sleep=FakeClock().sleep,
+                                   window=NoWindow())
         self.assertEqual(result['state'], 'failed')
+
+
+class FakeHyprctl:
+    """hyprctl with a fixed client list; records dispatches."""
+
+    def __init__(self, clients, focus_on_activate=1):
+        self.clients, self.focus = clients, focus_on_activate
+        self.dispatched = []
+
+    def __call__(self, *args):
+        if args[0] == 'clients':
+            return json.dumps(self.clients)
+        if args[0] == 'getoption':
+            return json.dumps({'int': self.focus})
+        self.dispatched.append(args[1])
+        return 'ok'
+
+
+def client(address, workspace, cls='steam'):
+    return {'address': address, 'class': cls, 'workspace': {'name': workspace}}
+
+
+class SteamWindowOnHyprland(unittest.TestCase):
+    def setUp(self):
+        patch = mock.patch.dict(os.environ, {'HYPRLAND_INSTANCE_SIGNATURE': 'test'})
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def test_hides_steam_windows_and_puts_them_back(self):
+        ctl = FakeHyprctl([client('0x1', '4'), client('0x2', '2', cls='kitty')])
+        w = steam_loader.SteamWindow(ctl)
+        w.hide()
+        self.assertEqual(len(ctl.dispatched), 2)
+        self.assertIn('prop = "focus_on_activate", value = 0', ctl.dispatched[0])
+        self.assertIn('workspace = "special:omatrophy", follow = false', ctl.dispatched[1])
+        self.assertNotIn('0x2', ''.join(ctl.dispatched))
+        ctl.clients = [client('0x1', 'special:omatrophy')]
+        w.hide()
+        self.assertEqual(len(ctl.dispatched), 2)
+        w.restore()
+        self.assertIn('value = 1', ctl.dispatched[2])
+        self.assertIn('workspace = "4"', ctl.dispatched[3])
+
+    def test_keeps_the_users_focus_setting(self):
+        ctl = FakeHyprctl([client('0x1', '4')], focus_on_activate=0)
+        w = steam_loader.SteamWindow(ctl)
+        w.hide()
+        w.restore()
+        self.assertIn('value = 0', ctl.dispatched[2])
+
+    def test_a_window_the_load_opened_is_closed_again(self):
+        ctl = FakeHyprctl([])
+        w = steam_loader.SteamWindow(ctl)
+        w.hide()
+        ctl.clients = [client('0x9', '1')]
+        w.hide()
+        w.restore()
+        self.assertIn('hl.dsp.window.close({ window = "address:0x9" })', ctl.dispatched[-1])
+
+    def test_nothing_without_hyprland(self):
+        ctl = FakeHyprctl([client('0x1', '4')])
+        with mock.patch.dict(os.environ, {'HYPRLAND_INSTANCE_SIGNATURE': ''}):
+            w = steam_loader.SteamWindow(ctl)
+        w.hide()
+        w.restore()
+        self.assertEqual(ctl.dispatched, [])
 
 
 class SteamRunning(unittest.TestCase):

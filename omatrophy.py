@@ -19,8 +19,9 @@ Usage:
   omatrophy.py set rarest ever|month|platinum
   omatrophy.py set community on|off   fill in games this machine never ran from your public Steam profile
   omatrophy.py sync                   run that backfill now, with progress
-  omatrophy.py steam-load             open each played game's Steam page so Steam caches its stats (ADR 13)
-  omatrophy.py steam-load stop|status stop a running load after its current game; or its progress, as JSON
+  omatrophy.py steam-load [all]       have Steam cache the stats of played games not tried yet (ADR 13);
+                                      `all` tries every played game without stats again
+  omatrophy.py steam-load stop|status stop a running load; or its progress, as JSON
   omatrophy.py hide <store> <game>    keep a game you won't finish out of "closest to platinum"
   omatrophy.py unhide <store> <game>  bring it back
   omatrophy.py favorite <store> <game>|clear
@@ -252,14 +253,16 @@ def steam_load_busy(state, now):
 
 
 def steam_load_status():
-    """{missing, status} for the panel: how many played games lack stats
-    here, and the latest run."""
+    """{missing, unchecked, status} for the panel: played games without
+    stats here, those no load has tried yet, and the latest run."""
     from stores import steam_loader
-    print(json.dumps({'missing': len(steam_store().missing()), 'status': steam_loader.status()}))
+    steam = steam_store()
+    print(json.dumps({'missing': len(steam.missing(everything=True)), 'unchecked': len(steam.missing()),
+                      'status': steam_loader.status()}))
 
 
-def steam_load():
-    """Load every missing game's stats through the Steam client, printing progress."""
+def steam_load(everything=False):
+    """Load missing games' stats through the Steam client, printing progress."""
     from stores import steam_loader
     steam = steam_store()
     if steam_load_busy(steam_loader.status(), time.time()):
@@ -267,7 +270,7 @@ def steam_load():
     # Steam's window must not jump over a game from any store.
     others = stores.available()
     busy = lambda: any(s.running() for s in others)
-    result = steam.load_from_steam(busy, say=lambda line: print(f'steam: {line}', flush=True))
+    result = steam.load_from_steam(busy, say=lambda line: print(f'steam: {line}', flush=True), everything=everything)
     if result['state'] == 'failed':
         raise SystemExit(1)
 
@@ -982,8 +985,8 @@ def main(argv):
         set_option(argv[2], argv[3])
     elif cmd == 'sync':
         sync()
-    elif cmd == 'steam-load' and len(argv) == 2:
-        steam_load()
+    elif cmd == 'steam-load' and argv[2:] in ([], ['all']):
+        steam_load(everything=argv[2:] == ['all'])
     elif cmd == 'steam-load' and argv[2:] == ['stop']:
         from stores import steam_loader
         steam_loader.request_stop()

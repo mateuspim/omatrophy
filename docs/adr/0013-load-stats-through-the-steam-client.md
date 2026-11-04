@@ -29,31 +29,44 @@ client's own cache needs none of that.
 - Played games are the whole queue: you can't earn achievements in a game
   you never played, so owned-but-unplayed games (Steam's binary
   packageinfo/appinfo) aren't read.
-- A game whose page opened without a stats file has no achievements, as
-  far as we can tell, and goes into `~/.cache/omatrophy/steam-load/none.json`.
-  It is tried again after 30 days.
-- Only the owner starts it, from the CLI or the panel, never the watcher:
-  Steam's window comes forward and changes page for every game. It stops
-  when Steam closes, when any store reports a running game (the window
-  must not jump over a game, see ADR 8), or on `steam-load stop`. Progress
-  goes to `steam-load/status.json`. A rerun picks up where the last one
-  stopped, since loaded games have their file now.
+- Every game tried goes into `~/.cache/omatrophy/steam-load/checked.json`
+  the moment it is done, with whether a stats file came: the checkpoint. A
+  game in it is never tried again, so a stopped run resumes at the next
+  game and a later load only takes games played since. A game whose page
+  opened without a file has no achievements, as far as we can tell. Only
+  `steam-load all` (Check all again in the panel) tries every played game
+  without stats again: whole-library passes happen only when the owner
+  asks.
+- On Hyprland, Steam's window waits on a hidden special workspace
+  (`special:omatrophy`) while a load runs, with `focus_on_activate` off
+  for that window only, and goes back to its workspace afterwards; a
+  window the load itself opened (Steam was in the tray) is closed again.
+  This is set at runtime through `hyprctl`; Hyprland's config is never
+  written. Elsewhere the window comes forward page by page.
+- Only the owner starts it, from the CLI or the panel, never the watcher.
+  It stops when Steam closes, when any store reports a running game (see
+  ADR 8), or on `steam-load stop`, which also cuts short the wait on the
+  current game. Progress, with the game being tried, goes to
+  `steam-load/status.json`; the panel shows it as a bar on every tab.
 - OmaTrophy writes nothing into Steam's files; the client writes its own
   cache, as it does when you click through the library yourself.
 
 ## Consequences
 
-- A library fills in locally in minutes: about a second per game with
-  achievements and 8 s per game without, with no key, no public profile
-  and no rate limit. The files are the same ones ADR 1 reads, so toasts,
+- A library fills in locally in minutes, out of sight: about a second
+  per game with achievements and 8 s per game without, with no key, no
+  public profile and no rate limit. The files are the same ones ADR 1 reads, so toasts,
   progress counters and the tracker work for those games as if they had
   run here.
 - The steam:// page path is undocumented and Valve's to change. If it
-  stops caching stats, every game times out and lands in none.json for a
-  month (unverified how such a change would look); deleting the folder
-  resets it.
-- Steam may drop those cache files later (unverified); a rerun reloads
-  them.
+  stops caching stats, every game times out and is marked tried
+  (unverified how such a change would look); Check all again, or deleting
+  the folder, retries them.
+- Steam may drop those cache files later (unverified); since tried games
+  aren't retried on their own, Check all again reloads them.
+- The window hiding leans on Hyprland 0.56's Lua dispatch
+  (`hl.dsp.window.move`, `hl.dsp.window.set_prop`). If those change, the
+  calls fail quietly and the window comes forward again.
 - The community backfill stays for what this can't reach: unlock times for
   games whose stats Steam won't load here, and machines where the owner
   won't let Steam's window move.

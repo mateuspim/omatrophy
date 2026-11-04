@@ -332,17 +332,18 @@ class Steam(Store):
         self.remember_names()
         return result
 
-    def missing(self):
-        """Played games with no local stats file, most played first: the
-        queue for Load from Steam (ADR 13)."""
+    def missing(self, everything=False):
+        """Played games with no local stats file that no load has tried yet
+        (with `everything`, tried or not), most played first: the queue
+        for Load from Steam (ADR 13)."""
         return steam_loader.missing(self.playtime(), set(self.local_games()),
-                                    steam_loader.none_index(), time.time())
+                                    steam_loader.checked(), everything)
 
-    def load_from_steam(self, busy, say=None):
+    def load_from_steam(self, busy, say=None, everything=False):
         """Open each missing game's library page so the client caches its
-        stats. Only the owner starts this: Steam's window moves."""
+        stats. Only the owner starts this."""
         stats = lambda app: os.path.exists(f'{self.stats}/UserGameStats_{self.uid}_{app}.bin')
-        return steam_loader.load(self.missing(), stats, busy, say=say)
+        return steam_loader.load(self.missing(everything), stats, busy, say=say, everything=everything)
 
     def remember_names(self):
         """Copy game names from cached profile pages into the name cache,
