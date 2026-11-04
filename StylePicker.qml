@@ -437,18 +437,24 @@ Column {
     }
   }
 
-  // A tab's content, faded in and risen a few pixels each time it shows.
+  // A tab's content, faded in each time it shows. It goes to opacity 0 as
+  // it hides, so it never shows a frame at full opacity before the fade
+  // starts; that frame, plus a rise on top of the panel snapping to the new
+  // tab's height, read as a jump.
   component TabPage: Column {
     id: page
-    property real rise: 0
     width: root.width
-    transform: Translate { y: page.rise }
-    onVisibleChanged: if (visible) enter.restart()
-    ParallelAnimation {
-      id: enter
-      NumberAnimation { target: page; property: "opacity"; from: 0; to: 1; duration: 220; easing.type: Easing.OutCubic }
-      NumberAnimation { target: page; property: "rise"; from: 8; to: 0; duration: 260; easing.type: Easing.OutCubic }
+    // Tabs that start hidden fade in on their first show too.
+    Component.onCompleted: if (!visible) opacity = 0
+    onVisibleChanged: {
+      if (visible) {
+        enter.restart()
+        return
+      }
+      enter.stop()
+      opacity = 0
     }
+    NumberAnimation { id: enter; target: page; property: "opacity"; to: 1; duration: 160; easing.type: Easing.OutCubic }
   }
 
   // A loading placeholder, like a web skeleton: a dim block with a band of
