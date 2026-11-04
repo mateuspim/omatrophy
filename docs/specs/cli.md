@@ -16,7 +16,7 @@ installed.
 | `guide [store app]`, `guide import <folder> [--replace]` | One game's 100% guide as JSON for the tracker, or copy guides in from another folder ([guides](guides.md#command-line)). |
 | `guide make <store> <app> [--no-web] [--agent a] [--model m] [--effort e]`, `guide stop`, `guide status` | Make a guide through your agent (ADR 14), stop it, or read its progress ([guides](guides.md#the-make-job)). |
 | `guide agents`, `guide model <agent> <model> [effort]\|default` | The agents, their models and your picks; set or clear one agent's pick. |
-| `set guide-agent default\|<agent>`, `set guide-web on\|off` | Which agent makes guides, and whether it may search the web. |
+| `set guide-agent default\|<agent>`, `set guide-web on\|off`, `set guide-jail on\|off` | Which agent makes guides, whether it may search the web, and whether it runs inside ai-jail. |
 | `set position top-center\|top-left\|top-right` | Where cards appear. |
 | `set sound on\|off\|omatrophy\|classic` | The chime: on, off, or which set (which also turns it on). |
 | `set icons omarchy\|vector\|painted` | Trophy art set. |

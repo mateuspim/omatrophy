@@ -52,7 +52,9 @@ what OmaTrophy does with that access:
   pages you saved in `guides/sources/`. It writes only in
   `~/.local/share/omatrophy/guides/`. An agent whose lock isn't checked on a
   real run (`dev/check-lock.py`) never runs, and no adapter ever passes an
-  auto-approve flag.
+  auto-approve flag. With `guide-jail` on, the agent also runs inside
+  ai-jail (bubblewrap, Landlock, seccomp): only the job's folder is
+  writable and only the variables it needs are passed in.
 - Root: never.
 - Network: HTTPS to the stores' public, keyless hosts only, when an unlock is
   shown or the bar panel or tracker opens, plus one name lookup per uncached

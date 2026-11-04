@@ -575,7 +575,7 @@ class Job:
     """One make: holds the status, the usage and the sources as it goes."""
 
     def __init__(self, store, app, game, achievements, adapter, model='', effort='', web=True, folder=None,
-                 fetch=None, list_guides=None, say=None, clock=time.time, minutes=0):
+                 fetch=None, list_guides=None, say=None, clock=time.time, minutes=0, jail=False):
         self.store, self.app, self.game, self.achs = store, str(app), game, achievements
         self.adapter, self.model, self.effort = adapter, model, effort
         self.web = web and adapter.web
@@ -585,6 +585,7 @@ class Job:
         self.say = say or (lambda line: None)
         self.clock = clock
         self.minutes = minutes
+        self.jail = jail
         self.usage, self.sources, self.fetched, self.links = [], {}, 0, []
         self.done, self.total, self.stage = 0, 0, ''
         self.started = int(clock())
@@ -595,7 +596,7 @@ class Job:
             'state': state, 'store': self.store, 'app': self.app, 'game': self.game, 'stage': self.stage,
             'done': self.done, 'total': self.total, 'line': line, 'started': self.started,
             'time': int(self.clock()), 'agent': self.adapter.id, 'model': self.model, 'pid': os.getpid(),
-            'web': self.web, 'open': sum(1 for a in self.achs if not a.get('unlocked'))})
+            'web': self.web, 'jail': self.jail, 'open': sum(1 for a in self.achs if not a.get('unlocked'))})
         if line:
             self.say(line)
 
@@ -616,7 +617,7 @@ class Job:
                 text = (text + '\n\nYour last answer had these problems:\n' + '\n'.join(f'- {e}' for e in errors[:20])
                         + '\nAnswer again in full, inside the tags.')
             found = guide_agents.run(self.adapter, text, web=self.web and stage == 'research', model=self.model,
-                                     effort=self.effort, stopped=lambda: stop_requested(self.folder))
+                                     effort=self.effort, stopped=lambda: stop_requested(self.folder), jail=self.jail)
             self.usage.append({'engine': self.adapter.id, 'model': self.model, 'stage': stage,
                                'input': found['usage'].get('input', 0), 'output': found['usage'].get('output', 0),
                                'cost_usd': found['usage'].get('cost_usd'), 'seconds': found['seconds'],
@@ -771,7 +772,7 @@ class Job:
             plan_items[key] = entry
         plan = dict(old)
         plan.update({'format': 2, 'generated': int(self.clock()),
-                     'agent': {'name': self.adapter.id, 'model': self.model, 'effort': self.effort,
+                     'agent': {'name': self.adapter.id, 'model': self.model, 'effort': self.effort, 'jail': self.jail,
                                'stages': stage_counts(self.usage)},
                      'order': route['order'] or list(items), 'items': plan_items,
                      'sections': route['sections'] or old.get('sections') or {},

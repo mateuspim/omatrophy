@@ -54,7 +54,8 @@
   ],
   "model": "sonnet",
   "effort": "medium",
-  "source": "built-in aliases"
+  "source": "built-in aliases",
+  "jail": true
  },
  {
   "agent": "codex",
@@ -66,7 +67,8 @@
   "models": [],
   "model": "",
   "effort": "",
-  "source": ""
+  "source": "",
+  "jail": true
  },
  {
   "agent": "opencode",
@@ -78,6 +80,7 @@
   "models": [],
   "model": "",
   "effort": "",
-  "source": ""
+  "source": "",
+  "jail": true
  }
 ]

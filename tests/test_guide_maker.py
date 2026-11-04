@@ -251,6 +251,17 @@ class Agents(unittest.TestCase):
         self.assertEqual(out['links'], ['https://b/c'])
         self.assertEqual(out['usage'], {'input': 7, 'output': 2, 'cost_usd': 0.5})
 
+    def test_jailed_wraps_the_command_and_passes_only_named_env(self):
+        with mock.patch.dict(os.environ, {'ANTHROPIC_BASE_URL': 'http://x', 'SECRET_THING': 'y'}):
+            argv = guide_agents.jailed(['claude', '-p'], {'OPENCODE_CONFIG_CONTENT': '{}'})
+        self.assertEqual(argv[:2], ['ai-jail', '--exec'])
+        self.assertEqual(argv[argv.index('--') + 1:], ['claude', '-p'])
+        envs = [argv[i + 1] for i, a in enumerate(argv) if a == '--env']
+        self.assertIn('ANTHROPIC_BASE_URL', envs)
+        self.assertIn('OPENCODE_CONFIG_CONTENT', envs)
+        self.assertNotIn('SECRET_THING', ' '.join(argv))
+        self.assertNotIn('--docker', argv)
+
     def test_codex_models_cache(self):
         with tempfile.TemporaryDirectory() as d:
             write(d, 'models_cache.json', json.dumps({'models': [

@@ -16,7 +16,7 @@ Usage:
   omatrophy.py guide make <store> <app> [--no-web] [--agent a] [--model m] [--effort e]
                                       make a guide through your agent (ADR 14); guide stop|status|agents
   omatrophy.py guide model <agent> <model> [effort]|default
-  omatrophy.py set guide-agent default|claude|...   set guide-web on|off
+  omatrophy.py set guide-agent default|claude|...   set guide-web on|off   set guide-jail on|off
   omatrophy.py set position <where>   top-center, top-left or top-right (applies live)
   omatrophy.py set glass <look>       clear, frosted or solid toast background
   omatrophy.py set sound on|off|omatrophy|classic
@@ -850,7 +850,7 @@ def guide(args):
     else:
         raise SystemExit(f'usage: omatrophy.py guide [{"|".join(s.id for s in found)} <game id>]\n'
                          '       omatrophy.py guide import <folder> [--replace]\n'
-                         '       omatrophy.py guide make <store> <app> [--no-web] [--notify] [--agent a] [--model m] [--effort e]\n'
+                         '       omatrophy.py guide make <store> <app> [--no-web] [--notify] [--jail|--no-jail] [--agent a] [--model m] [--effort e]\n'
                          '       omatrophy.py guide stop|status|agents\n'
                          '       omatrophy.py guide model <agent> <model> [effort] | default')
     print(json.dumps(guides.guide_answer(store.id, app, store.achievements(app))))
@@ -893,11 +893,17 @@ def guide_make(store_id, app, flags, cfg):
             web, i = False, i + 1
         elif flags[i] == '--notify':
             opts['notify'], i = True, i + 1
+        elif flags[i] in ('--jail', '--no-jail'):
+            opts['jail'], i = flags[i] == '--jail', i + 1
         elif flags[i] in ('--agent', '--model', '--effort') and i + 1 < len(flags):
             opts[flags[i][2:]], i = flags[i + 1], i + 2
         else:
             raise SystemExit(f'omatrophy: guide make: unknown option {flags[i]}')
     adapter = guide_agents.resolve(opts.get('agent', cfg.get('guide-agent') or ''))
+    jail = opts.get('jail', cfg.get('guide-jail') is True)
+    if jail and not guide_agents.jail_installed():
+        raise SystemExit('omatrophy: guide: ai-jail not found; install it, or turn the sandbox off: '
+                         'omatrophy.py set guide-jail off')
     pick = guide_agents.picks(cfg).get(adapter.id, {})
     if guide_maker.busy():
         raise SystemExit('omatrophy: guide: another guide is being made; stop it with: omatrophy.py guide stop')
@@ -911,7 +917,7 @@ def guide_make(store_id, app, flags, cfg):
         raise SystemExit(f'{store.name} has no achievements cached for {app}; launch it once in {store.name}')
     minutes = library_playtime([store]).get((store.id, app), {}).get('total', 0)
     job = guide_maker.Job(store.id, app, store.game_name(app), achs, adapter, model=opts.get('model', pick.get('model', '')),
-                          effort=opts.get('effort', pick.get('effort', '')), web=web, minutes=minutes,
+                          effort=opts.get('effort', pick.get('effort', '')), web=web, minutes=minutes, jail=jail,
                           say=lambda line: print(line, flush=True))
     if guide_maker.make(job, announce=opts.get('notify', False))['state'] == 'failed':
         raise SystemExit(1)
@@ -931,12 +937,13 @@ SETTINGS = {'position': ('top-center', 'top-left', 'top-right'),
             'games-sort': ('recent', 'closest', 'name'),
             'rarest': ('ever', 'month', 'platinum'),
             'community': ('on', 'off'),
-            'guide-web': ('on', 'off')}
+            'guide-web': ('on', 'off'),
+            'guide-jail': ('on', 'off')}
 # The Now tab's sections, each shown unless switched off in Settings.
 NOW_SECTIONS = ('metals', 'recent', 'rarest', 'shelf')
 SETTINGS.update({f'now-{name}': ('on', 'off') for name in NOW_SECTIONS})
 # Settings stored as true/false rather than the word given.
-SWITCHES = {'community', 'guide-web'} | {f'now-{name}' for name in NOW_SECTIONS}
+SWITCHES = {'community', 'guide-web', 'guide-jail'} | {f'now-{name}' for name in NOW_SECTIONS}
 
 
 def set_option(key, value):

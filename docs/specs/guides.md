@@ -126,7 +126,7 @@ OmaTrophy doesn't know survive a rewrite.
 | `guide import <folder>` | Copies every `*-<app>.md` with its `.plan.json` and `.sources.json` from another folder (the games app's `games/`), skipping files we already have (`--replace` overwrites). Read-only on `<folder>`. Prints `imported N, skipped M`. |
 | `guide agents` | Every agent with its models and picks (see Settings). |
 | `guide model <agent> <model> [effort]`, `guide model <agent> default` | Sets or clears that agent's pick in `guide-models`. |
-| `guide make <store> <app> [--no-web] [--notify] [--agent a] [--model m] [--effort e]` | Runs the job below; the flags override the settings for this run only. `--notify` (the tracker passes it) sends a desktop notification when the job is done or failed. One line per stage, then `done: N items, M verified`, or `stopped`/`failed: <what to do>`. Exits non-zero with no agent, an unsupported agent, or another job running. |
+| `guide make <store> <app> [--no-web] [--notify] [--jail\|--no-jail] [--agent a] [--model m] [--effort e]` | Runs the job below; the flags override the settings for this run only. `--notify` (the tracker passes it) sends a desktop notification when the job is done or failed. `--jail` runs the agent inside ai-jail (see Settings). One line per stage, then `done: N items, M verified`, or `stopped`/`failed: <what to do>`. Exits non-zero with no agent, an unsupported agent, or another job running. |
 | `guide stop` | Stops the job within half a second (the agent's process group is killed); nothing is written, so the old guide stays. |
 | `guide status` | `status.json`: `{state, store, app, game, stage, done, total, line, started, time, agent, model, pid, web, open}` (`web`: the research stage runs; `open`: achievements the guide covers); `state` is `running`, `done`, `stopped` or `failed`, and a `running` job whose `pid` is gone reads as `failed`. `{}` before any job. `done`/`total` count steps: gather, research (with web), one per classify batch, route, verify. |
 
@@ -137,9 +137,10 @@ OmaTrophy doesn't know survive a rewrite.
 | `guide-agent` | `""` (follow `omarchy-default-agent`) or any agent id in the adapter table. `set guide-agent default\|<id>`. | `""` |
 | `guide-models` | Per agent, `{agent: {"model": "...", "effort": "..."}}`; a missing agent or `""` uses that agent's own default. Written by `guide model` and the panel. | `{}` |
 | `guide-web` | `true`, `false`: let the agent search the web itself. `set guide-web on\|off`. | `true` |
+| `guide-jail` | `true`, `false`: run the agent inside [ai-jail](https://github.com/akitaonrails/ai-jail) (`ai-jail --exec ... --network -- <agent command>`): the job's empty folder read-write, the agent's own state dirs, the network, and only the environment variables it needs (its endpoint and key, when set). A second fence around the adapter's lock; an unchecked agent still never runs. Checked with `dev/check-lock.py --jail <agent>` (unverified as of 2026-11-04: written where ai-jail could not nest). `set guide-jail on\|off`. | `false` |
 
 `guide agents` prints `[{agent, name, installed, supported, default,
-web, models: [{id, name, efforts}], model, effort, source}]`. It lists
+web, models: [{id, name, efforts}], model, effort, source, jail}]` (`jail`: ai-jail is installed). It lists
 every agent in the adapter table. `default` marks the one
 `omarchy-default-agent` names, and `model`/`effort` are the picks from
 `guide-models`. `models` comes from the source named in the table and is

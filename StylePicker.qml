@@ -117,6 +117,7 @@ Column {
   property string guideAgent: ""
   property var guideModels: ({})
   property bool guideWeb: true
+  property bool guideJail: false
   property var guideJob: ({})
   // The agent a make uses now: the one picked, else Omarchy's default.
   readonly property var guideRow: guideAgents.find(function(a) { return guideAgent ? a.agent === guideAgent : a.default }) || null
@@ -160,6 +161,7 @@ Column {
     if (key === "glass") glass = value
     if (key === "community") community = value === "on"
     if (key === "guide-web") guideWeb = value === "on"
+    if (key === "guide-jail") guideJail = value === "on"
     if (key === "guide-agent") guideAgent = value === "default" ? "" : value
     if (key.indexOf("now-") === 0) {
       var shows = Object.assign({}, nowShows)
@@ -434,6 +436,7 @@ Column {
       root.guideAgent = typeof c["guide-agent"] === "string" ? c["guide-agent"] : ""
       root.guideModels = c["guide-models"] && typeof c["guide-models"] === "object" ? c["guide-models"] : {}
       root.guideWeb = c["guide-web"] !== false
+      root.guideJail = c["guide-jail"] === true
       if (c["games-sort"]) root.sort = c["games-sort"]
       if (c.rarest) root.rarestRange = c.rarest
       var shows = {}
@@ -1418,12 +1421,14 @@ Column {
   Rectangle {
     id: guideStrip
     readonly property var job: root.guideJob
-    readonly property bool running: job.state === "running"
-    readonly property bool recent: (job.state === "done" || job.state === "failed")
+    readonly property bool jobRunning: job.state === "running"
+    readonly property bool justEnded: (job.state === "done" || job.state === "failed")
                                    && Date.now() / 1000 - (job.time || 0) < 900
     width: root.width
     height: visible ? guideStripBody.height + Commons.Style.space(20) : 0
-    visible: running || recent
+    // Not `running`/`recent`: this file has an id `recent`, and ids win over
+    // a component's own properties.
+    visible: jobRunning || justEnded
     radius: Commons.Style.cornerRadius
     color: Qt.alpha(Commons.Color.accent, 0.05)
     border.width: 1
@@ -1441,7 +1446,7 @@ Column {
         height: guideStripTitle.implicitHeight
         MiniLabel {
           id: guideStripTitle
-          text: guideStrip.running ? "MAKING A 100% GUIDE" : guideStrip.job.state === "done" ? "GUIDE READY" : "GUIDE FAILED"
+          text: guideStrip.jobRunning ? "MAKING A 100% GUIDE" : guideStrip.job.state === "done" ? "GUIDE READY" : "GUIDE FAILED"
           color: Commons.Color.accent
         }
         Caption {
@@ -1449,7 +1454,7 @@ Column {
           anchors.right: parent.right
           anchors.verticalCenter: guideStripTitle.verticalCenter
           opacity: 0.6
-          visible: guideStrip.running
+          visible: guideStrip.jobRunning
           text: (guideStrip.job.total ? Math.round(100 * guideStrip.job.done / guideStrip.job.total) : 0) + "%"
                 + (guideStrip.job.agent ? " · " + guideStrip.job.agent + (guideStrip.job.model ? " " + guideStrip.job.model : "") : "")
         }
@@ -1506,7 +1511,7 @@ Column {
           spacing: Commons.Style.space(4)
           PillButton {
             label: "Stop"
-            visible: guideStrip.running
+            visible: guideStrip.jobRunning
             onClicked: {
               runner.exec(["python3", root.helperPath, "guide", "stop"])
               root.guideJob = Object.assign({}, root.guideJob, { line: "stopping…" })
@@ -1520,7 +1525,7 @@ Column {
       }
 
       Rectangle {
-        visible: guideStrip.running
+        visible: guideStrip.jobRunning
         width: parent.width
         height: 4
         radius: 2
@@ -3767,6 +3772,20 @@ Column {
         ]
         value: root.guideWeb ? "on" : "off"
         onPicked: value => root.set("guide-web", value)
+      }
+    }
+
+    // A second fence around the agent's own lock, when ai-jail is here.
+    SettingRow {
+      label: "SANDBOX"
+      visible: root.guideAgents.some(function(a) { return a.jail })
+      Chips {
+        options: [
+          { value: "off", label: "Off" },
+          { value: "on", label: "ai-jail" }
+        ]
+        value: root.guideJail ? "on" : "off"
+        onPicked: value => root.set("guide-jail", value)
       }
     }
 

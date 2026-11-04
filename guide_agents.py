@@ -317,6 +317,32 @@ ADAPTERS = [Claude(), Codex(), OpenCode(),
 BY_ID = {a.id: a for a in ADAPTERS}
 
 
+# Host variables an agent may need inside ai-jail, which passes only a
+# safe allowlist: its endpoint and key when the user set them (a local
+# model through ANTHROPIC_BASE_URL, say), and where codex keeps its state.
+JAIL_ENV = ('ANTHROPIC_BASE_URL', 'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_MODEL',
+            'OPENAI_API_KEY', 'OPENAI_BASE_URL', 'CODEX_HOME', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME')
+
+
+def jail_installed():
+    return shutil.which('ai-jail') is not None
+
+
+def jailed(argv, extra_env):
+    """`argv` run inside ai-jail (bubblewrap, Landlock, seccomp): the agent
+    sees only the job's empty folder read-write, its own state dirs and
+    the network, whatever its own flags let it do. A second fence around
+    the adapter's lock, not a replacement: an agent still runs only when
+    its own lock was checked. `--exec` runs it directly, stdin and stdout
+    piped as without the jail; nothing is saved to a project .ai-jail."""
+    out = ['ai-jail', '--exec', '--no-status-bar', '--no-save-config', '--no-display', '--no-gpu',
+           '--no-audio', '--no-docker', '--no-ssh', '--network']
+    for name in sorted(set(JAIL_ENV) | set(extra_env)):
+        if name in os.environ or name in extra_env:
+            out += ['--env', name]
+    return out + ['--'] + list(argv)
+
+
 def supported_ids():
     return [a.id for a in ADAPTERS if a.checked]
 
@@ -353,7 +379,7 @@ def picks(cfg):
 
 def listing(cfg):
     """`guide agents`: every row of the table, with its models and picks."""
-    chosen, default = picks(cfg), omarchy_default()
+    chosen, default, jail = picks(cfg), omarchy_default(), jail_installed()
     out = []
     for a in ADAPTERS:
         installed = a.installed()
@@ -363,19 +389,22 @@ def listing(cfg):
                     # Only agents that can run: a listing command can be slow
                     # (opencode's took over 20 s once), and the panel waits on it.
                     'models': a.models() if installed and a.checked else [],
-                    'model': pick.get('model', ''), 'effort': pick.get('effort', ''), 'source': a.models_source})
+                    'model': pick.get('model', ''), 'effort': pick.get('effort', ''), 'source': a.models_source,
+                    'jail': jail})
     return out
 
 
 def run(adapter, prompt, web=False, model='', effort='', stopped=lambda: False, timeout=STAGE_SECONDS,
-        clock=time.monotonic, sleep=time.sleep):
-    """Run one locked stage in a fresh empty folder. Returns the adapter's
-    answer plus {seconds, ok, stopped}. A stop or the ceiling kills the
-    agent's whole process group."""
+        clock=time.monotonic, sleep=time.sleep, jail=False):
+    """Run one locked stage in a fresh empty folder (inside ai-jail with
+    `jail`). Returns the adapter's answer plus {seconds, ok, stopped}. A
+    stop or the ceiling kills the agent's whole process group."""
     started = clock()
     with tempfile.TemporaryDirectory(prefix='omatrophy-guide-') as folder:
         argv, stdin_text, extra = adapter.command(folder, web, model, effort)
         env = dict(os.environ, **extra)
+        if jail:
+            argv = jailed(argv, extra)
         out_path, err_path = os.path.join(folder, '.stdout'), os.path.join(folder, '.stderr')
         with open(out_path, 'wb') as out, open(err_path, 'wb') as err:
             try:

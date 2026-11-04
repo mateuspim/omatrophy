@@ -166,7 +166,9 @@ tools, only web search and fetch when it researches
 Code is checked to stay locked down that way; Codex and OpenCode are
 listed as "not supported yet" until they are. Pick the agent (or follow
 `omarchy default agent`), its model (any the agent lists, or type another)
-and effort in the tracker or in **Settings > Guides**.
+and effort in the tracker or in **Settings > Guides**. With
+[ai-jail](https://github.com/akitaonrails/ai-jail) installed, **Sandbox**
+runs the agent inside it as well.
 
 Guides from another folder of `<slug>-<appid>.md` files (with their
 `.plan.json`) come in with `guide import`; the folder is only read.
