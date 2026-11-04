@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 - 2026-11-03
 
 - GOG support: games played through Heroic Games Launcher toast, show
   in the panel and open in the tracker like Steam's, with GOG's own
