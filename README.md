@@ -121,8 +121,10 @@ omarchy-shell shell summon pym.omatrophy '{}'   # the running or last game
 The panel's **Settings** tab holds the trophy style, then position, glass
 and sound as rows of choices, and **Try it** tiles that show a toast of
 each tier with your settings. Each choice applies to the next toast. Under
-**Steam**, **Profile** fills in games this machine never ran from your
-public Steam profile (off by default). Steam also shows its own popup for each unlock; **Turn off in Steam** opens
+**Stores**, a card per store says whether OmaTrophy found it and how many
+games it has, or what to do when it didn't. In Steam's card, **Profile**
+fills in games this machine never ran from your public Steam profile (off
+by default). GOG has nothing to set. Steam also shows its own popup for each unlock; **Turn off in Steam** opens
 Steam's Notifications settings: untick Show Toast (and Play Sound) on
 "When I unlock an achievement".
 

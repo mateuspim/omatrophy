@@ -505,6 +505,19 @@ class NowTab(unittest.TestCase):
         self.assertEqual((d['percent'], d['tier'], d['hidden'], d['icon_locked']), (4.0, 'gold', True, 'g.jpg'))
         self.assertEqual(omatrophy.detail(ach('b'), {})['tier'], 'bronze')
 
+    def test_store_rows_count_games_and_keep_found_stores_with_none(self):
+        class Steamish:
+            id, name = 'steam', 'Steam'
+
+        class Gogish:
+            id, name = 'gog', 'GOG'
+
+        steam_store, gog_store = Steamish(), Gogish()
+        lib = [(steam_store, '1', []), (steam_store, '2', [])]
+        self.assertEqual(omatrophy.store_rows([Steamish, Gogish], [steam_store, gog_store], lib),
+                         [{'id': 'steam', 'name': 'Steam', 'found': True, 'games': 2},
+                          {'id': 'gog', 'name': 'GOG', 'found': True, 'games': 0}])
+
     def test_rarest_unlocks_rarest_first_ties_to_the_newest(self):
         unlocks = [{'name': 'a', 'percent': 30.0, 'time': 5}, {'name': 'b', 'percent': 2.0, 'time': 6},
                    {'name': 'c', 'percent': 2.0, 'time': 9}, {'name': 'd', 'percent': None, 'time': 9}]
@@ -642,6 +655,12 @@ class PanelJson(unittest.TestCase):
         self.assertEqual([(c['app'], c['game'], c['unlocked'], c['total']) for c in nearest],
                          [('20', 'Half Game', 2, 4)])
         self.assertEqual(nearest[0]['latest'], [])
+
+    def test_now_lists_every_known_store_found_or_not(self):
+        with FakeLibrary():
+            rows = omatrophy.now()['stores']
+        self.assertEqual(rows, [{'id': 'steam', 'name': 'Steam', 'found': True, 'games': 3},
+                                {'id': 'gog', 'name': 'GOG', 'found': False, 'games': 0}])
 
     def test_game_detail_for_the_tracker(self):
         with FakeLibrary(running={'game': '20', 'since': 0}):

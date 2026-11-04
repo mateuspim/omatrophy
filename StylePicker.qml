@@ -107,6 +107,13 @@ Column {
     return !!hiddenKeys[g.store + ":" + g.app]
   }
 
+  // One store's row from `now` ({id, name, found, games}), or null before
+  // the first read.
+  function storeInfo(id) {
+    if (!cabinet || !cabinet.stores) return null
+    return cabinet.stores.find(function(s) { return s.id === id }) || null
+  }
+
   // The rows of a list whose game isn't hidden.
   function unhidden(rows) {
     return rows.filter(function(g) { return !isHidden(g) })
@@ -564,7 +571,7 @@ Column {
   component SettingRow: Item {
     property string label: ""
     default property alias control: slot.data
-    width: root.width
+    width: parent ? parent.width : root.width
     height: Math.max(labelText.height, slot.childrenRect.height)
     MiniLabel {
       id: labelText
@@ -577,6 +584,76 @@ Column {
       anchors.verticalCenter: parent.verticalCenter
       width: childrenRect.width
       height: childrenRect.height
+    }
+  }
+
+  // A store in Settings: a card with its name and what OmaTrophy found
+  // there, then that store's own rows, shown only once it is found.
+  component StoreCard: Rectangle {
+    id: card
+    property string storeId: ""
+    // What to do when the store isn't found, and a line once it is.
+    property string missing: ""
+    property string note: ""
+    default property alias rows: storeRows.data
+    readonly property var info: root.storeInfo(storeId)
+    readonly property bool found: info !== null && info.found
+    width: root.width
+    height: storeBody.height + Commons.Style.space(24)
+    radius: Commons.Style.cornerRadius
+    color: Qt.alpha(root.foreground, 0.04)
+    border.width: 1
+    border.color: Qt.alpha(root.foreground, 0.12)
+    Column {
+      id: storeBody
+      x: Commons.Style.space(12)
+      y: Commons.Style.space(12)
+      width: parent.width - Commons.Style.space(24)
+      spacing: Commons.Style.space(8)
+      Item {
+        width: parent.width
+        height: storeName.height
+        Text {
+          textFormat: Text.PlainText
+          id: storeName
+          text: card.info ? card.info.name : ""
+          color: root.foreground
+          font.family: Commons.Style.font.family
+          font.pixelSize: Commons.Style.font.body
+          font.bold: true
+        }
+        Row {
+          anchors.right: parent.right
+          anchors.verticalCenter: parent.verticalCenter
+          spacing: Commons.Style.space(6)
+          Rectangle {
+            anchors.verticalCenter: parent.verticalCenter
+            width: 6
+            height: 6
+            radius: 3
+            color: card.found ? Commons.Color.accent : Qt.alpha(root.foreground, 0.3)
+          }
+          Caption {
+            text: card.info === null ? "…" : card.found
+              ? card.info.games + (card.info.games === 1 ? " game" : " games")
+              : "Not found"
+          }
+        }
+      }
+      Caption {
+        width: parent.width
+        visible: text !== ""
+        wrapMode: Text.WordWrap
+        elide: Text.ElideNone
+        opacity: 0.45
+        text: card.info === null ? "" : card.found ? card.note : card.missing
+      }
+      Column {
+        id: storeRows
+        visible: card.found
+        width: parent.width
+        spacing: Commons.Style.space(8)
+      }
     }
   }
 
@@ -1939,78 +2016,90 @@ Column {
       text: "Changes apply to the next toast. A tile shows one now, with your settings."
     }
 
-    // ------------------------------------------------ steam
+    // ------------------------------------------------ stores
 
     Item { width: 1; height: Commons.Style.space(8) }
 
-    PanelSectionHeader { text: "STEAM"; foreground: root.foreground }
+    PanelSectionHeader { text: "STORES"; foreground: root.foreground }
 
-    // The opt-in profile backfill (ADR 11). The switch goes through
-    // `set community`, like every other setting.
-    SettingRow {
-      label: "PROFILE"
-      Chips {
-        options: [
-          { value: "off", label: "Off" },
-          { value: "on", label: "Fill in" }
-        ]
-        value: root.community ? "on" : "off"
-        onPicked: value => root.set("community", value)
+    // Every store OmaTrophy knows, found or not, so "is GOG working?" has
+    // an answer here; a store's own settings sit inside its card.
+    StoreCard {
+      storeId: "steam"
+      missing: "Install Steam and play a game with achievements once. Steam somewhere else? Set STEAM_DIR."
+
+      // The opt-in profile backfill (ADR 11). The switch goes through
+      // `set community`, like every other setting.
+      SettingRow {
+        label: "PROFILE"
+        Chips {
+          options: [
+            { value: "off", label: "Off" },
+            { value: "on", label: "Fill in" }
+          ]
+          value: root.community ? "on" : "off"
+          onPicked: value => root.set("community", value)
+        }
+      }
+
+      Caption {
+        textFormat: Text.PlainText
+        width: parent.width
+        wrapMode: Text.WordWrap
+        opacity: 0.4
+        text: root.backfillText()
+      }
+
+      // Steam shows its own popup for the same unlock. OmaTrophy only reads
+      // Steam's files (ADR 1), and Steam rewrites its config while it runs,
+      // so this opens Steam's Notifications page for the owner to switch it
+      // off there. Page id and labels from Steam's own client UI (steamui).
+      SettingRow {
+        label: "POPUPS"
+        Rectangle {
+          id: steamButton
+          width: steamText.implicitWidth + Commons.Style.space(20)
+          height: steamText.implicitHeight + Commons.Style.space(10)
+          radius: height / 2
+          color: steamHit.containsMouse ? Commons.Style.hoverFill : "transparent"
+          border.width: 1
+          border.color: Qt.alpha(root.foreground, steamHit.containsMouse ? 0.35 : 0.18)
+          Accessible.role: Accessible.Button
+          Accessible.name: "Open Steam's settings to turn off its achievement popups"
+          Behavior on color { ColorAnimation { duration: 120 } }
+          Text {
+            textFormat: Text.PlainText
+            id: steamText
+            anchors.centerIn: parent
+            text: "Turn off in Steam ↗"
+            color: root.foreground
+            opacity: 0.8
+            font.family: Commons.Style.font.family
+            font.pixelSize: Commons.Style.font.caption
+          }
+          MouseArea {
+            id: steamHit
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: Qt.openUrlExternally("steam://open/settings/notifications")
+          }
+        }
+      }
+
+      Caption {
+        textFormat: Text.PlainText
+        width: parent.width
+        wrapMode: Text.WordWrap
+        opacity: 0.4
+        text: "Steam shows its own popup too. On the page this opens, find \"When I unlock an achievement\" and untick Show Toast (and Play Sound)."
       }
     }
 
-    Caption {
-      textFormat: Text.PlainText
-      width: root.width
-      wrapMode: Text.WordWrap
-      opacity: 0.4
-      text: root.backfillText()
+    StoreCard {
+      storeId: "gog"
+      missing: "Play a GOG game once through Heroic Games Launcher, signed in to GOG."
+      note: "Through Heroic Games Launcher. Toasts come live while you play; nothing to set."
     }
-
-    // Steam shows its own popup for the same unlock. OmaTrophy only reads
-    // Steam's files (ADR 1), and Steam rewrites its config while it runs,
-    // so this opens Steam's Notifications page for the owner to switch it
-    // off there. Page id and labels from Steam's own client UI (steamui).
-    SettingRow {
-      label: "POPUPS"
-      Rectangle {
-        id: steamButton
-        width: steamText.implicitWidth + Commons.Style.space(20)
-        height: steamText.implicitHeight + Commons.Style.space(10)
-        radius: height / 2
-        color: steamHit.containsMouse ? Commons.Style.hoverFill : "transparent"
-        border.width: 1
-        border.color: Qt.alpha(root.foreground, steamHit.containsMouse ? 0.35 : 0.18)
-        Accessible.role: Accessible.Button
-        Accessible.name: "Open Steam's settings to turn off its achievement popups"
-        Behavior on color { ColorAnimation { duration: 120 } }
-        Text {
-          textFormat: Text.PlainText
-          id: steamText
-          anchors.centerIn: parent
-          text: "Turn off in Steam ↗"
-          color: root.foreground
-          opacity: 0.8
-          font.family: Commons.Style.font.family
-          font.pixelSize: Commons.Style.font.caption
-        }
-        MouseArea {
-          id: steamHit
-          anchors.fill: parent
-          hoverEnabled: true
-          cursorShape: Qt.PointingHandCursor
-          onClicked: Qt.openUrlExternally("steam://open/settings/notifications")
-        }
-      }
-    }
-
-    Caption {
-      textFormat: Text.PlainText
-      width: root.width
-      wrapMode: Text.WordWrap
-      opacity: 0.4
-      text: "Steam shows its own popup too. On the page this opens, find \"When I unlock an achievement\" and untick Show Toast (and Play Sound)."
-    }
-
   }
 }

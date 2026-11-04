@@ -5,5 +5,22 @@
  "playing": null,
  "recent": [],
  "shelf": [],
- "rarest": {"ever": [], "month": []}
+ "rarest": {
+  "ever": [],
+  "month": []
+ },
+ "stores": [
+  {
+   "id": "steam",
+   "name": "Steam",
+   "found": true,
+   "games": 0
+  },
+  {
+   "id": "gog",
+   "name": "GOG",
+   "found": false,
+   "games": 0
+  }
+ ]
 }

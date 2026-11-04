@@ -399,6 +399,16 @@ def rarest_cards(lib, n, now_time, hidden=()):
             'month': [card(u) for u in rarest_unlocks(unlocks, n, month_start(now_time))]}
 
 
+def store_rows(classes, found, lib):
+    """Every store OmaTrophy knows, for Settings: whether it was found here
+    and how many of its games have achievements."""
+    counts = {}
+    for s, _, _ in lib:
+        counts[s.id] = counts.get(s.id, 0) + 1
+    found_ids = {s.id for s in found}
+    return [{'id': c.id, 'name': c.name, 'found': c.id in found_ids, 'games': counts.get(c.id, 0)} for c in classes]
+
+
 def recent_games(played, owned, skip, n):
     """The n most recently played games we hold achievements for, minus `skip`."""
     out = []
@@ -459,6 +469,7 @@ def now(recent_n=3, rarest_n=3, nearest_n=4):
         s, achs = by_key[(r['store'], r['app'])]
         nearest.append(dict(game_card(s, r['app'], achs), latest=[]))
     return dict(totals(rows), playing=playing, recent=recent, shelf=shelf, nearest=nearest,
+                stores=store_rows(stores.STORES, found, lib),
                 rarest=rarest_cards(lib, rarest_n + 2, time.time(), hidden))
 
 

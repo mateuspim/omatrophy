@@ -39,7 +39,7 @@ the next read names them locally. The command itself exits at once.
 {"games": 126, "trophies": 1779, "platinums": 12,
  "playing": {...card, "hero": "...", "since": 1793065549, "session": [...], "next": [...]} | null,
  "recent": [card, ...], "shelf": [card, ...],
- "nearest": [card, ...],
+ "nearest": [card, ...], "stores": [{"id", "name", "found", "games"}, ...],
  "rarest": {"ever": [unlock, ...], "month": [unlock, ...]}}
 ```
 
@@ -54,6 +54,9 @@ the next read names them locally. The command itself exits at once.
   hidden achievements and `progress` is as in [game](#game).
 - `recent`: the three games played last, minus the running one.
 - `shelf`: every complete game, newest platinum first, with `latest` empty.
+- `stores`: every store OmaTrophy knows (`stores.STORES` order), whether
+  it was found on this machine, and how many of its games have
+  achievements; Settings shows one card per store.
 - `nearest`: the six started, unfinished games closest to 100%, ties to
   the one with fewer left, with `latest` empty; the panel fills the
   platinum shelf's empty slots with them. Hidden games are left out.

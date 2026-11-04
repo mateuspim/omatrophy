@@ -11,9 +11,11 @@
 - The platinum shelf's empty slots show the games closest to platinum:
   dimmed art, how many are left and a bar, each opening the tracker.
 - Settings is one list of choices: style, then position, glass and sound
-  as chip rows (no more screen drawing or slider), then Try it. The Steam
-  rows have their own header, and the "applies to the next toast" note
-  sits under the toast settings it is about.
+  as chip rows (no more screen drawing or slider), then Try it, with the
+  "applies to the next toast" note under the toast settings it is about.
+- Settings has a Stores section: a card per store saying whether it was
+  found and how many games it has, or what to do when it wasn't. Steam's
+  card holds its Profile and Popups rows. `now` carries `stores`.
 - Switching panel tabs no longer jumps: the page fades in from hidden
   without the rise, instead of flashing at full opacity first.
 - The tracker no longer fills the shell log with "Cannot set a duration

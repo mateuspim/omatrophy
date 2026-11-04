@@ -268,5 +268,19 @@
     "game": "Lanterns of Aster"
    }
   ]
- }
+ },
+ "stores": [
+  {
+   "id": "steam",
+   "name": "Steam",
+   "found": true,
+   "games": 78
+  },
+  {
+   "id": "gog",
+   "name": "GOG",
+   "found": true,
+   "games": 6
+  }
+ ]
 }
