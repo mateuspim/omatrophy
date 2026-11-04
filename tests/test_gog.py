@@ -290,6 +290,26 @@ class LockedDatabase(unittest.TestCase):
                 f.write('not sqlite')
             store = gog.Gog()
             self.assertEqual(omatrophy.unlocked_set(store, CLIENT), ([], set()))
+            self.assertNotIn(CLIENT, store.retry)
+
+    def test_another_layout_has_no_achievements_and_is_not_retried(self):
+        with HeroicDir() as h:
+            db = h.database([row('A')])
+            conn = sqlite3.connect(db)
+            conn.execute('ALTER TABLE achievement RENAME TO trophies')
+            conn.commit()
+            conn.close()
+            store = gog.Gog()
+            with mock.patch.object(gog, 'read_rows', wraps=gog.read_rows) as reads:
+                self.assertEqual(store.achievements(CLIENT), [])
+                self.assertEqual(store.achievements(CLIENT), [])
+                self.assertEqual(reads.call_count, 1)
+            self.assertNotIn(CLIENT, store.retry)
+
+    def test_only_a_lock_is_busy(self):
+        self.assertTrue(gog.busy(sqlite3.OperationalError('database is locked')))
+        self.assertFalse(gog.busy(sqlite3.OperationalError('no such table: achievement')))
+        self.assertFalse(gog.busy(sqlite3.DatabaseError('file is not a database')))
 
 
 class Watcher(unittest.TestCase):

@@ -148,6 +148,13 @@ def read_rows(db):
         conn.close()
 
 
+def busy(error):
+    """True when Comet holds the database's lock, the one failure worth
+    retrying next second; SQLite says so only in the message."""
+    text = str(error).lower()
+    return isinstance(error, sqlite3.OperationalError) and ('locked' in text or 'busy' in text)
+
+
 def achievement(row):
     """One Comet row as the store contract's dict. An unlock not yet synced
     to GOG (`changed` = 1) has its unlock_time already, so it counts."""
@@ -280,11 +287,16 @@ class Gog(Store):
             return old[1]
         try:
             rows = read_rows(db)
-        except sqlite3.Error:
-            self.retry.add(game)
-            if old:
-                return old[1]
-            raise
+        except sqlite3.Error as e:
+            if not busy(e):
+                # Not Comet's layout, or not a database: nothing to read
+                # until the file changes again.
+                rows = []
+            else:
+                self.retry.add(game)
+                if old:
+                    return old[1]
+                raise
         self.retry.discard(game)
         self.rows[game] = (token, rows)
         return rows
