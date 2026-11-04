@@ -13,8 +13,15 @@ import qs.Commons as Commons
 // tracker. Settings read and write the same ~/.config/omatrophy/config.json
 // the service watches, through `omatrophy.py set`, so a choice applies to the
 // next toast. Bones shimmer in place of what's still loading.
+//
+// Sections, in order, each under a "// ---- Name" banner: State, Helpers,
+// Files and processes, Building blocks, Tab strip, Now, Games, Settings.
 Column {
   id: root
+  spacing: Commons.Style.space(8)
+
+  // ------------------------------------------------------------------ State
+
   property color foreground: Commons.Color.popups.text
 
   readonly property string helperPath: decodeURIComponent(String(Qt.resolvedUrl("omatrophy.py")).replace(/^file:\/\//, ""))
@@ -81,6 +88,8 @@ Column {
   // Asks Panel.qml to open the tracker on one game; the panel owns the
   // shell handle, this file only knows the game.
   signal track(string store, string app)
+
+  // ---------------------------------------------------------------- Helpers
 
   function set(key, value) {
     if (key === "icons") iconSet = value
@@ -179,7 +188,23 @@ Column {
     return Math.floor(m / 60) + " h " + (rest < 10 ? "0" : "") + rest
   }
 
-  spacing: Commons.Style.space(8)
+  // What the backfill row says under its switch: what turning it on sends
+  // while off, then the latest run, so a slow fill or Steam's rate limit
+  // is visible without the shell log.
+  function backfillText() {
+    if (!community)
+      return "Fills in games this machine never ran from your public Steam profile. On sends your SteamID64 to steamcommunity.com."
+    var b = backfill
+    if (!b || !b.time) return "On. The first pages come within the hour, then more every hour."
+    var at = Qt.formatTime(new Date(b.time * 1000), "hh:mm")
+    if (b.limited)
+      return "Steam asked for a pause at " + at + ". The next run waits a few hours and fetches fewer pages."
+    return "Last run " + at + " · " + b.line
+  }
+
+  // ---------------------------------------------------- Files and processes
+  // What the panel reads (settings, the last answers, the backfill's
+  // status) and the omatrophy.py calls that fill it.
 
   FileView {
     path: Quickshell.env("HOME") + "/.config/omatrophy/config.json"
@@ -234,20 +259,6 @@ Column {
     }
   }
 
-  // What the backfill row says under its switch: what turning it on sends
-  // while off, then the latest run, so a slow fill or Steam's rate limit
-  // is visible without the shell log.
-  function backfillText() {
-    if (!community)
-      return "Fills in games this machine never ran from your public Steam profile. On sends your SteamID64 to steamcommunity.com."
-    var b = backfill
-    if (!b || !b.time) return "On. The first pages come within the hour, then more every hour."
-    var at = Qt.formatTime(new Date(b.time * 1000), "hh:mm")
-    if (b.limited)
-      return "Steam asked for a pause at " + at + ". The next run waits a few hours and fetches fewer pages."
-    return "Last run " + at + " · " + b.line
-  }
-
   Process { id: runner }
 
   Process {
@@ -272,6 +283,10 @@ Column {
       }
     }
   }
+
+  // -------------------------------------------------------- Building blocks
+  // Inline components, kept in this file because FreshObject builds it
+  // from its text alone (ADR 10): it can't load sibling QML types.
 
   // One trophy, drawn the way the cards draw it (the omarchy set's inlay
   // painted in the theme accent).
@@ -554,6 +569,8 @@ Column {
     }
   }
 
+  // -------------------------------------------------------------- Tab strip
+
   // The tabs as an underlined strip, so they read as places in the panel
   // and the Games tab's sort buttons below them as controls.
   Item {
@@ -616,7 +633,7 @@ Column {
     }
   }
 
-  // ---------------------------------------------------------------- Now
+  // -------------------------------------------------------------------- Now
 
   TabPage {
     id: nowTab
@@ -1340,13 +1357,15 @@ Column {
     }
   }
 
-  // ---------------------------------------------------------------- Games
+  // ------------------------------------------------------------------ Games
 
   TabPage {
     id: gamesTab
     visible: root.tab === "games"
     width: root.width
     spacing: Commons.Style.space(6)
+
+    // ------------------------------------------------ sort and filter
 
     Item {
       width: root.width
@@ -1389,6 +1408,8 @@ Column {
       }
       Keys.onTabPressed: focus = false
     }
+
+    // ------------------------------------------------ game list
 
     Repeater {
       model: root.shownGames
@@ -1532,6 +1553,8 @@ Column {
       }
     }
 
+    // ------------------------------------------------ pager
+
     // Previous, the page numbers and next, with which games these are.
     Item {
       width: root.width
@@ -1593,6 +1616,8 @@ Column {
       }
     }
 
+    // ------------------------------------------------ empty and loading
+
     Caption {
       width: root.width
       horizontalAlignment: Text.AlignHCenter
@@ -1625,13 +1650,15 @@ Column {
     }
   }
 
-  // ---------------------------------------------------------- Settings
+  // --------------------------------------------------------------- Settings
 
   TabPage {
     id: settingsTab
     visible: root.tab === "settings"
     width: root.width
     spacing: root.spacing
+
+    // ------------------------------------------------ toasts
 
     PanelSectionHeader { text: "TROPHY STYLE"; foreground: root.foreground }
 
@@ -1954,6 +1981,8 @@ Column {
       opacity: 0.4
       text: "These apply to the next toast · try one with a preview tile"
     }
+
+    // ------------------------------------------------ steam
 
     Item { width: 1; height: Commons.Style.space(8) }
 
