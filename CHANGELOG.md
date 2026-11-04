@@ -2,10 +2,27 @@
 
 ## Unreleased
 
-- `omatrophy.py guide [store app]` reads a game's 100% guide (Markdown
-  notes, checklist and `.plan.json`) as JSON, and `guide import <folder>`
-  copies guide files in from another folder without touching it. Nothing
-  shows it yet (docs/specs/guides.md, slice b).
+100% guides (ADR 14). The tracker and panel changes show on their next
+open; the watcher and `Tracker.qml` are unchanged, so no restart is needed.
+
+- The tracker's **Guide** tab shows a game's path to 100%: up next, the
+  route and notes, then every open achievement by phase, missables first,
+  with time, difficulty, counters, tips, combos and "(unverified)" where
+  no source backs a claim.
+- **Make guide** writes one through your coding agent, run headless with
+  no shell and no file tools (Claude Code; Codex and OpenCode adapters
+  wait for a real lock check): OmaTrophy gathers sources, the agent
+  researches, classifies and plans, and OmaTrophy verifies every quote.
+  Live progress and Stop in the tracker; the last guide is kept as
+  `.prev`.
+- **Settings > Guides** picks the agent, its model (or any typed one), the
+  effort and web search.
+- The Now tab's **Up next** follows the game's guide when it has one,
+  with its time, missable warning and tip.
+- `omatrophy.py guide [store app]`, `guide import <folder>`, `guide make`,
+  `guide stop`, `guide status`, `guide agents`, `guide model`, and
+  `set guide-agent` / `set guide-web`. `dev/check-lock.py <agent>` checks
+  an agent's lock on a real run.
 
 ## 0.5.2 - 2026-11-04
 

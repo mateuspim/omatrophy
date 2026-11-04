@@ -42,6 +42,10 @@ achievement list.
   80"); filtered to locked, unlocked or rare, sorted, and searched as you
   type, by mouse or keyboard. Hidden ones stay hidden until you hover or
   press Enter.
+- A 100% guide per game, made on request by your own coding agent (Claude
+  Code today): the route, missables first, time and difficulty per
+  achievement, combos and tips, with every claim checked against the page
+  it quotes. The Now tab's Up next follows it.
 - Three trophy styles: Omarchy (a pixel grid with an inlay in your theme
   accent), Faceted and Painted.
 - Theme-native: cards draw from your Omarchy theme colours.
@@ -73,7 +77,9 @@ OmaTrophy runs inside `omarchy-shell` as your user. It reads Steam's local
 achievement cache and, for GOG, the database Heroic's Comet service keeps, keeps its settings and a small cache in its own folders,
 and calls Steam's public endpoints for rarity, game names and art when a
 toast shows, the bar panel opens or the watcher starts (game names, once
-each). GOG needs no network at all. No root, no API key, no login. Details in
+each). GOG needs no network at all. No root, no API key, no login. Making a 100%
+guide is the one exception, and only when you ask: it runs your own coding
+agent, locked to web search and fetch, through its own login. Details in
 [SECURITY.md](SECURITY.md).
 
 ## Trophy cabinet and tracker
@@ -124,7 +130,7 @@ the game tracks the count. Its keys:
 | --- | --- |
 | Up, Down, Page Up/Down, Home, End | Move the highlight |
 | Enter (or Space, when not searching) | Reveal a hidden achievement |
-| Tab, Shift+Tab | All, Locked, Unlocked, Rare |
+| Tab, Shift+Tab | All, Locked, Unlocked, Rare, Guide |
 | Left, Right | Sort: recent, rarest, A–Z, the game's own order (remembered) |
 | Any letter | Search; Backspace edits |
 | Escape | Clear the search, then close |
@@ -135,12 +141,55 @@ From a script:
 omarchy-shell shell summon pym.omatrophy '{}'   # the running or last game
 ```
 
+## 100% guides
+
+The tracker's **Guide** tab shows a game's path to 100%: what to do next,
+an overview and the recommended route, then every open achievement by
+phase (missable first, then story, quick, challenge, grind, collectibles,
+online), each with its time, difficulty, counter, where the point of no
+return is, a tip and what it combines with. A hidden achievement keeps its
+name and tip secret until you hover it. Anything no source backs says
+"(unverified)". With a guide, the Now tab's **Up next** follows its route.
+
+No guide yet? **Make guide** asks your coding agent to write one. OmaTrophy
+gathers what it can fetch itself (Steam community guides, pages you saved
+by hand in `~/.local/share/omatrophy/guides/sources/<guide name>/`), the
+agent searches the web if you let it, classifies the achievements in small
+batches and plans the route, and OmaTrophy checks each quote against the
+page it came from. It takes a few minutes and keeps going if you close the
+tracker; **Stop** leaves the old guide as it was. A cloud agent bills your
+account (the guide records the cost it reports).
+
+The agent runs headless in an empty folder with no shell and no file
+tools, only web search and fetch when it researches
+([ADR 14](docs/adr/0014-generate-guides-through-the-users-agent.md)). Claude
+Code is checked to stay locked down that way; Codex and OpenCode are
+listed as "not supported yet" until they are. Pick the agent (or follow
+`omarchy default agent`), its model (any the agent lists, or type another)
+and effort in the tracker or in **Settings > Guides**.
+
+Guides from another folder of `<slug>-<appid>.md` files (with their
+`.plan.json`) come in with `guide import`; the folder is only read.
+
+```bash
+omatrophy.py guide import ~/path/to/guides     # copy guides in (--replace overwrites)
+omatrophy.py set guide-agent claude            # or default: follow omarchy default agent
+omatrophy.py guide model claude sonnet medium  # that agent's model and effort; `default` clears
+omatrophy.py guide make steam 620              # make one; --no-web, --model, --effort for this run
+omatrophy.py guide status                      # the running job, as JSON; guide stop ends it
+omatrophy.py guide steam 620                   # the guide, as JSON
+```
+
+Format and stages: [docs/specs/guides.md](docs/specs/guides.md).
+
 ## Settings
 
 The panel's **Settings** tab holds the trophy style, then position, glass
 and sound as rows of choices, and **Try it** tiles that show a toast of
 each tier with your settings. Each choice applies to the next toast.
-**Now tab** picks which sections the Now tab shows. Under
+**Now tab** picks which sections the Now tab shows. **Guides** picks the
+agent that makes 100% guides, its model and effort, and whether it may
+search the web. Under
 **Stores**, a card per store says whether OmaTrophy found it and how many
 games it has, or what to do when it didn't. In Steam's card, **Profile**
 fills in games this machine never ran from your public Steam profile (off

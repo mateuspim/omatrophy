@@ -410,6 +410,12 @@ Item {
     return Object.keys(guide.items).filter(function(api) { return byApi[api] && guideDone(api) }).length
   }
 
+  // Guide prose is the agent's (or an imported file's) text: images, as
+  // Markdown or HTML, are dropped so showing it fetches nothing.
+  function safeMarkdown(text) {
+    return String(text || "").replace(/!\[[^\]]*\]\([^)]*\)/g, "").replace(/<img\b[^>]*>/gi, "")
+  }
+
   function dots(n) {
     var out = ""
     for (var i = 1; i <= 5; i++) out += i <= n ? "●" : "○"
@@ -1770,7 +1776,7 @@ Item {
             visible: body !== ""
             spacing: Commons.Style.space(4)
             SectionLabel { text: parent.modelData.title }
-            Prose { width: parent.width; text: parent.body }
+            Prose { width: parent.width; text: root.safeMarkdown(parent.body) }
           }
         }
         // An imported guide may have prose but no sections.
@@ -1778,7 +1784,7 @@ Item {
           width: parent.width
           visible: root.hasGuide && !root.appliedSearch && !!root.guide.notes
                    && !(root.guide.sections && root.guide.sections.overview)
-          text: root.guide ? root.guide.notes || "" : ""
+          text: root.guide ? root.safeMarkdown(root.guide.notes) : ""
         }
 
         Repeater {

@@ -446,9 +446,16 @@ def verify_cites(item, sources, pieces):
                 url, ok = (hit, True) if hit else (url, False)
         cites.append({'source': url, 'quote': c['quote'][:QUOTE_MAX * 2], 'verified': bool(ok)})
     item = dict(item, cites=cites)
+    # Only claims the item makes can be unverified: a model also lists
+    # fields it left empty, or judgments like difficulty, which would only
+    # be noise in the view.
+    claimed = [f for f in CLAIMS if item.get(f) not in (None, '', [], False)]
+    said = set(item.get('unverified', []))
+    if 'missable_note' in said:
+        said.add('missable')
     if not any(c['verified'] for c in cites):
-        claimed = [f for f in CLAIMS if item.get(f) not in (None, '', [], False)]
-        item['unverified'] = sorted(set(item.get('unverified', [])) | set(claimed))
+        said |= set(claimed)
+    item['unverified'] = [f for f in claimed if f in said]
     return item
 
 

@@ -39,6 +39,20 @@ what OmaTrophy does with that access:
   `~/.cache/omatrophy/` (achievement icons, art, global rarity per game,
   refreshed daily, and with the backfill on, profile pages per game in
   `community/`).
+- 100% guides, only when you press Make guide or run `omatrophy.py guide
+  make`: runs your coding agent (`claude`, the one checked so far) headless
+  in a fresh empty temporary folder, with its built-in tools limited to
+  none, or to WebSearch and WebFetch for the research stage; no MCP servers,
+  no user or project settings (so no hooks or plugins), and anything else
+  refused without a prompt (ADR 14). It uses the agent's own login; a cloud
+  agent bills your account. OmaTrophy itself fetches at most 10 HTTPS pages
+  a job (Steam community guides and pages the agent cites), as
+  `omatrophy-guide/<version>`, with an 8 s timeout and 4 MB cap, skips any
+  page behind a bot check rather than retrying it another way, and reads
+  pages you saved in `guides/sources/`. It writes only in
+  `~/.local/share/omatrophy/guides/`. An agent whose lock isn't checked on a
+  real run (`dev/check-lock.py`) never runs, and no adapter ever passes an
+  auto-approve flag.
 - Root: never.
 - Network: HTTPS to the stores' public, keyless hosts only, when an unlock is
   shown or the bar panel or tracker opens, plus one name lookup per uncached
@@ -79,6 +93,10 @@ Steam's files, its web pages and the shell's IPC are treated as untrusted:
   over the old one, so a crash never leaves half a file and a symlink in
   OmaTrophy's folders is replaced, not followed.
 - Commands run as argument lists, never through a shell.
+- A guide is the agent's text: its answers are parsed only as JSON between
+  stage tags and checked field by field; achievement names it gives must
+  be the game's own; prose is shown as Markdown whose links open only when
+  they are `https`, and images in it are not loaded from the network.
 
 Local processes running as you can already do anything you can; within
 that, the IPC target `pym.omatrophy` (`omarchy-shell shell summon

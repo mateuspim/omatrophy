@@ -177,6 +177,15 @@ class Checks(unittest.TestCase):
     def test_html_text_drops_scripts(self):
         self.assertEqual(guide_maker.html_text('<p>Hi</p><script>x()</script><p>there</p>'), 'Hi\nthere')
 
+    def test_unverified_keeps_only_claims_the_item_makes(self):
+        item = {'time': '~5 min', 'tips': 'Go.', 'missable': False, 'unverified': ['difficulty', 'missable', 'time'],
+                'cites': [{'source': 'u', 'quote': 'a quote that is in the page'}]}
+        out = guide_maker.verify_cites(item, {'u': {'text': 'Yes, a quote that is in the page.'}}, [])
+        self.assertTrue(out['cites'][0]['verified'])
+        self.assertEqual(out['unverified'], ['time'])
+        out = guide_maker.verify_cites(dict(item, cites=[]), {}, [])
+        self.assertEqual(out['unverified'], ['time', 'tips'])
+
     def test_slug(self):
         self.assertEqual(guide_maker.slug('DOOM: The Dark Ages™'), 'doom-the-dark-ages')
 
