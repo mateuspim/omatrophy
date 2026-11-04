@@ -344,7 +344,17 @@ class Steam(Store):
         stats. Only the owner starts this."""
         stats = lambda app: os.path.exists(f'{self.stats}/UserGameStats_{self.uid}_{app}.bin')
         return steam_loader.load(self.missing(everything), stats, busy, say=say, everything=everything,
-                                 describe=self.describe_for_load)
+                                 describe=self.describe_for_load, prepare=self.name_in_background)
+
+    def name_in_background(self, app):
+        """Look a game's name up in a thread, once per game: the load tells
+        the store the next game while the current one loads, so the name
+        is cached by the time the panel shows it."""
+        naming = self.__dict__.setdefault('naming', set())
+        if app in naming:
+            return
+        naming.add(app)
+        threading.Thread(target=self.game_name, args=(app,), daemon=True).start()
 
     def describe_for_load(self, app):
         """{name, art} for the load's progress strip, never waiting on the
@@ -353,11 +363,11 @@ class Steam(Store):
         just fetched for the library page."""
         with NAMES_LOCK:
             name = read_json(NAMES, {}).get(app, '')
-        naming = self.__dict__.setdefault('naming', set())
-        if not name and app not in naming:
-            naming.add(app)
-            threading.Thread(target=self.game_name, args=(app,), daemon=True).start()
-        return {'name': name, 'art': self.library_art(app, 'header.jpg') or ''}
+        if not name:
+            self.name_in_background(app)
+        # Steam may not have saved the header yet when the page opens; the
+        # CDN's copy is what the Games tab shows for it anyway.
+        return {'name': name, 'art': self.library_art(app, 'header.jpg') or f'{ART_BASE}/{app}/header.jpg'}
 
     def remember_names(self):
         """Copy game names from cached profile pages into the name cache,

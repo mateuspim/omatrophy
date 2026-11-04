@@ -972,6 +972,10 @@ Column {
     readonly property var load: root.steamLoad
     // A run started before `current` existed names only its app.
     readonly property var current: load.current || (load.app ? { app: load.app, name: "", art: "" } : null)
+    // Steam's CDN header when the run gave no cover (an older run, or
+    // art Steam hasn't saved yet).
+    readonly property string currentArt: !current ? ""
+      : (current.art || "https://cdn.fastly.steamstatic.com/steam/apps/" + current.app + "/header.jpg")
     readonly property int done: load.done || 0
     readonly property int total: load.total || 0
     readonly property int found: load.loaded || 0
@@ -1017,7 +1021,7 @@ Column {
           id: stripArt
           width: Math.round(height * 460 / 215)
           height: parent.height
-          source: steamLoadStrip.current ? steamLoadStrip.current.art : ""
+          source: steamLoadStrip.currentArt
           label: ""
           // A soft breathing while Steam opens the page.
           SequentialAnimation on opacity {
@@ -1050,8 +1054,7 @@ Column {
             textFormat: Text.PlainText
             width: parent.width
             opacity: 0.5
-            text: "Game " + Math.min(steamLoadStrip.done + 1, steamLoadStrip.total) + " of " + steamLoadStrip.total
-                  + " · looking for achievements"
+            text: "Checking " + Math.min(steamLoadStrip.done + 1, steamLoadStrip.total) + " of " + steamLoadStrip.total
           }
         }
         PillButton {

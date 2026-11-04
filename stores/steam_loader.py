@@ -215,13 +215,15 @@ def wait_for(has_stats, app, wait, poll, clock, sleep):
 
 def load(todo, has_stats, busy, opener=open_page, running=steam_running, say=None,
          wait=WAIT_SECONDS, poll=POLL_SECONDS, clock=time.time, sleep=time.sleep, window=None,
-         everything=False, describe=None):
+         everything=False, describe=None, prepare=None):
     """Open each app's page in turn and wait for its stats file. Stops when
     Steam closes, a game starts (`busy()`: Steam's window must not jump
     over a game) or a stop is requested. Each tried game goes into
     checked.json at once, so a stopped run resumes at the next game.
     `describe(app)` gives {name, art} for the panel's progress strip,
-    from what is already on disk. Returns {loaded, none, state}."""
+    from what is already on disk; `prepare(app)` is told the next game
+    while the current one loads (the store warms its name). Returns
+    {loaded, none, state}."""
     clear_stop()
     tried = checked()
     counts = {'loaded': 0, 'none': 0}
@@ -256,12 +258,13 @@ def load(todo, has_stats, busy, opener=open_page, running=steam_running, say=Non
     # The panel's bar shows up before the first game is done.
     report('', 'running', 0)
     try:
-        return run(todo, has_stats, busy, opener, running, wait, poll, clock, sleep, window, tried, counts, report, end)
+        return run(todo, has_stats, busy, opener, running, wait, poll, clock, sleep, window, tried, counts, report, end,
+                   prepare or (lambda app: None))
     finally:
         window.restore()
 
 
-def run(todo, has_stats, busy, opener, running, wait, poll, clock, sleep, window, tried, counts, report, end):
+def run(todo, has_stats, busy, opener, running, wait, poll, clock, sleep, window, tried, counts, report, end, prepare):
     """load()'s loop, with Steam's window kept out of sight."""
     for i, app in enumerate(todo):
         if stop_requested():
@@ -279,6 +282,8 @@ def run(todo, has_stats, busy, opener, running, wait, poll, clock, sleep, window
         window.hide()
         # The panel's progress bar names the game being tried.
         report('', 'running', i, app)
+        if i + 1 < len(todo):
+            prepare(todo[i + 1])
         found = wait_for(has_stats, app, wait, poll, clock, sleep)
         if found == 'stopped':
             clear_stop()

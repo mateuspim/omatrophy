@@ -146,6 +146,12 @@ class Load(LoaderCache):
         self.assertIn('started', status)
         self.assertFalse(status['hidden'])
 
+    def test_the_next_game_is_prepared_while_one_loads(self):
+        told = []
+        steam_loader.load(['1', '2', '3'], lambda app: True, lambda: False, opener=lambda app: None,
+                          running=lambda: True, window=NoWindow(), prepare=told.append)
+        self.assertEqual(told, ['2', '3'])
+
     def test_status_says_which_kind_of_run(self):
         steam_loader.load(['1'], lambda app: True, lambda: False, opener=lambda app: None,
                           running=lambda: True, window=NoWindow(), everything=True)
