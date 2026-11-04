@@ -1666,7 +1666,7 @@ Column {
 
     // ------------------------------------------------ toasts
 
-    PanelSectionHeader { text: "TROPHY STYLE"; foreground: root.foreground }
+    PanelSectionHeader { text: "TOASTS"; foreground: root.foreground }
 
     Row {
       id: styleCards
@@ -1751,10 +1751,52 @@ Column {
       }
     }
 
-    Item { width: 1; height: Commons.Style.space(2) }
+    // Every toast setting is the same kind of control, a row of chips,
+    // so the tab reads at a glance. (A screen drawing for position and a
+    // slider for glass looked nice but each needed learning.)
+    SettingRow {
+      label: "POSITION"
+      Chips {
+        options: [
+          { value: "top-left", label: "Left" },
+          { value: "top-center", label: "Center" },
+          { value: "top-right", label: "Right" }
+        ]
+        value: root.position
+        onPicked: value => root.set("position", value)
+      }
+    }
+
+    // From see-through to the solid card.
+    SettingRow {
+      label: "GLASS"
+      Chips {
+        options: [
+          { value: "clear", label: "Clear" },
+          { value: "frosted", label: "Frosted" },
+          { value: "solid", label: "Solid" }
+        ]
+        value: root.glass
+        onPicked: value => root.set("glass", value)
+      }
+    }
 
     SettingRow {
-      label: "PREVIEW"
+      label: "SOUND"
+      Chips {
+        options: [
+          { value: "omatrophy", label: "OmaTrophy" },
+          { value: "classic", label: "Classic" },
+          { value: "off", label: "Silent" }
+        ]
+        value: root.sound ? root.chimes : "off"
+        onPicked: value => root.set("sound", value)
+      }
+    }
+
+    // Last in the section, so a choice is made before it is tried.
+    SettingRow {
+      label: "TRY IT"
       Row {
         spacing: Commons.Style.space(6)
         Repeater {
@@ -1808,184 +1850,14 @@ Column {
       }
     }
 
-    // Where toasts show, picked on a small drawing of the screen: a slot
-    // along its top edge for each place, the chosen one lit.
-    SettingRow {
-      label: "POSITION"
-      Rectangle {
-        id: screen
-        readonly property var places: [
-          { value: "top-left", label: "Left" },
-          { value: "top-center", label: "Center" },
-          { value: "top-right", label: "Right" }
-        ]
-        width: Commons.Style.space(150)
-        height: Math.round(width * 9 / 16)
-        radius: Math.max(2, Commons.Style.cornerRadius)
-        color: Qt.alpha(root.foreground, 0.04)
-        border.width: 1
-        border.color: Qt.alpha(root.foreground, 0.18)
-        Row {
-          anchors.top: parent.top
-          anchors.topMargin: Commons.Style.space(7)
-          anchors.horizontalCenter: parent.horizontalCenter
-          spacing: Commons.Style.space(6)
-          Repeater {
-            model: screen.places
-            delegate: Rectangle {
-              id: slot
-              required property var modelData
-              readonly property bool chosen: root.position === modelData.value
-              width: (screen.width - Commons.Style.space(14) - Commons.Style.space(12)) / 3
-              height: Commons.Style.space(16)
-              radius: 2
-              color: chosen ? Qt.alpha(Commons.Color.accent, 0.85)
-                     : (slotHit.containsMouse ? Qt.alpha(root.foreground, 0.16) : Qt.alpha(root.foreground, 0.06))
-              border.width: chosen ? 0 : 1
-              border.color: Qt.alpha(root.foreground, 0.14)
-              Accessible.role: Accessible.RadioButton
-              Accessible.name: "Toasts at the top " + modelData.label.toLowerCase()
-              Accessible.checked: chosen
-              Behavior on color { ColorAnimation { duration: 120 } }
-              MouseArea {
-                id: slotHit
-                anchors.fill: parent
-                anchors.margins: -3
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root.set("position", slot.modelData.value)
-              }
-            }
-          }
-        }
-        Caption {
-          anchors.bottom: parent.bottom
-          anchors.bottomMargin: Commons.Style.space(5)
-          anchors.horizontalCenter: parent.horizontalCenter
-          opacity: 0.45
-          text: (screen.places.find(function(p) { return p.value === root.position }) || screen.places[1]).label
-        }
-      }
-    }
-
-    // Three stops on a track, from see-through to the solid card. Dragging
-    // moves the knob between stops and writes the setting on release, so
-    // one drag is one `set`.
-    SettingRow {
-      label: "GLASS"
-      Item {
-        id: glassSlider
-        readonly property var stops: [
-          { value: "clear", label: "Clear" },
-          { value: "frosted", label: "Frosted" },
-          { value: "solid", label: "Solid" }
-        ]
-        readonly property int current: Math.max(0, stops.findIndex(function(s) { return s.value === root.glass }))
-        property int dragged: -1
-        readonly property int shown: dragged >= 0 ? dragged : current
-        readonly property real step: glassTrack.width / (stops.length - 1)
-        width: Commons.Style.space(150)
-        height: glassTrack.y + Commons.Style.space(22)
-        Accessible.role: Accessible.Slider
-        Accessible.name: "Toast glass: " + stops[shown].label
-
-        function nearest(x) {
-          return Math.max(0, Math.min(stops.length - 1, Math.round((x - glassTrack.x) / step)))
-        }
-
-        Rectangle {
-          id: glassTrack
-          x: Commons.Style.space(14)
-          y: Commons.Style.space(7)
-          width: parent.width - 2 * x
-          height: 2
-          radius: 1
-          color: Qt.alpha(root.foreground, 0.15)
-          // Filled up to the knob: more fill, more solid.
-          Rectangle {
-            width: glassSlider.shown * glassSlider.step
-            height: parent.height
-            radius: 1
-            color: Qt.alpha(Commons.Color.accent, 0.7)
-            Behavior on width { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
-          }
-        }
-        Repeater {
-          model: glassSlider.stops
-          delegate: Item {
-            id: glassStop
-            required property var modelData
-            required property int index
-            x: glassTrack.x + index * glassSlider.step
-            Rectangle {
-              x: -width / 2
-              y: glassTrack.y - height / 2 + 1
-              width: 6
-              height: 6
-              radius: 3
-              color: glassStop.index <= glassSlider.shown ? Commons.Color.accent : Qt.alpha(root.foreground, 0.3)
-            }
-            Caption {
-              textFormat: Text.PlainText
-              x: -width / 2
-              y: glassTrack.y + Commons.Style.space(8)
-              text: glassStop.modelData.label
-              color: glassStop.index === glassSlider.shown ? Commons.Color.accent : root.foreground
-              opacity: glassStop.index === glassSlider.shown ? 1 : 0.5
-              font.bold: glassStop.index === glassSlider.shown
-            }
-          }
-        }
-        Rectangle {
-          x: glassTrack.x + glassSlider.shown * glassSlider.step - width / 2
-          y: glassTrack.y - height / 2 + 1
-          width: 12
-          height: 12
-          radius: 6
-          color: Commons.Color.accent
-          border.width: 2
-          border.color: Commons.Color.popups.background
-          scale: glassHit.pressed ? 1.2 : (glassHit.containsMouse ? 1.1 : 1)
-          Behavior on x { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
-          Behavior on scale { NumberAnimation { duration: 120 } }
-        }
-        MouseArea {
-          id: glassHit
-          anchors.fill: parent
-          hoverEnabled: true
-          cursorShape: Qt.PointingHandCursor
-          onPressed: mouse => glassSlider.dragged = glassSlider.nearest(mouse.x)
-          onPositionChanged: mouse => { if (pressed) glassSlider.dragged = glassSlider.nearest(mouse.x) }
-          onReleased: {
-            var pick = glassSlider.stops[glassSlider.dragged].value
-            glassSlider.dragged = -1
-            if (pick !== root.glass) root.set("glass", pick)
-          }
-          onCanceled: glassSlider.dragged = -1
-        }
-      }
-    }
-
-    SettingRow {
-      label: "SOUND"
-      Chips {
-        options: [
-          { value: "omatrophy", label: "OmaTrophy" },
-          { value: "classic", label: "Classic" },
-          { value: "off", label: "Silent" }
-        ]
-        value: root.sound ? root.chimes : "off"
-        onPicked: value => root.set("sound", value)
-      }
-    }
-
     // Said under the toast rows only: the Steam rows below don't touch
-    // toasts, so a footer for the whole tab read wrong there.
+    // toasts.
     Caption {
       width: root.width
-      horizontalAlignment: Text.AlignHCenter
+      wrapMode: Text.WordWrap
+      elide: Text.ElideNone
       opacity: 0.4
-      text: "These apply to the next toast · try one with a preview tile"
+      text: "Changes apply to the next toast. A tile shows one now, with your settings."
     }
 
     // ------------------------------------------------ steam
