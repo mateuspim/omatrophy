@@ -44,6 +44,18 @@ Column {
   // The Steam profile backfill's latest line, from its status.json
   // (stores/steam_community.py); {} before the first run.
   property var backfill: ({})
+  // Load from Steam (ADR 13): played Steam games with no stats here, those
+  // no load has tried yet (a load only takes these, unless the owner asks
+  // for all), from `steam-load status`; the latest run from
+  // steam-load/status.json.
+  property int steamMissing: 0
+  property int steamUnchecked: 0
+  property var steamLoad: ({})
+  // A run rewrites its status every few seconds; one quiet for a minute
+  // died (omatrophy.py's STEAM_LOAD_STALE).
+  readonly property bool steamLoading: steamLoad.state === "running" && clock - steamLoad.time < 60
+  // Seconds, ticked while a load runs so a dead one stops looking alive.
+  property real clock: Date.now() / 1000
 
   // From `omatrophy.py now`; null until it answers. dev/render.sh turns
   // `live` off and sets `cabinet` to sample data.
@@ -297,6 +309,68 @@ Column {
     return "Last run " + at + " · " + b.line
   }
 
+  // What the Load from Steam row says: progress while it runs, why it
+  // stopped, or how many games it would load. Steam's window moving is
+  // said up front, since that is the surprise.
+  function steamLoadText() {
+    var l = steamLoad
+    if (steamLoading)
+      return "Loading " + l.done + " of " + l.total + " · " + l.loaded + " found. Steam stays out of sight; progress is at the top of the panel."
+    if (l.state === "failed") return l.line.replace(/^stopped: /, "Stopped: ")
+    if (steamUnchecked > 0)
+      return (steamUnchecked === 1 ? "1 played game isn't" : steamUnchecked + " played games aren't")
+             + " here yet. Load has Steam save their achievements on this machine, out of sight; it picks up where it stopped."
+    var none = steamMissing === 1 ? "1 game" : steamMissing + " games"
+    if (steamMissing > 0)
+      return "Every played game checked; " + none + " had no achievements. New games load on their own next time; Check all tries them all again."
+    return "Every played game is here."
+  }
+
+  // Detached: the panel's content is rebuilt on every open, and a child
+  // process would end with it. `all` tries games a load already tried.
+  function startSteamLoad(all) {
+    clock = Date.now() / 1000
+    steamLoad = { state: "running", time: clock, done: 0, total: all ? steamMissing : steamUnchecked,
+                  loaded: 0, none: 0, app: "" }
+    Quickshell.execDetached(["python3", helperPath, "steam-load"].concat(all ? ["all"] : []))
+  }
+
+  // Shown as stopped at once; the loader ends within a quarter second.
+  function stopSteamLoad() {
+    runner.exec(["python3", helperPath, "steam-load", "stop"])
+    steamLoad = Object.assign({}, steamLoad, { state: "stopped" })
+  }
+
+  // Load from Steam's progress as a whole percent.
+  function steamLoadPercent() {
+    var l = steamLoad
+    return l.total ? Math.floor(100 * (l.done || 0) / l.total) : 0
+  }
+
+  // Time left at the pace so far; "" until a few games set the pace.
+  function steamLoadLeft() {
+    var l = steamLoad
+    if (!l.started || !l.total || (l.done || 0) < 3) return ""
+    var each = (clock - l.started) / l.done
+    var minutes = Math.round(each * (l.total - l.done) / 60)
+    if (minutes < 1) return "under a minute left"
+    if (minutes < 60) return "about " + minutes + " min left"
+    return "about " + Math.floor(minutes / 60) + " h " + (minutes % 60) + " min left"
+  }
+
+  // Shows or hides Steam's hidden workspace (the loader's
+  // HIDDEN_WORKSPACE); a second click hides it again.
+  function peekSteam() {
+    Quickshell.execDetached(["hyprctl", "dispatch", "hl.dsp.workspace.toggle_special(\"omatrophy\")"])
+  }
+
+  // A game's name for the progress strip, from the panel's own lists.
+  function steamGameName(app) {
+    var all = (games || []).concat(cabinet && cabinet.recent ? cabinet.recent : [])
+    var g = all.find(function(x) { return x.store === "steam" && x.app === app })
+    return g ? g.game : "App " + app
+  }
+
   // ---------------------------------------------------- Files and processes
   // What the panel reads (settings, the last answers, the backfill's
   // status) and the omatrophy.py calls that fill it.
@@ -357,6 +431,44 @@ Column {
     onLoaded: {
       try { root.backfill = JSON.parse(text()) } catch (e) {}
     }
+  }
+
+  FileView {
+    path: root.live ? Quickshell.env("HOME") + "/.cache/omatrophy/steam-load/status.json" : ""
+    watchChanges: true
+    printErrors: false
+    onFileChanged: reload()
+    onLoaded: {
+      var was = root.steamLoad
+      try { root.steamLoad = JSON.parse(text()) } catch (e) {}
+      // Each loaded game joins the Games tab as it lands; the status is
+      // written twice a game, so only a new find or a new state re-reads it.
+      var changed = root.steamLoad.loaded !== was.loaded || root.steamLoad.state !== was.state
+      if (changed && root.games !== null && !gamesReader.running) gamesReader.running = true
+      if (was.state === "running" && root.steamLoad.state !== "running") steamLoadReader.running = true
+    }
+  }
+
+  Process {
+    id: steamLoadReader
+    running: root.live
+    command: ["python3", root.helperPath, "steam-load", "status"]
+    stdout: StdioCollector {
+      onStreamFinished: {
+        try {
+          var answer = JSON.parse(text)
+          root.steamMissing = answer.missing || 0
+          root.steamUnchecked = answer.unchecked || 0
+        } catch (e) {}
+      }
+    }
+  }
+
+  Timer {
+    interval: 5000
+    repeat: true
+    running: root.steamLoad.state === "running"
+    onTriggered: root.clock = Date.now() / 1000
   }
 
   Process { id: runner }
@@ -665,6 +777,39 @@ Column {
     }
   }
 
+  // A small outlined button: Load from Steam, Stop.
+  component PillButton: Rectangle {
+    id: pill
+    property string label: ""
+    signal clicked()
+    width: pillText.implicitWidth + Commons.Style.space(20)
+    height: pillText.implicitHeight + Commons.Style.space(10)
+    radius: height / 2
+    color: pillHit.containsMouse ? Commons.Style.hoverFill : "transparent"
+    border.width: 1
+    border.color: Qt.alpha(root.foreground, pillHit.containsMouse ? 0.35 : 0.18)
+    Accessible.role: Accessible.Button
+    Accessible.name: label
+    Behavior on color { ColorAnimation { duration: 120 } }
+    Text {
+      textFormat: Text.PlainText
+      id: pillText
+      anchors.centerIn: parent
+      text: pill.label
+      color: root.foreground
+      opacity: 0.8
+      font.family: Commons.Style.font.family
+      font.pixelSize: Commons.Style.font.caption
+    }
+    MouseArea {
+      id: pillHit
+      anchors.fill: parent
+      hoverEnabled: true
+      cursorShape: Qt.PointingHandCursor
+      onClicked: pill.clicked()
+    }
+  }
+
   // Settings as label + control rows, so they read as one compact block.
   component SettingRow: Item {
     property string label: ""
@@ -814,6 +959,383 @@ Column {
             cursorShape: Qt.PointingHandCursor
             onClicked: root.tab = tabItem.modelData.value
           }
+        }
+      }
+    }
+  }
+
+  // Load from Steam's progress, on every tab while it runs: it works out of
+  // sight, so this is the only sign it is going. The game being checked,
+  // a bar split into found and empty, what is left, the latest results as
+  // covers, and why Steam's window is gone.
+  Rectangle {
+    id: steamLoadStrip
+    readonly property var load: root.steamLoad
+    // A run started before `current` existed names only its app.
+    readonly property var current: load.current || (load.app ? { app: load.app, name: "", art: "" } : null)
+    // Steam's CDN header when the run gave no cover (an older run, or
+    // art Steam hasn't saved yet).
+    readonly property string currentArt: !current ? ""
+      : (current.art || "https://cdn.fastly.steamstatic.com/steam/apps/" + current.app + "/header.jpg")
+    readonly property int done: load.done || 0
+    readonly property int total: load.total || 0
+    readonly property int found: load.loaded || 0
+    readonly property int empty: load.none || 0
+    // The newest result that has already dropped in; the row is rebuilt on
+    // every status change, and only a new arrival should animate.
+    property string arrived: ""
+    width: root.width
+    height: visible ? stripBody.height + Commons.Style.space(20) : 0
+    visible: root.steamLoading
+    radius: Commons.Style.cornerRadius
+    color: Qt.alpha(Commons.Color.accent, 0.05)
+    border.width: 1
+    border.color: Qt.alpha(Commons.Color.accent, 0.22)
+
+    Column {
+      id: stripBody
+      x: Commons.Style.space(10)
+      y: Commons.Style.space(10)
+      width: parent.width - Commons.Style.space(20)
+      spacing: Commons.Style.space(8)
+
+      // Title, percent and time left.
+      Item {
+        width: parent.width
+        height: stripTitle.implicitHeight
+        MiniLabel {
+          id: stripTitle
+          text: steamLoadStrip.load.everything ? "CHECKING ALL STEAM GAMES" : "LOADING FROM STEAM"
+          color: Commons.Color.accent
+        }
+        Caption {
+          textFormat: Text.PlainText
+          anchors.right: parent.right
+          anchors.verticalCenter: stripTitle.verticalCenter
+          opacity: 0.6
+          text: root.steamLoadPercent() + "%" + (root.steamLoadLeft() ? " · " + root.steamLoadLeft() : "")
+        }
+      }
+
+      // The game being checked now, and Stop.
+      Item {
+        width: parent.width
+        height: Commons.Style.space(40)
+        // The cover of the game being checked, behind Omarchy's boot veil
+        // (as omadroid's preview splash and omamosaic's swap veil draw it):
+        // the wordmark with a light sweeping across it over a thin bar that
+        // eases forward on its own. Each game starts it again; once the
+        // cover has loaded the bar fills, the veil lifts and the cover
+        // settles in.
+        Rectangle {
+          id: stripArt
+          readonly property string app: steamLoadStrip.current ? steamLoadStrip.current.app : ""
+          // 0 to 1, eased towards 0.6 while waiting, like the boot screen.
+          property real progress: 0
+          readonly property string logoPath: (Quickshell.env("OMARCHY_PATH") || "/usr/share/omarchy") + "/logo.svg"
+          width: Math.round(height * 460 / 215)
+          height: parent.height
+          radius: Commons.Style.cornerRadius
+          color: Qt.alpha(root.foreground, 0.06)
+          clip: true
+
+          function start() {
+            lifting.stop()
+            coverIn.stop()
+            stripCover.opacity = 0
+            veil.opacity = 1
+            progress = 0
+            waiting.restart()
+          }
+          function finish() {
+            if (lifting.running || veil.opacity === 0) return
+            waiting.stop()
+            lifting.restart()
+          }
+          onAppChanged: start()
+          Component.onCompleted: start()
+
+          NumberAnimation { id: waiting; target: stripArt; property: "progress"; to: 0.6; duration: 2500; easing.type: Easing.OutCubic }
+          SequentialAnimation {
+            id: lifting
+            NumberAnimation { target: stripArt; property: "progress"; to: 1; duration: 220; easing.type: Easing.OutCubic }
+            PauseAnimation { duration: 120 }
+            ParallelAnimation {
+              NumberAnimation { target: veil; property: "opacity"; to: 0; duration: 260; easing.type: Easing.InCubic }
+              ScriptAction { script: coverIn.restart() }
+            }
+          }
+
+          Image {
+            id: stripCover
+            anchors.fill: parent
+            source: steamLoadStrip.currentArt
+            fillMode: Image.PreserveAspectCrop
+            asynchronous: true
+            sourceSize.width: 460
+            opacity: 0
+            onStatusChanged: if (status === Image.Ready) stripArt.finish()
+            ParallelAnimation {
+              id: coverIn
+              NumberAnimation { target: stripCover; property: "opacity"; from: 0; to: 1; duration: 320; easing.type: Easing.OutCubic }
+              NumberAnimation { target: stripCover; property: "scale"; from: 1.12; to: 1; duration: 520; easing.type: Easing.OutCubic }
+            }
+          }
+
+          Rectangle {
+            id: veil
+            anchors.fill: parent
+            radius: parent.radius
+            color: Commons.Color.popups.background
+
+            Column {
+              anchors.centerIn: parent
+              spacing: Commons.Style.space(5)
+
+              Item {
+                id: veilLogo
+                width: Math.round(stripArt.width * 0.62)
+                height: Math.round(width * 285 / 1215)
+                anchors.horizontalCenter: parent.horizontalCenter
+
+                // The wordmark's shape, used as a mask over `veilPaint`.
+                Image {
+                  id: veilShape
+                  anchors.fill: parent
+                  source: "file://" + stripArt.logoPath
+                  sourceSize.width: Math.ceil(parent.width * 2)
+                  fillMode: Image.PreserveAspectFit
+                  smooth: true
+                  visible: false
+                  layer.enabled: true
+                }
+                // The popup's text colour, dimmed, with a brighter band
+                // sweeping across it.
+                Item {
+                  id: veilPaint
+                  anchors.fill: parent
+                  visible: false
+                  layer.enabled: true
+                  clip: true
+                  Rectangle { anchors.fill: parent; color: root.foreground; opacity: 0.5 }
+                  Rectangle {
+                    id: veilBand
+                    width: parent.width * 0.4
+                    height: parent.height * 3
+                    anchors.verticalCenter: parent.verticalCenter
+                    rotation: 18
+                    gradient: Gradient {
+                      orientation: Gradient.Horizontal
+                      GradientStop { position: 0.0; color: "transparent" }
+                      GradientStop { position: 0.5; color: root.foreground }
+                      GradientStop { position: 1.0; color: "transparent" }
+                    }
+                    NumberAnimation on x {
+                      from: -veilBand.width
+                      to: veilLogo.width
+                      duration: 1100
+                      loops: Animation.Infinite
+                      running: steamLoadStrip.visible && veil.opacity > 0
+                      easing.type: Easing.InOutSine
+                    }
+                  }
+                }
+                MultiEffect {
+                  anchors.fill: parent
+                  source: veilPaint
+                  maskEnabled: true
+                  maskSource: veilShape
+                  maskThresholdMin: 0.4
+                  maskSpreadAtMin: 0.2
+                  visible: veilShape.status === Image.Ready
+                }
+                // Without the logo file, the name.
+                Text {
+                  textFormat: Text.PlainText
+                  anchors.centerIn: parent
+                  visible: veilShape.status === Image.Error
+                  text: "omarchy"
+                  color: root.foreground
+                  opacity: 0.6
+                  font.family: Commons.Style.font.family
+                  font.pixelSize: Commons.Style.font.caption
+                  font.bold: true
+                }
+              }
+
+              Rectangle {
+                width: veilLogo.width * 0.5
+                height: 2
+                radius: 1
+                anchors.horizontalCenter: parent.horizontalCenter
+                color: Qt.alpha(root.foreground, 0.15)
+                Rectangle {
+                  width: parent.width * stripArt.progress
+                  height: parent.height
+                  radius: parent.radius
+                  color: Commons.Color.accent
+                }
+              }
+            }
+          }
+        }
+        Column {
+          anchors.left: stripArt.right
+          anchors.leftMargin: Commons.Style.space(10)
+          anchors.right: stripStop.left
+          anchors.rightMargin: Commons.Style.space(8)
+          anchors.verticalCenter: parent.verticalCenter
+          spacing: Commons.Style.space(2)
+          Text {
+            textFormat: Text.PlainText
+            width: parent.width
+            text: steamLoadStrip.current
+                  ? (steamLoadStrip.current.name || root.steamGameName(steamLoadStrip.current.app))
+                  : "Starting…"
+            color: root.foreground
+            font.family: Commons.Style.font.family
+            font.pixelSize: Commons.Style.font.bodySmall
+            font.bold: true
+            elide: Text.ElideRight
+          }
+          Caption {
+            textFormat: Text.PlainText
+            width: parent.width
+            opacity: 0.5
+            text: "Checking " + Math.min(steamLoadStrip.done + 1, steamLoadStrip.total) + " of " + steamLoadStrip.total
+          }
+        }
+        PillButton {
+          id: stripStop
+          anchors.right: parent.right
+          anchors.verticalCenter: parent.verticalCenter
+          label: "Stop"
+          onClicked: root.stopSteamLoad()
+        }
+      }
+
+      // Found in the accent, empty in a quiet tone, the rest still to go.
+      Rectangle {
+        width: parent.width
+        height: 4
+        radius: 2
+        color: Qt.alpha(root.foreground, 0.08)
+        clip: true
+        Row {
+          height: parent.height
+          Rectangle {
+            width: steamLoadStrip.total ? parent.parent.width * steamLoadStrip.found / steamLoadStrip.total : 0
+            height: parent.height
+            color: Commons.Color.accent
+            Behavior on width { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
+          }
+          Rectangle {
+            width: steamLoadStrip.total ? parent.parent.width * steamLoadStrip.empty / steamLoadStrip.total : 0
+            height: parent.height
+            color: Qt.alpha(root.foreground, 0.3)
+            Behavior on width { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
+          }
+        }
+      }
+
+      Row {
+        spacing: Commons.Style.space(12)
+        Repeater {
+          model: [
+            { dot: Commons.Color.accent, text: steamLoadStrip.found + " found" },
+            { dot: Qt.alpha(root.foreground, 0.3), text: steamLoadStrip.empty + " without achievements" },
+            { dot: Qt.alpha(root.foreground, 0.1), text: Math.max(0, steamLoadStrip.total - steamLoadStrip.done) + " to go" }
+          ]
+          delegate: Row {
+            required property var modelData
+            spacing: Commons.Style.space(4)
+            Rectangle {
+              width: 6; height: 6; radius: 3
+              anchors.verticalCenter: parent.verticalCenter
+              color: parent.modelData.dot
+            }
+            Caption {
+              textFormat: Text.PlainText
+              opacity: 0.55
+              text: parent.modelData.text
+            }
+          }
+        }
+      }
+
+      // The latest results, newest first: found games in full colour,
+      // games without achievements faded.
+      Row {
+        id: stripRecent
+        readonly property real tile: (parent.width - spacing * 5) / 6
+        visible: (steamLoadStrip.load.recent || []).length > 0
+        spacing: Commons.Style.space(4)
+        Repeater {
+          model: steamLoadStrip.load.recent || []
+          delegate: Art {
+            id: recentCover
+            required property var modelData
+            required property int index
+            width: stripRecent.tile
+            height: Math.round(width * 215 / 460)
+            source: modelData.art || "https://cdn.fastly.steamstatic.com/steam/apps/" + modelData.app + "/header.jpg"
+            label: modelData.name || ""
+            readonly property real rest: modelData.found ? 1 : 0.3
+            opacity: rest
+            // The list is rebuilt on every result; only the newest, first,
+            // arrives, so the row reads as games dropping in one by one.
+            Component.onCompleted: {
+              if (index !== 0 || steamLoadStrip.arrived === modelData.app) return
+              steamLoadStrip.arrived = modelData.app
+              arrive.start()
+            }
+            ParallelAnimation {
+              id: arrive
+              NumberAnimation { target: recentCover; property: "opacity"; from: 0; to: recentCover.rest; duration: 360; easing.type: Easing.OutCubic }
+              NumberAnimation { target: recentCover; property: "scale"; from: 0.7; to: 1; duration: 420; easing.type: Easing.OutBack }
+            }
+            Rectangle {
+              visible: parent.modelData.found
+              anchors.right: parent.right
+              anchors.bottom: parent.bottom
+              anchors.margins: 3
+              width: 12; height: 12; radius: 6
+              color: Commons.Color.accent
+              Text {
+                textFormat: Text.PlainText
+                anchors.centerIn: parent
+                text: "✓"
+                color: Commons.Color.popups.background
+                font.pixelSize: 8
+                font.bold: true
+              }
+            }
+          }
+        }
+      }
+
+      // Why Steam's window is gone, and a way to look at it.
+      Item {
+        width: parent.width
+        height: Math.max(hiddenNote.implicitHeight, peekButton.height)
+        visible: !!steamLoadStrip.load.hidden
+        Caption {
+          textFormat: Text.PlainText
+          id: hiddenNote
+          anchors.left: parent.left
+          anchors.right: peekButton.left
+          anchors.rightMargin: Commons.Style.space(8)
+          anchors.verticalCenter: parent.verticalCenter
+          wrapMode: Text.WordWrap
+          opacity: 0.45
+          text: "Steam is hidden for now so its pages can open without taking over your screen. It comes back where it was when this ends."
+        }
+        PillButton {
+          id: peekButton
+          anchors.right: parent.right
+          anchors.verticalCenter: parent.verticalCenter
+          label: "Peek"
+          onClicked: root.peekSteam()
         }
       }
     }
@@ -2415,6 +2937,31 @@ Column {
       Keys.onTabPressed: focus = false
     }
 
+    // Played Steam games OmaTrophy can't see yet, and the way to load
+    // them; also the progress while a load runs.
+    Item {
+      width: root.width
+      height: Math.max(steamLoadLine.implicitHeight, steamLoadButton.height)
+      visible: !root.steamLoading && root.steamUnchecked > 0
+      Caption {
+        textFormat: Text.PlainText
+        id: steamLoadLine
+        anchors.left: parent.left
+        anchors.right: steamLoadButton.left
+        anchors.rightMargin: Commons.Style.space(8)
+        anchors.verticalCenter: parent.verticalCenter
+        opacity: 0.5
+        text: root.steamUnchecked === 1 ? "1 Steam game isn't here yet" : root.steamUnchecked + " Steam games aren't here yet"
+      }
+      PillButton {
+        id: steamLoadButton
+        anchors.right: parent.right
+        anchors.verticalCenter: parent.verticalCenter
+        label: "Load from Steam"
+        onClicked: root.startSteamLoad(false)
+      }
+    }
+
     // ------------------------------------------------ game list
 
     Repeater {
@@ -2942,6 +3489,33 @@ Column {
         wrapMode: Text.WordWrap
         opacity: 0.4
         text: root.backfillText()
+      }
+
+      // Load from Steam (ADR 13): only ever started here or from the CLI,
+      // never by the watcher, because Steam's window moves.
+      SettingRow {
+        label: "LIBRARY"
+        Row {
+          spacing: Commons.Style.space(4)
+          PillButton {
+            label: "Check all again"
+            visible: !root.steamLoading && root.steamMissing > root.steamUnchecked
+            onClicked: root.startSteamLoad(true)
+          }
+          PillButton {
+            label: root.steamLoading ? "Stop" : "Load from Steam"
+            visible: root.steamLoading || root.steamUnchecked > 0
+            onClicked: root.steamLoading ? root.stopSteamLoad() : root.startSteamLoad(false)
+          }
+        }
+      }
+
+      Caption {
+        textFormat: Text.PlainText
+        width: parent.width
+        wrapMode: Text.WordWrap
+        opacity: 0.4
+        text: root.steamLoadText()
       }
 
       // Steam shows its own popup for the same unlock. OmaTrophy only reads

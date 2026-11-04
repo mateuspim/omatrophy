@@ -24,6 +24,7 @@ made.
 | [10](0010-build-views-from-their-text.md) | Build live-edited views from their text | Accepted |
 | [11](0011-backfill-from-the-community-profile.md) | Backfill games this machine never ran from the public profile, opt-in | Accepted |
 | [12](0012-read-comets-gameplay-database-for-gog.md) | Read Comet's gameplay database for GOG | Accepted |
+| [13](0013-load-stats-through-the-steam-client.md) | Load played games' stats through the Steam client, on request | Accepted |
 
 ## Rules
 

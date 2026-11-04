@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- Load from Steam: `omatrophy.py steam-load` opens the library page of
+  every game you played that OmaTrophy can't see yet, and the Steam
+  client caches its achievements locally, about a second a game, with
+  no key and no rate limit (ADR 13). On Hyprland Steam's window stays
+  on a hidden workspace meanwhile. Tried games are remembered, so a
+  load resumes where it stopped and later loads only take new games;
+  `steam-load all` retries everything. `steam-load stop` (immediate) and
+  `steam-load status` go with it. In the panel: Load from Steam and
+  Check all again in Settings' Steam card, a Load button on the Games
+  tab, and a progress strip under the tabs while it runs: the game being
+  checked with its cover, found and empty counts on a split bar, time
+  left, the latest results as covers, Stop, and a note that Steam is
+  hidden only until the load ends, with Peek to look at it.
+
 ## 0.4.0 - 2026-11-04
 
 After updating, restart the shell once (`omarchy restart shell`) so the

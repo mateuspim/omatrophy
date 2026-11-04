@@ -8,7 +8,7 @@ what was played last from userdata/<account>/config/localconfig.vdf.
 """
 import os, re, struct, threading, time
 
-from . import steam_community
+from . import steam_community, steam_loader
 from .base import CACHE, STATE, Store, boot_time, cached, config, http_json, read_json, started_at, write_json
 from .steam_community import app_id
 
@@ -331,6 +331,43 @@ class Steam(Store):
         result = steam_community.backfill(self.uid, self.recent(), set(self.local_games()), say=say)
         self.remember_names()
         return result
+
+    def missing(self, everything=False):
+        """Played games with no local stats file that no load has tried yet
+        (with `everything`, tried or not), most played first: the queue
+        for Load from Steam (ADR 13)."""
+        return steam_loader.missing(self.playtime(), set(self.local_games()),
+                                    steam_loader.checked(), everything)
+
+    def load_from_steam(self, busy, say=None, everything=False):
+        """Open each missing game's library page so the client caches its
+        stats. Only the owner starts this."""
+        stats = lambda app: os.path.exists(f'{self.stats}/UserGameStats_{self.uid}_{app}.bin')
+        return steam_loader.load(self.missing(everything), stats, busy, say=say, everything=everything,
+                                 describe=self.describe_for_load, prepare=self.name_in_background)
+
+    def name_in_background(self, app):
+        """Look a game's name up in a thread, once per game: the load tells
+        the store the next game while the current one loads, so the name
+        is cached by the time the panel shows it."""
+        naming = self.__dict__.setdefault('naming', set())
+        if app in naming:
+            return
+        naming.add(app)
+        threading.Thread(target=self.game_name, args=(app,), daemon=True).start()
+
+    def describe_for_load(self, app):
+        """{name, art} for the load's progress strip, never waiting on the
+        network: the name from the cache, else looked up in the background
+        while the page loads (so the next report has it); the header Steam
+        just fetched for the library page."""
+        with NAMES_LOCK:
+            name = read_json(NAMES, {}).get(app, '')
+        if not name:
+            self.name_in_background(app)
+        # Steam may not have saved the header yet when the page opens; the
+        # CDN's copy is what the Games tab shows for it anyway.
+        return {'name': name, 'art': self.library_art(app, 'header.jpg') or f'{ART_BASE}/{app}/header.jpg'}
 
     def remember_names(self):
         """Copy game names from cached profile pages into the name cache,

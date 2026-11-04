@@ -144,7 +144,10 @@ each tier with your settings. Each choice applies to the next toast.
 **Stores**, a card per store says whether OmaTrophy found it and how many
 games it has, or what to do when it didn't. In Steam's card, **Profile**
 fills in games this machine never ran from your public Steam profile (off
-by default). GOG has nothing to set. Steam also shows its own popup for each unlock; **Turn off in Steam** opens
+by default), and **Load from Steam** has the Steam client save the
+achievements of played games OmaTrophy can't see yet (it shows how many;
+the Games tab has the same button), with **Check all again** to retry the
+whole library. While a load runs, a bar under the tabs shows it. GOG has nothing to set. Steam also shows its own popup for each unlock; **Turn off in Steam** opens
 Steam's Notifications settings: untick Show Toast (and Play Sound) on
 "When I unlock an achievement".
 
@@ -173,10 +176,29 @@ Steam and GOG are supported today.
 
 Native or Flatpak; set `STEAM_DIR` if yours lives elsewhere.
 
-Steam keeps a game's achievements on disk only once that game has run on
-this machine, so a fresh install shows just a few games. If your profile
-and game details are public, fill in the rest from your Steam Community
-profile:
+Steam keeps a game's achievements on disk only once its client has
+loaded them here: by playing the game, or just by opening its library
+page. So a fresh install shows just a few games. With Steam running and no
+game open, let OmaTrophy open those pages for you:
+
+```bash
+omatrophy.py steam-load          # every played game not tried yet, most played first
+omatrophy.py steam-load stop     # from another terminal: stop now
+omatrophy.py steam-load all      # try every played game without stats again
+```
+
+On Hyprland, Steam's window waits on a hidden workspace while it runs, and
+comes back where it was afterwards (Peek shows it meanwhile); the panel
+shows the progress on every tab: the game being checked, what was found,
+and time left. It takes about a second per game with achievements and 8 s for
+one without. Each game is remembered once tried, so a stopped load picks
+up where it ended and later loads only take games you played since; only
+`all` goes over the whole library again. It stops by itself when a game
+starts or Steam closes. Everything stays on this machine
+([ADR 13](docs/adr/0013-load-stats-through-the-steam-client.md)).
+
+If your profile and game details are public, you can also fill in games
+from your Steam Community profile:
 
 ```bash
 omatrophy.py set community on   # off by default; sends your SteamID64 to steamcommunity.com

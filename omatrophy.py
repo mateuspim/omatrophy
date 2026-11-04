@@ -19,6 +19,9 @@ Usage:
   omatrophy.py set rarest ever|month|platinum
   omatrophy.py set community on|off   fill in games this machine never ran from your public Steam profile
   omatrophy.py sync                   run that backfill now, with progress
+  omatrophy.py steam-load [all]       have Steam cache the stats of played games not tried yet (ADR 13);
+                                      `all` tries every played game without stats again
+  omatrophy.py steam-load stop|status stop a running load; or its progress, as JSON
   omatrophy.py hide <store> <game>    keep a game you won't finish out of "closest to platinum"
   omatrophy.py unhide <store> <game>  bring it back
   omatrophy.py favorite <store> <game>|clear
@@ -33,7 +36,7 @@ Usage:
 Each store (stores/) reads its launcher's own files; this file diffs them and
 turns new unlocks into events. Steam and GOG (through Heroic) so far.
 """
-import hashlib, json, os, sys, threading, time, urllib.parse
+import hashlib, json, os, signal, sys, threading, time, urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 
 import stores
@@ -230,6 +233,52 @@ def sync():
         if result:
             fetched, failed = result
             print(f'{s.id}: fetched {fetched}' + (' (stopped early; run again later)' if failed else ''))
+
+
+# A running load rewrites its status at least every WAIT_SECONDS; one quiet
+# for longer than this died without saying so (killed, logged out).
+STEAM_LOAD_STALE = 60
+
+
+def steam_store(found=None):
+    steam = next((s for s in (found or stores.available()) if s.id == 'steam'), None)
+    if not steam:
+        raise SystemExit('Steam was not found. Install it and sign in, or set STEAM_DIR=/path/to/Steam')
+    return steam
+
+
+def steam_load_busy(state, now):
+    """True when another load is still running."""
+    return state.get('state') == 'running' and now - state.get('time', 0) < STEAM_LOAD_STALE
+
+
+def steam_load_status():
+    """{missing, unchecked, status} for the panel: played games without
+    stats here, those no load has tried yet, and the latest run."""
+    from stores import steam_loader
+    steam = steam_store()
+    played = steam.missing(everything=True)
+    tried = steam_loader.checked()
+    print(json.dumps({'missing': len(played), 'unchecked': len([a for a in played if a not in tried]),
+                      'status': steam_loader.status()}))
+
+
+def steam_load(everything=False):
+    """Load missing games' stats through the Steam client, printing progress."""
+    from stores import steam_loader
+    others = stores.available()
+    steam = steam_store(others)
+    if steam_load_busy(steam_loader.status(), time.time()):
+        raise SystemExit('A load from Steam is already running. Stop it with: omatrophy.py steam-load stop')
+    # A kill (or a closed terminal) must still run the loader's cleanup,
+    # or Steam's window stays on the hidden workspace.
+    for sig in (signal.SIGTERM, signal.SIGHUP):
+        signal.signal(sig, lambda *_: sys.exit(1))
+    # Steam's window must not jump over a game from any store.
+    busy = lambda: any(s.running() for s in others)
+    result = steam.load_from_steam(busy, say=lambda line: print(f'steam: {line}', flush=True), everything=everything)
+    if result['state'] == 'failed':
+        raise SystemExit(1)
 
 
 def watch(interval=1.0):
@@ -942,6 +991,13 @@ def main(argv):
         set_option(argv[2], argv[3])
     elif cmd == 'sync':
         sync()
+    elif cmd == 'steam-load' and argv[2:] in ([], ['all']):
+        steam_load(everything=argv[2:] == ['all'])
+    elif cmd == 'steam-load' and argv[2:] == ['stop']:
+        from stores import steam_loader
+        steam_loader.request_stop()
+    elif cmd == 'steam-load' and argv[2:] == ['status']:
+        steam_load_status()
     elif cmd == 'favorite' and len(argv) in (3, 4):
         set_favorite(argv[2], argv[3] if len(argv) == 4 else '')
     elif cmd in ('showcase', 'completionist') and len(argv) >= 3 and argv[2] == 'order':
