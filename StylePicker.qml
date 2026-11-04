@@ -1020,21 +1020,51 @@ Column {
       Item {
         width: parent.width
         height: Commons.Style.space(40)
-        // The cover of the game being checked: a shimmer until it loads,
-        // then the cover settles in, with an accent line sweeping across
-        // it while Steam looks for achievements.
+        // The cover of the game being checked, behind Omarchy's boot veil
+        // (as omadroid's preview splash and omamosaic's swap veil draw it):
+        // the wordmark with a light sweeping across it over a thin bar that
+        // eases forward on its own. Each game starts it again; once the
+        // cover has loaded the bar fills, the veil lifts and the cover
+        // settles in.
         Rectangle {
           id: stripArt
+          readonly property string app: steamLoadStrip.current ? steamLoadStrip.current.app : ""
+          // 0 to 1, eased towards 0.6 while waiting, like the boot screen.
+          property real progress: 0
+          readonly property string logoPath: (Quickshell.env("OMARCHY_PATH") || "/usr/share/omarchy") + "/logo.svg"
           width: Math.round(height * 460 / 215)
           height: parent.height
           radius: Commons.Style.cornerRadius
-          color: "transparent"
+          color: Qt.alpha(root.foreground, 0.06)
           clip: true
-          Bone {
-            anchors.fill: parent
-            radius: parent.radius
-            visible: stripCover.status !== Image.Ready
+
+          function start() {
+            lifting.stop()
+            coverIn.stop()
+            stripCover.opacity = 0
+            veil.opacity = 1
+            progress = 0
+            waiting.restart()
           }
+          function finish() {
+            if (lifting.running || veil.opacity === 0) return
+            waiting.stop()
+            lifting.restart()
+          }
+          onAppChanged: start()
+          Component.onCompleted: start()
+
+          NumberAnimation { id: waiting; target: stripArt; property: "progress"; to: 0.6; duration: 2500; easing.type: Easing.OutCubic }
+          SequentialAnimation {
+            id: lifting
+            NumberAnimation { target: stripArt; property: "progress"; to: 1; duration: 220; easing.type: Easing.OutCubic }
+            PauseAnimation { duration: 120 }
+            ParallelAnimation {
+              NumberAnimation { target: veil; property: "opacity"; to: 0; duration: 260; easing.type: Easing.InCubic }
+              ScriptAction { script: coverIn.restart() }
+            }
+          }
+
           Image {
             id: stripCover
             anchors.fill: parent
@@ -1043,32 +1073,108 @@ Column {
             asynchronous: true
             sourceSize.width: 460
             opacity: 0
-            // Each new cover fades in and settles from a slight zoom.
-            onStatusChanged: if (status === Image.Ready) coverIn.restart()
-            onSourceChanged: { coverIn.stop(); opacity = 0 }
+            onStatusChanged: if (status === Image.Ready) stripArt.finish()
             ParallelAnimation {
               id: coverIn
               NumberAnimation { target: stripCover; property: "opacity"; from: 0; to: 1; duration: 320; easing.type: Easing.OutCubic }
               NumberAnimation { target: stripCover; property: "scale"; from: 1.12; to: 1; duration: 520; easing.type: Easing.OutCubic }
             }
           }
+
           Rectangle {
-            id: scanLine
-            width: Math.max(24, stripArt.width * 0.35)
-            height: stripArt.height
-            gradient: Gradient {
-              orientation: Gradient.Horizontal
-              GradientStop { position: 0; color: "transparent" }
-              GradientStop { position: 0.85; color: Qt.alpha(Commons.Color.accent, 0.22) }
-              GradientStop { position: 1; color: Qt.alpha(Commons.Color.accent, 0.7) }
-            }
-            NumberAnimation on x {
-              from: -scanLine.width
-              to: stripArt.width
-              duration: 1400
-              easing.type: Easing.InOutSine
-              loops: Animation.Infinite
-              running: steamLoadStrip.visible
+            id: veil
+            anchors.fill: parent
+            radius: parent.radius
+            color: Commons.Color.popups.background
+
+            Column {
+              anchors.centerIn: parent
+              spacing: Commons.Style.space(5)
+
+              Item {
+                id: veilLogo
+                width: Math.round(stripArt.width * 0.62)
+                height: Math.round(width * 285 / 1215)
+                anchors.horizontalCenter: parent.horizontalCenter
+
+                // The wordmark's shape, used as a mask over `veilPaint`.
+                Image {
+                  id: veilShape
+                  anchors.fill: parent
+                  source: "file://" + stripArt.logoPath
+                  sourceSize.width: Math.ceil(parent.width * 2)
+                  fillMode: Image.PreserveAspectFit
+                  smooth: true
+                  visible: false
+                  layer.enabled: true
+                }
+                // The popup's text colour, dimmed, with a brighter band
+                // sweeping across it.
+                Item {
+                  id: veilPaint
+                  anchors.fill: parent
+                  visible: false
+                  layer.enabled: true
+                  clip: true
+                  Rectangle { anchors.fill: parent; color: root.foreground; opacity: 0.5 }
+                  Rectangle {
+                    id: veilBand
+                    width: parent.width * 0.4
+                    height: parent.height * 3
+                    anchors.verticalCenter: parent.verticalCenter
+                    rotation: 18
+                    gradient: Gradient {
+                      orientation: Gradient.Horizontal
+                      GradientStop { position: 0.0; color: "transparent" }
+                      GradientStop { position: 0.5; color: root.foreground }
+                      GradientStop { position: 1.0; color: "transparent" }
+                    }
+                    NumberAnimation on x {
+                      from: -veilBand.width
+                      to: veilLogo.width
+                      duration: 1100
+                      loops: Animation.Infinite
+                      running: steamLoadStrip.visible && veil.opacity > 0
+                      easing.type: Easing.InOutSine
+                    }
+                  }
+                }
+                MultiEffect {
+                  anchors.fill: parent
+                  source: veilPaint
+                  maskEnabled: true
+                  maskSource: veilShape
+                  maskThresholdMin: 0.4
+                  maskSpreadAtMin: 0.2
+                  visible: veilShape.status === Image.Ready
+                }
+                // Without the logo file, the name.
+                Text {
+                  textFormat: Text.PlainText
+                  anchors.centerIn: parent
+                  visible: veilShape.status === Image.Error
+                  text: "omarchy"
+                  color: root.foreground
+                  opacity: 0.6
+                  font.family: Commons.Style.font.family
+                  font.pixelSize: Commons.Style.font.caption
+                  font.bold: true
+                }
+              }
+
+              Rectangle {
+                width: veilLogo.width * 0.5
+                height: 2
+                radius: 1
+                anchors.horizontalCenter: parent.horizontalCenter
+                color: Qt.alpha(root.foreground, 0.15)
+                Rectangle {
+                  width: parent.width * stripArt.progress
+                  height: parent.height
+                  radius: parent.radius
+                  color: Commons.Color.accent
+                }
+              }
             }
           }
         }
