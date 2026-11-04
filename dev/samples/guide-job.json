@@ -11,5 +11,7 @@
  "time": 1793059100,
  "agent": "claude",
  "model": "sonnet",
- "pid": 1
+ "pid": 1,
+ "web": true,
+ "open": 5
 }

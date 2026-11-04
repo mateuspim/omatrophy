@@ -10,7 +10,7 @@ Only the owner starts a job (`guide make` or the tracker's button), never
 the watcher. Nothing is written until the last stage passes, so a stopped
 or failed job leaves the old guide as it was.
 """
-import html, html.parser, json, os, re, signal, sys, tempfile, time, urllib.error, urllib.parse, urllib.request
+import html, html.parser, json, os, re, signal, subprocess, sys, tempfile, time, urllib.error, urllib.parse, urllib.request
 
 import guide_agents, guides
 from stores.base import read_json, write_json
@@ -594,7 +594,8 @@ class Job:
         write_json(status_path(self.folder), {
             'state': state, 'store': self.store, 'app': self.app, 'game': self.game, 'stage': self.stage,
             'done': self.done, 'total': self.total, 'line': line, 'started': self.started,
-            'time': int(self.clock()), 'agent': self.adapter.id, 'model': self.model, 'pid': os.getpid()})
+            'time': int(self.clock()), 'agent': self.adapter.id, 'model': self.model, 'pid': os.getpid(),
+            'web': self.web, 'open': sum(1 for a in self.achs if not a.get('unlocked'))})
         if line:
             self.say(line)
 
@@ -790,8 +791,20 @@ def stage_counts(usage):
     return out
 
 
-def make(job):
-    """Run a Job to its end and report how it ended: {state, line}."""
+def notify(summary, body):
+    """A desktop notification, for a make started from the tracker: the
+    owner may have closed it long ago. Quietly nothing without notify-send."""
+    try:
+        subprocess.run(['notify-send', '-a', 'OmaTrophy', summary, body], timeout=4,
+                       stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
+def make(job, announce=False):
+    """Run a Job to its end and report how it ended: {state, line}. With
+    `announce`, a notification says it finished or failed (not a stop:
+    the owner asked for that)."""
     for sig in (signal.SIGTERM, signal.SIGHUP):
         signal.signal(sig, lambda *_: sys.exit(1))
     try:
@@ -802,6 +815,8 @@ def make(job):
         return {'state': 'stopped'}
     except (RuntimeError, OSError) as e:
         job.report(f'failed: {e}', 'failed')
+        if announce:
+            notify(f'Guide failed: {job.game}', str(e))
         return {'state': 'failed', 'error': str(e)}
     except BaseException:
         job.report('failed: the job was interrupted; the old guide is unchanged', 'failed')
@@ -811,6 +826,9 @@ def make(job):
     cost = sum(u['cost_usd'] or 0 for u in job.usage if isinstance(u.get('cost_usd'), (int, float)))
     tail = f' (${cost:.2f})' if cost else ''
     job.report(f'done: {len(items)} items, {verified} verified{tail}', 'done')
+    if announce:
+        notify(f'Guide ready: {job.game}', f'{len(items)} achievements, {verified} checked against their source. '
+               'Open the tracker\'s Guide tab.')
     for p in problems[:5]:
         job.say(f'note: {p}')
     return {'state': 'done', 'name': name}

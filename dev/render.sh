@@ -49,6 +49,10 @@ case $target in
     feed="item.cabinet = JSON.parse(sample.text())"
     [[ $target == games ]] && feed="item.games = JSON.parse(sample.text())"
     [[ $target == loading ]] && feed=""
+    if [[ $target == now ]]; then
+      extra="FileView { id: jobSample; path: \"$repo/dev/samples/guide-job.json\"; blockLoading: true }"
+      feed="$feed; item.guideJob = JSON.parse(jobSample.text())"
+    fi
     if [[ $target == settings ]]; then
       extra="FileView { id: agentSample; path: \"$repo/dev/samples/agents.json\"; blockLoading: true }"
       feed="$feed; item.guideAgents = JSON.parse(agentSample.text()); item.guideModels = ({ claude: { model: \"sonnet\", effort: \"medium\" } })"
@@ -77,8 +81,8 @@ case $target in
       }"
     data=game.json ;;
   guide|guide-making|guide-empty)
-    w=1000 h=900 at=3000
-    guide="JSON.parse(guideSample.text())"; [[ $target == guide-empty ]] && guide="({})"
+    w=1300 h=960 at=3000
+    guide="JSON.parse(guideSample.text())"; [[ $target == guide-empty || $target == guide-making ]] && guide="({})"
     job="({})"; [[ $target == guide-making ]] && job="JSON.parse(jobSample.text())"
     extra="FileView { id: guideSample; path: \"$repo/dev/samples/guide.json\"; blockLoading: true }
   FileView { id: agentSample; path: \"$repo/dev/samples/agents.json\"; blockLoading: true }
@@ -87,7 +91,7 @@ case $target in
         anchors.centerIn: parent
         source: \"file:$repo/TrackerView.qml\"
         onLoaded: {
-          item.maxWidth = 960; item.maxHeight = 860
+          item.maxWidth = 1260; item.maxHeight = 920
           item.game = JSON.parse(sample.text())
           item.agents = JSON.parse(agentSample.text())
           item.choosePick()

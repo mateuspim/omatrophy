@@ -850,7 +850,7 @@ def guide(args):
     else:
         raise SystemExit(f'usage: omatrophy.py guide [{"|".join(s.id for s in found)} <game id>]\n'
                          '       omatrophy.py guide import <folder> [--replace]\n'
-                         '       omatrophy.py guide make <store> <app> [--no-web] [--agent a] [--model m] [--effort e]\n'
+                         '       omatrophy.py guide make <store> <app> [--no-web] [--notify] [--agent a] [--model m] [--effort e]\n'
                          '       omatrophy.py guide stop|status|agents\n'
                          '       omatrophy.py guide model <agent> <model> [effort] | default')
     print(json.dumps(guides.guide_answer(store.id, app, store.achievements(app))))
@@ -891,6 +891,8 @@ def guide_make(store_id, app, flags, cfg):
     while i < len(flags):
         if flags[i] == '--no-web':
             web, i = False, i + 1
+        elif flags[i] == '--notify':
+            opts['notify'], i = True, i + 1
         elif flags[i] in ('--agent', '--model', '--effort') and i + 1 < len(flags):
             opts[flags[i][2:]], i = flags[i + 1], i + 2
         else:
@@ -911,7 +913,7 @@ def guide_make(store_id, app, flags, cfg):
     job = guide_maker.Job(store.id, app, store.game_name(app), achs, adapter, model=opts.get('model', pick.get('model', '')),
                           effort=opts.get('effort', pick.get('effort', '')), web=web, minutes=minutes,
                           say=lambda line: print(line, flush=True))
-    if guide_maker.make(job)['state'] == 'failed':
+    if guide_maker.make(job, announce=opts.get('notify', False))['state'] == 'failed':
         raise SystemExit(1)
 
 

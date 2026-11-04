@@ -108,7 +108,7 @@ Column {
   property bool gamesRead: false
   onTabChanged: {
     if (tab === "games" && !gamesRead && live) { gamesRead = true; gamesReader.running = true }
-    if (tab === "settings" && live && !guideAgentsReader.running) { guideAgentsReader.running = true; guideJobReader.running = true }
+    if (tab === "settings" && live && !guideAgentsReader.running) guideAgentsReader.running = true
   }
 
   // Settings > Guides (ADR 14): `guide agents` lists the agents and their
@@ -518,6 +518,15 @@ Column {
 
   Process { id: runner }
 
+  // A guide being made runs out of sight once its tracker closes; the strip
+  // under the tabs follows it with a light poll.
+  Timer {
+    interval: 2000
+    repeat: true
+    running: root.live && root.guideJob.state === "running"
+    onTriggered: if (!guideJobReader.running) guideJobReader.running = true
+  }
+
   Process {
     id: guideAgentsReader
     command: ["python3", root.helperPath, "guide", "agents"]
@@ -528,6 +537,7 @@ Column {
 
   Process {
     id: guideJobReader
+    running: root.live
     command: ["python3", root.helperPath, "guide", "status"]
     stdout: StdioCollector {
       onStreamFinished: { try { root.guideJob = JSON.parse(text) || {} } catch (e) {} }
@@ -1397,6 +1407,130 @@ Column {
           anchors.verticalCenter: parent.verticalCenter
           label: "Peek"
           onClicked: root.peekSteam()
+        }
+      }
+    }
+  }
+
+  // A 100% guide being made (or just made, for a quarter of an hour), on
+  // every tab: the job runs detached, so this is where it shows once its
+  // tracker is closed. Open goes to the game's tracker.
+  Rectangle {
+    id: guideStrip
+    readonly property var job: root.guideJob
+    readonly property bool running: job.state === "running"
+    readonly property bool recent: (job.state === "done" || job.state === "failed")
+                                   && Date.now() / 1000 - (job.time || 0) < 900
+    width: root.width
+    height: visible ? guideStripBody.height + Commons.Style.space(20) : 0
+    visible: running || recent
+    radius: Commons.Style.cornerRadius
+    color: Qt.alpha(Commons.Color.accent, 0.05)
+    border.width: 1
+    border.color: Qt.alpha(Commons.Color.accent, 0.22)
+
+    Column {
+      id: guideStripBody
+      x: Commons.Style.space(10)
+      y: Commons.Style.space(10)
+      width: parent.width - Commons.Style.space(20)
+      spacing: Commons.Style.space(8)
+
+      Item {
+        width: parent.width
+        height: guideStripTitle.implicitHeight
+        MiniLabel {
+          id: guideStripTitle
+          text: guideStrip.running ? "MAKING A 100% GUIDE" : guideStrip.job.state === "done" ? "GUIDE READY" : "GUIDE FAILED"
+          color: Commons.Color.accent
+        }
+        Caption {
+          textFormat: Text.PlainText
+          anchors.right: parent.right
+          anchors.verticalCenter: guideStripTitle.verticalCenter
+          opacity: 0.6
+          visible: guideStrip.running
+          text: (guideStrip.job.total ? Math.round(100 * guideStrip.job.done / guideStrip.job.total) : 0) + "%"
+                + (guideStrip.job.agent ? " · " + guideStrip.job.agent + (guideStrip.job.model ? " " + guideStrip.job.model : "") : "")
+        }
+      }
+
+      Item {
+        width: parent.width
+        height: Math.max(guideArt.height, guideStripText.height)
+        Rectangle {
+          id: guideArt
+          width: Commons.Style.space(92)
+          height: Commons.Style.space(43)
+          radius: 4
+          color: Qt.alpha(root.foreground, 0.06)
+          clip: true
+          Image {
+            anchors.fill: parent
+            fillMode: Image.PreserveAspectCrop
+            asynchronous: true
+            source: guideStrip.job.store === "steam" && /^\d+$/.test(String(guideStrip.job.app || ""))
+                    ? "https://cdn.fastly.steamstatic.com/steam/apps/" + guideStrip.job.app + "/header.jpg" : ""
+            opacity: status === Image.Ready ? 1 : 0
+          }
+        }
+        Column {
+          id: guideStripText
+          anchors.left: guideArt.right
+          anchors.leftMargin: Commons.Style.space(10)
+          anchors.right: guideStripButtons.left
+          anchors.rightMargin: Commons.Style.space(8)
+          anchors.verticalCenter: parent.verticalCenter
+          spacing: Commons.Style.space(2)
+          Text {
+            textFormat: Text.PlainText
+            width: parent.width
+            text: guideStrip.job.game || ("App " + (guideStrip.job.app || ""))
+            color: root.foreground
+            elide: Text.ElideRight
+            font.family: Commons.Style.font.family
+            font.pixelSize: Commons.Style.font.bodySmall
+            font.bold: true
+          }
+          Caption {
+            textFormat: Text.PlainText
+            width: parent.width
+            text: guideStrip.job.line || ""
+            opacity: 0.6
+          }
+        }
+        Row {
+          id: guideStripButtons
+          anchors.right: parent.right
+          anchors.verticalCenter: parent.verticalCenter
+          spacing: Commons.Style.space(4)
+          PillButton {
+            label: "Stop"
+            visible: guideStrip.running
+            onClicked: {
+              runner.exec(["python3", root.helperPath, "guide", "stop"])
+              root.guideJob = Object.assign({}, root.guideJob, { line: "stopping…" })
+            }
+          }
+          PillButton {
+            label: "Open"
+            onClicked: root.track(String(guideStrip.job.store), String(guideStrip.job.app), "")
+          }
+        }
+      }
+
+      Rectangle {
+        visible: guideStrip.running
+        width: parent.width
+        height: 4
+        radius: 2
+        color: Qt.alpha(root.foreground, 0.08)
+        Rectangle {
+          width: guideStrip.job.total ? parent.width * Math.min(1, (guideStrip.job.done + 0.5) / guideStrip.job.total) : 0
+          height: parent.height
+          radius: parent.radius
+          color: Commons.Color.accent
+          Behavior on width { NumberAnimation { duration: 400; easing.type: Easing.OutCubic } }
         }
       }
     }

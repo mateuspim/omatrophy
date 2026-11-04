@@ -126,9 +126,9 @@ OmaTrophy doesn't know survive a rewrite.
 | `guide import <folder>` | Copies every `*-<app>.md` with its `.plan.json` and `.sources.json` from another folder (the games app's `games/`), skipping files we already have (`--replace` overwrites). Read-only on `<folder>`. Prints `imported N, skipped M`. |
 | `guide agents` | Every agent with its models and picks (see Settings). |
 | `guide model <agent> <model> [effort]`, `guide model <agent> default` | Sets or clears that agent's pick in `guide-models`. |
-| `guide make <store> <app> [--no-web] [--agent a] [--model m] [--effort e]` | Runs the job below; the flags override the settings for this run only. One line per stage, then `done: N items, M verified`, or `stopped`/`failed: <what to do>`. Exits non-zero with no agent, an unsupported agent, or another job running. |
+| `guide make <store> <app> [--no-web] [--notify] [--agent a] [--model m] [--effort e]` | Runs the job below; the flags override the settings for this run only. `--notify` (the tracker passes it) sends a desktop notification when the job is done or failed. One line per stage, then `done: N items, M verified`, or `stopped`/`failed: <what to do>`. Exits non-zero with no agent, an unsupported agent, or another job running. |
 | `guide stop` | Stops the job within half a second (the agent's process group is killed); nothing is written, so the old guide stays. |
-| `guide status` | `status.json`: `{state, store, app, game, stage, done, total, line, started, time, agent, model, pid}`; `state` is `running`, `done`, `stopped` or `failed`, and a `running` job whose `pid` is gone reads as `failed`. `{}` before any job. `done`/`total` count steps: gather, research (with web), one per classify batch, route, verify. |
+| `guide status` | `status.json`: `{state, store, app, game, stage, done, total, line, started, time, agent, model, pid, web, open}` (`web`: the research stage runs; `open`: achievements the guide covers); `state` is `running`, `done`, `stopped` or `failed`, and a `running` job whose `pid` is gone reads as `failed`. `{}` before any job. `done`/`total` count steps: gather, research (with web), one per classify batch, route, verify. |
 
 ## Settings (config.json)
 

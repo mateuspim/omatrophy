@@ -76,6 +76,12 @@ Item {
   property string pickModel: ""
   property string pickEffort: ""
   property string configAgent: ""
+  // The first `guide status` after a game loads: a make under way for this
+  // game opens the tracker on its Guide tab.
+  property bool jobSeen: false
+  // The trophy picked on the guide side (an Up next row): the trophy list
+  // scrolls to it and lights it.
+  property string highlightApi: ""
   // The agent and model picker; folded away under a made guide.
   property bool makerOpen: false
   readonly property bool hasGuide: !!guide && !!guide.items && (Object.keys(guide.items).length > 0 || !!guide.notes)
@@ -95,8 +101,12 @@ Item {
 
   signal closeRequested()
 
-  width: Math.min(maxWidth, Commons.Style.space(760))
-  height: Math.min(maxHeight, Commons.Style.space(820))
+  // The guide gets a wider card: the guide on the left, every trophy of
+  // the game on the right.
+  width: Math.min(maxWidth, Commons.Style.space(filter === "guide" ? 1200 : 760))
+  height: Math.min(maxHeight, Commons.Style.space(filter === "guide" ? 880 : 820))
+  Behavior on width { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+  Behavior on height { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
 
   // Called by Tracker.qml with the summon payload: {store, app}, or empty
   // for the game running now (or played last).
@@ -318,6 +328,37 @@ Item {
 
   // ------------------------------------------------------------ guide
 
+  // The make job's stages, for the progress list; research only runs with
+  // web search on.
+  function jobStages() {
+    var out = [{ key: "gather", label: "Gather sources" }]
+    if (job.web) out.push({ key: "research", label: "Search the web for guides" })
+    out.push({ key: "classify", label: "Classify " + (job.open || "the open") + " achievements" })
+    out.push({ key: "route", label: "Plan the route and write the notes" })
+    out.push({ key: "verify", label: "Check every quote against its page" })
+    return out
+  }
+
+  function shown(api) {
+    return !appliedSearch || guideMatches(api)
+  }
+
+  // Open achievements the guide has no entry for (or every open one, with
+  // no guide), in the store's order.
+  function unguided() {
+    if (!game) return []
+    return game.achievements.filter(function(a) {
+      return !guideDone(a.api) && !(guide && guide.items && guide.items[a.api]) && shown(a.api)
+    }).map(function(a) { return a.api })
+  }
+
+  // Done achievements (unlocked, or ticked by hand), newest first.
+  function doneApis() {
+    if (!game) return []
+    return game.achievements.filter(function(a) { return guideDone(a.api) && shown(a.api) })
+             .sort(function(a, b) { return b.time - a.time }).map(function(a) { return a.api })
+  }
+
   function readGuide() {
     guideReader.command = ["python3", helperPath, "guide", String(game.store), String(game.app)]
     guideReader.running = true
@@ -361,7 +402,8 @@ Item {
   // Runs detached: the job outlives this card, which only shows it.
   function makeGuide() {
     if (!game || !pickAgent || making) return
-    var args = ["python3", helperPath, "guide", "make", String(game.store), String(game.app), "--agent", pickAgent]
+    // --notify: the owner may close this long before it ends.
+    var args = ["python3", helperPath, "guide", "make", String(game.store), String(game.app), "--notify", "--agent", pickAgent]
     if (pickModel) args = args.concat(["--model", pickModel])
     if (pickEffort) args = args.concat(["--effort", pickEffort])
     Quickshell.execDetached(args)
@@ -400,7 +442,7 @@ Item {
 
   function guideMatches(api) {
     var q = appliedSearch.toLowerCase()
-    var a = byApi[api], item = guide.items[api] || {}
+    var a = byApi[api], item = (guide && guide.items && guide.items[api]) || {}
     var secret = a.hidden && !a.unlocked
     return a.name.toLowerCase().indexOf(q) >= 0 || (!secret && (item.tips || "").toLowerCase().indexOf(q) >= 0)
   }
@@ -477,6 +519,11 @@ Item {
       onStreamFinished: {
         var was = root.job
         try { root.job = JSON.parse(text) || {} } catch (e) { return }
+        if (!root.jobSeen) {
+          root.jobSeen = true
+          var fresh = root.job.state === "done" && Date.now() / 1000 - (root.job.time || 0) < 900
+          if ((root.making || fresh) && root.jobHere) root.filter = "guide"
+        }
         // A make of this game just ended: show what it wrote.
         if (was.state === "running" && root.job.state === "done" && root.jobHere) root.readGuide()
       }
@@ -789,6 +836,11 @@ Item {
   component GuideRow: Rectangle {
     id: grow
     property string api: ""
+    // In the trophy list (right); otherwise on the guide side, where a
+    // click finds the trophy in that list.
+    property bool listed: false
+    readonly property bool lit: listed && root.highlightApi === api
+    onLitChanged: if (lit) Qt.callLater(function() { allPane.reveal(grow) })
     readonly property var ach: root.byApi[api] || ({ name: "", desc: "", icon: "", hidden: false, unlocked: false })
     readonly property var item: root.guide && root.guide.items ? root.guide.items[api] || ({}) : ({})
     readonly property bool done: root.guideDone(api)
@@ -806,11 +858,61 @@ Item {
       return parts.join("  ·  ")
     }
     width: parent ? parent.width : 0
-    height: growBody.height + Commons.Style.space(14)
+    height: Math.max(growBody.height, growIcon.height, growSide.height) + Commons.Style.space(14)
     radius: Commons.Style.cornerRadius
-    color: growHover.hovered ? Commons.Style.hoverFill : "transparent"
-    opacity: done ? 0.5 : 1
-    HoverHandler { id: growHover }
+    color: lit ? Qt.alpha(Commons.Color.accent, 0.16) : growHover.hovered ? Commons.Style.hoverFill : "transparent"
+    border.width: lit ? 1 : 0
+    border.color: Qt.alpha(Commons.Color.accent, 0.6)
+    Behavior on color { ColorAnimation { duration: 200 } }
+    HoverHandler { id: growHover; cursorShape: grow.listed ? Qt.ArrowCursor : Qt.PointingHandCursor }
+    TapHandler { enabled: !grow.listed; onTapped: root.highlightApi = grow.api }
+    // An unlocked trophy carries its metal as a rail, like the list.
+    Rectangle {
+      visible: grow.ach.unlocked
+      x: 0
+      anchors.verticalCenter: parent.verticalCenter
+      width: 3
+      height: parent.height - Commons.Style.space(14)
+      radius: 1.5
+      color: root.metalColors[grow.ach.tier] || root.metalColors.bronze
+    }
+    // The metal it earns and the share of players, as in the list.
+    Column {
+      id: growSide
+      anchors.right: parent.right
+      anchors.rightMargin: Commons.Style.space(10)
+      y: Commons.Style.space(9)
+      width: Commons.Style.space(76)
+      spacing: Commons.Style.space(3)
+      Row {
+        anchors.right: parent.right
+        spacing: Commons.Style.space(5)
+        Text {
+          textFormat: Text.PlainText
+          anchors.verticalCenter: parent.verticalCenter
+          text: grow.ach.percent !== null && grow.ach.percent !== undefined ? grow.ach.percent.toFixed(1) + "%" : "–"
+          color: root.metalColors[grow.ach.tier] || root.foreground
+          opacity: grow.ach.unlocked ? 1 : 0.7
+          font.family: Commons.Style.font.family
+          font.pixelSize: Commons.Style.font.caption
+          font.bold: true
+        }
+        Trophy {
+          anchors.verticalCenter: parent.verticalCenter
+          style: root.iconSet
+          metal: grow.ach.tier || "bronze"
+          width: 16
+          height: 16
+          opacity: grow.ach.unlocked ? 1 : 0.35
+        }
+      }
+      Caption {
+        anchors.right: parent.right
+        visible: text !== ""
+        text: grow.ach.unlocked ? root.day(grow.ach.time) : (root.guide && (root.guide.ticks || []).indexOf(grow.api) >= 0 ? "ticked" : "")
+        opacity: 0.45
+      }
+    }
 
     Rectangle {
       id: growIcon
@@ -831,10 +933,11 @@ Item {
     }
     Column {
       id: growBody
+      opacity: grow.done ? 0.6 : 1
       anchors.left: growIcon.right
       anchors.leftMargin: Commons.Style.space(12)
-      anchors.right: parent.right
-      anchors.rightMargin: Commons.Style.space(10)
+      anchors.right: growSide.left
+      anchors.rightMargin: Commons.Style.space(8)
       y: Commons.Style.space(7)
       spacing: Commons.Style.space(3)
       Text {
@@ -852,6 +955,8 @@ Item {
         width: parent.width
         visible: text !== ""
         text: grow.meta
+        wrapMode: Text.Wrap
+        elide: Text.ElideNone
         color: grow.item.missable && !grow.done ? Commons.Color.accent : root.foreground
         opacity: grow.item.missable && !grow.done ? 0.95 : 0.6
       }
@@ -1464,7 +1569,7 @@ Item {
       anchors.bottom: footer.top
       anchors.bottomMargin: Commons.Style.space(6)
       x: toolbar.x
-      width: toolbar.width
+      width: Math.round(toolbar.width * 0.44)
       visible: root.filter === "guide" && root.game !== null
       clip: true
       contentWidth: width
@@ -1510,12 +1615,20 @@ Item {
                 color: Commons.Color.accent
                 opacity: 1
               }
-              ActionButton {
+              Row {
                 id: stopButton
                 anchors.right: parent.right
-                accent: false
-                text: "Stop"
-                onClicked: root.stopGuide()
+                spacing: Commons.Style.space(6)
+                ActionButton {
+                  accent: false
+                  text: "Stop"
+                  onClicked: root.stopGuide()
+                }
+                // Closing is safe: the job runs on its own (detached).
+                ActionButton {
+                  text: "Close"
+                  onClicked: root.closeRequested()
+                }
               }
             }
             Text {
@@ -1543,10 +1656,55 @@ Item {
             Caption {
               width: parent.width
               text: "With " + (root.job.agent || "your agent") + (root.job.model ? " · " + root.job.model : "")
-                    + ". It keeps going if you close this; the old guide stays until it finishes."
+                    + ". You can close this (Close, Esc or a click outside): it keeps going, the panel shows it under its tabs,"
+                    + " and a notification says when it's ready." + (root.hasGuide ? " The current guide stays until then." : "")
               wrapMode: Text.Wrap
               elide: Text.ElideNone
               opacity: 0.5
+            }
+          }
+        }
+
+        // A first guide on its way: the stages as they pass (the trophies
+        // it covers are on the right).
+        Column {
+          width: parent.width
+          visible: root.making && root.jobHere && !root.hasGuide
+          spacing: Commons.Style.space(6)
+          Repeater {
+            model: root.making && root.jobHere ? root.jobStages() : []
+            delegate: Row {
+              id: stageRow
+              required property var modelData
+              required property int index
+              readonly property int at: root.jobStages().findIndex(function(s) { return s.key === root.job.stage })
+              readonly property bool done: index < at
+              readonly property bool now: index === at
+              spacing: Commons.Style.space(10)
+              Text {
+                textFormat: Text.PlainText
+                width: Commons.Style.space(16)
+                horizontalAlignment: Text.AlignHCenter
+                text: stageRow.done ? "✓" : stageRow.now ? "●" : "○"
+                color: stageRow.done || stageRow.now ? Commons.Color.accent : root.foreground
+                opacity: stageRow.done || stageRow.now ? 1 : 0.35
+                font.pixelSize: Commons.Style.font.bodySmall
+                SequentialAnimation on opacity {
+                  running: stageRow.now
+                  loops: Animation.Infinite
+                  NumberAnimation { to: 0.3; duration: 700 }
+                  NumberAnimation { to: 1; duration: 700 }
+                }
+              }
+              Text {
+                textFormat: Text.PlainText
+                text: stageRow.modelData.label
+                color: root.foreground
+                opacity: stageRow.now ? 1 : stageRow.done ? 0.6 : 0.35
+                font.family: Commons.Style.font.family
+                font.pixelSize: Commons.Style.font.bodySmall
+                font.bold: stageRow.now
+              }
             }
           }
         }
@@ -1787,11 +1945,75 @@ Item {
           text: root.guide ? root.safeMarkdown(root.guide.notes) : ""
         }
 
+        Item { width: 1; height: Commons.Style.space(8) }
+      }
+    }
+
+    Rectangle {
+      visible: guidePane.visible
+      x: guidePane.x + guidePane.width + Commons.Style.space(11)
+      y: guidePane.y
+      width: 1
+      height: guidePane.height
+      color: Qt.alpha(root.foreground, 0.1)
+    }
+
+    // Every trophy of the game: open ones by the guide's phases in its
+    // route order, then those it doesn't cover, then the ones done.
+    Flickable {
+      id: allPane
+      anchors.top: guidePane.top
+      anchors.bottom: guidePane.bottom
+      x: guidePane.x + guidePane.width + Commons.Style.space(22)
+      width: toolbar.x + toolbar.width - x
+      visible: guidePane.visible
+      clip: true
+      contentWidth: width
+      contentHeight: allColumn.height
+      boundsBehavior: Flickable.StopAtBounds
+
+      // Scrolls a row of this list to a third of the way down.
+      function reveal(row) {
+        var y = row.mapToItem(allColumn, 0, 0).y - height / 3
+        contentY = Math.max(0, Math.min(Math.max(0, contentHeight - height), y))
+      }
+      Behavior on contentY { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+
+      WheelHandler {
+        target: null
+        acceptedDevices: PointerDevice.Mouse
+        onWheel: function(event) {
+          var notch = Math.max(-120, Math.min(120, event.angleDelta.y)) / 120
+          var bottom = Math.max(0, allPane.contentHeight - allPane.height)
+          allPane.contentY = Math.max(0, Math.min(bottom, allPane.contentY - notch * Commons.Style.space(120)))
+        }
+      }
+
+      Column {
+        id: allColumn
+        width: allPane.width
+        spacing: Commons.Style.space(12)
+
+        Item {
+          width: parent.width
+          height: allTitle.implicitHeight
+          SectionLabel {
+            id: allTitle
+            text: root.hasGuide ? "ALL TROPHIES · IN THE GUIDE'S ORDER" : root.making && root.jobHere ? "THE GUIDE WILL COVER" : "ALL TROPHIES"
+          }
+          Caption {
+            anchors.right: parent.right
+            anchors.verticalCenter: allTitle.verticalCenter
+            text: root.game ? root.game.unlocked + " of " + root.game.total + " done" : ""
+            opacity: 0.45
+          }
+        }
+
         Repeater {
           model: root.hasGuide ? root.phaseGroups() : []
           delegate: Column {
             required property var modelData
-            width: guideColumn.width
+            width: allColumn.width
             spacing: Commons.Style.space(2)
             SectionLabel {
               text: (root.phaseNames[parent.modelData.phase] || parent.modelData.phase).toUpperCase()
@@ -1800,15 +2022,31 @@ Item {
             }
             Repeater {
               model: parent.modelData.apis
-              delegate: GuideRow { required property string modelData; api: modelData }
+              delegate: GuideRow { required property string modelData; api: modelData; listed: true }
             }
           }
         }
 
-        Caption {
-          visible: root.hasGuide && root.doneCount() > 0 && !root.appliedSearch
-          text: root.doneCount() + " in the guide already done"
-          opacity: 0.4
+        Column {
+          width: parent.width
+          spacing: Commons.Style.space(2)
+          visible: root.unguided().length > 0
+          SectionLabel { text: (root.hasGuide ? "NOT IN THE GUIDE · " : "OPEN · ") + root.unguided().length }
+          Repeater {
+            model: root.unguided()
+            delegate: GuideRow { required property string modelData; api: modelData; listed: true }
+          }
+        }
+
+        Column {
+          width: parent.width
+          spacing: Commons.Style.space(2)
+          visible: root.doneApis().length > 0
+          SectionLabel { text: "DONE · " + root.doneApis().length }
+          Repeater {
+            model: root.doneApis()
+            delegate: GuideRow { required property string modelData; api: modelData; listed: true }
+          }
         }
         Item { width: 1; height: Commons.Style.space(8) }
       }

@@ -102,6 +102,17 @@ class Job(unittest.TestCase):
         self.assertEqual(answer['next'][0], 'L')
         self.assertEqual(answer['agent']['name'], 'fake')
 
+    def test_announce_says_done_and_failed_and_status_names_the_work(self):
+        said = []
+        with mock.patch.object(guide_maker, 'notify', lambda summary, body: said.append(summary)):
+            guide_maker.make(self.job(), announce=True)
+            write(self.agent_dir, 'items', 'nothing useful')
+            guide_maker.make(self.job(), announce=True)
+            guide_maker.make(self.job())
+        self.assertEqual(said, ['Guide ready: Starfall Odyssey', 'Guide failed: Starfall Odyssey'])
+        found = guide_maker.status(self.guides)
+        self.assertEqual((found['open'], found['web']), (3, False))
+
     def test_bad_answer_is_asked_again_once(self):
         write(self.agent_dir, 'items', 'no tags at all')
         write(self.agent_dir, 'items.retry', ITEMS)
