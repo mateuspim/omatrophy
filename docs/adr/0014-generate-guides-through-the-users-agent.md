@@ -20,20 +20,25 @@ out after 4 s so a toast never waits. A guide can't come from the
 launcher's files, and it needs a language model. The owner asked for
 generation inside OmaTrophy, grounded in trusted guide sites
 (PowerPyx, TrueAchievements and the like), through "whichever harness
-Omarchy installs or uses". That includes claude and codex, and also
-opencode running a local model.
+Omarchy installs or uses", with a choice of model in each one.
 
 What we found on 2026-11-04:
 
-- Omarchy installs claude, codex, gemini and opencode through mise and
-  records the user's pick in `~/.config/omarchy/defaults/agent`
-  (`omarchy-default-agent`). Its `omarchy-agent` launcher only opens an
-  interactive session with every permission approved. That's wrong for an
-  unattended job that should only read the web.
-- The owner's opencode runs a small local model (a 2-bit quant with a
-  128k context) behind an OpenAI-compatible endpoint, with SearXNG as its
-  web search. A run like that may have no web tools, weak ones, or little
-  room for long pages.
+- `omarchy-default-agent` offers 13 agents (pi, omp, opencode, claude,
+  codex, grok, gemini, openclaw, hermes, copilot, crush, cursor-agent,
+  muse) and records the user's pick in
+  `~/.config/omarchy/defaults/agent`. Its `omarchy-agent` launcher only
+  opens an interactive session with every permission approved. That's
+  wrong for an unattended job that should only read the web.
+- Each agent has its own headless mode, its own way to turn tools off,
+  and its own list of models: a built-in set (claude's `opus`, `sonnet`,
+  `fable` and any others its account offers), a local cache (codex's
+  `models_cache.json`), or a command (`opencode models`, `crush models`,
+  `pi --list-models`).
+- Any of them may run a local model: opencode, crush or pi against an
+  OpenAI-compatible endpoint, or claude through `ANTHROPIC_BASE_URL`. A
+  run like that may have no web tools, weak ones, or little room for long
+  pages.
 - TrueAchievements, PlayStationTrophies and XboxAchievements answer a
   plain client with 403 (a bot check). Retrying with a browser user agent
   would dodge that check, and OmaTrophy won't do it. Steam's global
@@ -49,15 +54,23 @@ What we found on 2026-11-04:
   like Load from Steam (ADR 13). The 4 s rule stays for everything a toast
   or panel read waits on. A guide job may take minutes and uses longer
   timeouts.
-- **The agent is the user's.** `guide-agent` in config.json picks it;
-  empty means follow `omarchy-default-agent`. OmaTrophy ships one small
-  headless adapter per supported agent (claude, codex, opencode and gemini
-  to start). Each adapter runs the agent in an empty temporary folder with
-  no shell and no file writes, and with web tools only when the job asks
-  for research. Our own adapter runs it, never `omarchy-agent`. An agent
-  without an adapter fails with a message naming the supported ones.
-  OmaTrophy holds no API key; the agent's own login or local endpoint is
-  used.
+- **The agent and its model are the user's.** `guide-agent` in config.json
+  picks the agent; empty means follow `omarchy-default-agent`. Every
+  agent that `omarchy-default-agent` offers gets an adapter: a table row
+  with its headless command, how to turn its tools off, how to allow web
+  search, its model and effort flags, and where its models are listed.
+  `guide agents` lists the installed agents with the models each one
+  offers, read from that agent's own source. The panel offers the same
+  list, plus free text for a model the list doesn't name. The pick is
+  stored per agent (`guide-models`), so switching agents keeps each
+  one's model. Our own adapter runs the agent, never `omarchy-agent`. It
+  runs in an empty temporary folder with no shell and no file writes,
+  and with web tools only when the job asks for research. OmaTrophy
+  holds no API key; it uses the agent's own login or local endpoint.
+- **Never an unlocked agent.** An adapter is enabled only once it has
+  been checked to keep shell and file tools off in headless mode. An
+  agent whose lock isn't confirmed is listed as "not supported yet", and
+  it's never run with auto-approve as a fallback.
 - **OmaTrophy gathers and checks; the agent writes.** OmaTrophy itself
   collects what it can fetch with an honest client: the store's
   achievement list, rarity and the player's progress; Steam community

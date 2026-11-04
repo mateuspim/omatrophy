@@ -123,7 +123,9 @@ OmaTrophy doesn't know survive a rewrite.
 | --- | --- |
 | `guide [store app]` | Prints the guide as JSON for the tracker: `{store, app, file, generated, order, items: {api: item}, sections, notes, ticks: [api], next: [api]}`, or `{}` when there is none. `next` is the first three open items in `order`, missables first. Without arguments, the game running now, else the last one played. |
 | `guide import <folder>` | Copies every `*-<app>.md` with its `.plan.json` and `.sources.json` from another folder (the games app's `games/`), skipping files we already have (`--replace` overwrites). Read-only on `<folder>`. Prints `imported N, skipped M`. |
-| `guide make <store> <app> [--no-web]` | Runs the job below. One line per stage, then `done: N items, M verified`, or `stopped`/`failed: <what to do>`. Exits non-zero with no agent, an unsupported agent, or another job running. |
+| `guide agents` | Every agent with its models and picks (see Settings). |
+| `guide model <agent> <model> [effort]`, `guide model <agent> default` | Sets or clears that agent's pick in `guide-models`. |
+| `guide make <store> <app> [--no-web] [--agent a] [--model m] [--effort e]` | Runs the job below; the flags override the settings for this run only. One line per stage, then `done: N items, M verified`, or `stopped`/`failed: <what to do>`. Exits non-zero with no agent, an unsupported agent, or another job running. |
 | `guide stop` | Stops the job; a stage cut short writes nothing. |
 | `guide status` | `status.json`: `{state, store, app, stage, done, total, line, started, agent}`. |
 
@@ -131,9 +133,20 @@ OmaTrophy doesn't know survive a rewrite.
 
 | Key | Values | Default |
 | --- | --- | --- |
-| `guide-agent` | `""` (follow `omarchy-default-agent`), `claude`, `codex`, `opencode`, `gemini` | `""` |
-| `guide-model` | Passed to the agent's model flag; `""` uses the agent's default | `""` |
+| `guide-agent` | `""` (follow `omarchy-default-agent`) or any agent id in the adapter table | `""` |
+| `guide-models` | Per agent, `{agent: {"model": "...", "effort": "..."}}`; a missing agent or `""` uses that agent's own default. Written by `guide model` and the panel. | `{}` |
 | `guide-web` | `true`, `false`: let the agent search the web itself | `true` |
+
+`guide agents` prints `[{agent, name, installed, supported, default,
+web, models: [{id, name, efforts}], model, effort, source}]`. It lists
+every agent in the adapter table. `default` marks the one
+`omarchy-default-agent` names, and `model`/`effort` are the picks from
+`guide-models`. `models` comes from the source named in the table and is
+empty when the agent can't list them. The panel then offers free text:
+any string the agent's model flag takes, such as a full model id, a
+`provider/model` for a local endpoint, or an alias. `guide model <agent>
+<model> [effort]` sets a pick, and `guide model <agent> default` clears
+it.
 
 ## The make job (slice c)
 
@@ -194,16 +207,32 @@ but rank lower in excerpts.
 
 ### Agent adapters
 
-Each runs in a fresh empty temporary folder, prompt on stdin or as an
-argument, with a 25 min ceiling per stage.
+One table row per agent `omarchy-default-agent` offers (13 on
+2026-11-04). Each runs in a fresh, empty temporary folder, with the prompt
+on stdin or as an argument and a 25 min ceiling per stage. A row is
+**supported** once slice c has checked, on a real run, that its lock keeps
+shell and file tools off. Until then `guide agents` shows it as "not
+supported yet". No row ever falls back to an auto-approve flag. Flags come
+from each tool's `--help` on 2026-11-04; "unverified" means the help didn't
+show it or timed out.
 
-| Agent | Command (no tools / research) | Usage reported |
-| --- | --- | --- |
-| claude | `claude -p --output-format stream-json --verbose --no-session-persistence --disallowedTools Bash Edit Write NotebookEdit` plus `--allowedTools WebSearch WebFetch` for research | tokens, $ |
-| codex | `codex exec --sandbox read-only --skip-git-repo-check --json -C <tmp>`, plus `--search` for research | tokens |
-| opencode | `opencode run --format json [--model <m>]` in `<tmp>`; edit and bash denied through its config (unverified how, slice c) | tokens if given |
-| gemini | `gemini -p <prompt> --output-format json --approval-mode plan` (unverified that plan mode allows web search) | tokens if given |
+| Agent | Headless | Lock (no shell, no writes) | Web for research | Model / effort | Models listed from |
+| --- | --- | --- | --- | --- | --- |
+| claude | `-p --output-format stream-json --verbose --no-session-persistence` | `--disallowedTools Bash Edit Write NotebookEdit` | `--allowedTools WebSearch WebFetch` | `--model`, `--effort` | built-in aliases (`opus`, `sonnet`, `haiku`, `fable`, ...) plus `~/.claude.json` `additionalModelOptionsCache`; works with `ANTHROPIC_BASE_URL` for a local endpoint |
+| codex | `exec --json --skip-git-repo-check -C <tmp>` | `--sandbox read-only` | `--search` | `-c model=`, `-c model_reasoning_effort=` | `$CODEX_HOME/models_cache.json` (`visibility: list`) |
+| opencode | `run --format json` | through its permission config (unverified how, slice c) | its own websearch provider (unverified) | `-m provider/model#variant` | `opencode models` |
+| crush | `run --quiet` | unverified (`--yolo` only on the interactive command) | unverified | `-m`, `--reasoning-effort` | `crush models` |
+| pi | `-p --mode json` | `--no-tools`, or `--tools` allowlist | `--tools` with its web tool, if one is installed (unverified) | `--model provider/id:thinking` | `pi --list-models` |
+| gemini | `-p --output-format json` | `--approval-mode plan` | unverified whether plan mode allows search | `-m` (unverified) | none (free text) |
+| grok | unverified (`[PROMPT]` starts an interactive session) | `--disallowed-tools`, `--deny` | default on; `--disable-web-search` for no-tools stages | unverified | none (free text) |
+| hermes | `chat --query-file <f> --oneshot` | `-t <toolsets>` with only web | `-t` | `-m` | none (free text) |
+| copilot | unverified | unverified | unverified | unverified | none |
+| cursor-agent | unverified | unverified | unverified | unverified | none |
+| omp | unverified | unverified | unverified | unverified | none |
+| muse | unverified | unverified | unverified | unverified | none |
+| openclaw | unverified (runs through a gateway) | unverified | unverified | unverified | none |
 
-`guide-model` goes to `--model` (`-m` for opencode, in its
-`provider/model` form). An agent missing from `PATH` fails with
-`omatrophy: guide: <agent> not found; install it or set guide-agent`.
+A missing agent fails with `omatrophy: guide: <agent> not found; install
+it or pick another in Settings > Guides`. An unsupported one fails with
+`omatrophy: guide: <agent> can't run locked down yet; pick claude, codex,
+... in Settings > Guides` (the supported ones at that time).
