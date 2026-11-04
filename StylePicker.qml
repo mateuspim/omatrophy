@@ -89,7 +89,7 @@ Column {
   onGamesPageCountChanged: gamesPageIndex = Math.min(gamesPageIndex, gamesPageCount - 1)
   // True while the filter field has the keyboard; Panel.qml then lets keys
   // through to it instead of its own shortcuts.
-  readonly property bool typing: filterField.activeFocus
+  readonly property bool typing: filterField.activeFocus || favoriteField.activeFocus
 
   // The Games tab reads once per open; a copy from the last read (below)
   // shows until it answers.
@@ -159,6 +159,33 @@ Column {
       var i = order.indexOf(a.key), j = order.indexOf(b.key)
       return (i < 0 ? 999 : i) - (j < 0 ? 999 : j)
     })
+  }
+
+  // True while the favorite game picker is open on the Profile tab.
+  property bool pickingFavorite: false
+  property string favoriteSearch: ""
+  // Games matching the picker's search, most recently played first.
+  readonly property var favoriteMatches: {
+    if (!games) return []
+    var q = favoriteSearch.toLowerCase()
+    return games.filter(function(g) { return !q || (g.game || "").toLowerCase().indexOf(q) >= 0 })
+                .sort(function(a, b) { return b.played - a.played || (a.game || "").localeCompare(b.game || "") })
+                .slice(0, 6)
+  }
+
+  // Opens the picker, reading the games list if the Games tab hasn't.
+  function chooseFavorite() {
+    pickingFavorite = true
+    favoriteSearch = ""
+    if (!gamesRead && live) { gamesRead = true; gamesReader.running = true }
+    Qt.callLater(function() { favoriteField.forceActiveFocus() })
+  }
+
+  // Saves the pick, then reads `now` again so the tile fills with it.
+  function pickFavorite(g) {
+    pickingFavorite = false
+    favoriteSetter.command = ["python3", helperPath, "favorite", String(g.store), String(g.app)]
+    favoriteSetter.running = true
   }
 
   // `list` is "showcase" or "completionist", the omatrophy.py command.
@@ -334,6 +361,12 @@ Column {
 
   Process { id: runner }
 
+  // `favorite` then a fresh `now`, in order, so the new favorite shows.
+  Process {
+    id: favoriteSetter
+    onExited: if (root.live) nowReader.running = true
+  }
+
   Process {
     id: gamesReader
     command: ["python3", root.helperPath, "games"]
@@ -347,6 +380,7 @@ Column {
   }
 
   Process {
+    id: nowReader
     running: root.live
     command: ["python3", root.helperPath, "now"]
     stdout: StdioCollector {
@@ -1681,16 +1715,143 @@ Column {
 
     // The game you set with ♥ in the tracker, like Steam's favorite game:
     // its art, hours and trophies, then your rarest unlocks from it.
-    PanelSectionHeader {
+    Item {
       visible: root.cabinet !== null
-      text: "FAVORITE GAME"
-      foreground: root.foreground
+      width: root.width
+      height: favoriteButtonRow.height
+      PanelSectionHeader {
+        anchors.verticalCenter: parent.verticalCenter
+        text: "FAVORITE GAME"
+        foreground: root.foreground
+      }
+      Rectangle {
+        id: favoriteButtonRow
+        anchors.right: parent.right
+        width: chooseText.implicitWidth + Commons.Style.space(16)
+        height: chooseText.implicitHeight + Commons.Style.space(8)
+        radius: height / 2
+        color: chooseHit.containsMouse || root.pickingFavorite ? Qt.alpha(Commons.Color.accent, 0.18) : "transparent"
+        Accessible.role: Accessible.Button
+        Accessible.name: root.pickingFavorite ? "Cancel" : "Choose a favorite game"
+        Text {
+          textFormat: Text.PlainText
+          id: chooseText
+          anchors.centerIn: parent
+          text: root.pickingFavorite ? "Cancel" : (favorite.game ? "Change" : "+ Choose game")
+          color: Commons.Color.accent
+          font.family: Commons.Style.font.family
+          font.pixelSize: Commons.Style.font.caption
+          font.bold: true
+        }
+        MouseArea {
+          id: chooseHit
+          anchors.fill: parent
+          hoverEnabled: true
+          cursorShape: Qt.PointingHandCursor
+          onClicked: root.pickingFavorite ? root.pickingFavorite = false : root.chooseFavorite()
+        }
+      }
+    }
+
+    // The picker: type to narrow your games, click one (or Enter for the
+    // first) to make it the favorite. It covers the tile while open.
+    Rectangle {
+      visible: root.pickingFavorite
+      width: root.width
+      height: pickerBody.height + Commons.Style.space(20)
+      radius: Commons.Style.cornerRadius
+      color: Qt.alpha(root.foreground, 0.04)
+      border.width: 1
+      border.color: Commons.Color.accent
+      Column {
+        id: pickerBody
+        x: Commons.Style.space(10)
+        y: Commons.Style.space(10)
+        width: parent.width - Commons.Style.space(20)
+        spacing: Commons.Style.space(6)
+        TextField {
+          id: favoriteField
+          width: parent.width
+          placeholderText: "Search your games"
+          foreground: root.foreground
+          font.pixelSize: Commons.Style.font.bodySmall
+          verticalPadding: Commons.Style.space(4)
+          text: root.favoriteSearch
+          onTextChanged: root.favoriteSearch = text
+          Keys.onReturnPressed: if (root.favoriteMatches.length) root.pickFavorite(root.favoriteMatches[0])
+          Keys.onEnterPressed: if (root.favoriteMatches.length) root.pickFavorite(root.favoriteMatches[0])
+          Keys.onEscapePressed: {
+            if (text) text = ""
+            else root.pickingFavorite = false
+          }
+        }
+        Repeater {
+          model: root.favoriteMatches
+          delegate: Rectangle {
+            id: pickRow
+            required property var modelData
+            width: pickerBody.width
+            height: Commons.Style.space(40)
+            radius: Commons.Style.cornerRadius
+            color: pickHit.containsMouse ? Commons.Style.hoverFill : "transparent"
+            Accessible.role: Accessible.Button
+            Accessible.name: "Make " + modelData.game + " your favorite"
+            Art {
+              id: pickArt
+              x: Commons.Style.space(4)
+              anchors.verticalCenter: parent.verticalCenter
+              height: parent.height - Commons.Style.space(8)
+              width: Math.round(height * 460 / 215)
+              source: pickRow.modelData.header || ""
+              label: ""
+            }
+            Text {
+              textFormat: Text.PlainText
+              anchors.left: pickArt.right
+              anchors.leftMargin: Commons.Style.space(10)
+              anchors.right: pickCount.left
+              anchors.rightMargin: Commons.Style.space(8)
+              anchors.verticalCenter: parent.verticalCenter
+              text: pickRow.modelData.game
+              color: root.foreground
+              font.family: Commons.Style.font.family
+              font.pixelSize: Commons.Style.font.bodySmall
+              elide: Text.ElideRight
+            }
+            Caption {
+              id: pickCount
+              anchors.right: parent.right
+              anchors.rightMargin: Commons.Style.space(6)
+              anchors.verticalCenter: parent.verticalCenter
+              text: pickRow.modelData.unlocked + " / " + pickRow.modelData.total
+              color: pickRow.modelData.platinum ? root.metalColors.platinum : root.foreground
+            }
+            MouseArea {
+              id: pickHit
+              anchors.fill: parent
+              hoverEnabled: true
+              cursorShape: Qt.PointingHandCursor
+              onClicked: root.pickFavorite(pickRow.modelData)
+            }
+          }
+        }
+        Caption {
+          visible: root.games === null
+          text: "Reading your games…"
+          opacity: 0.5
+        }
+        Caption {
+          visible: root.games !== null && root.favoriteMatches.length === 0
+          text: "No game matches “" + root.favoriteSearch + "”"
+          opacity: 0.5
+        }
+      }
     }
 
     Rectangle {
       id: favorite
       readonly property var game: root.cabinet && root.cabinet.favorite ? root.cabinet.favorite : null
-      visible: game !== null
+      visible: game !== null && !root.pickingFavorite
       width: root.width
       height: favoriteBody.height + Commons.Style.space(20)
       radius: Commons.Style.cornerRadius
@@ -1793,7 +1954,7 @@ Column {
 
     // No favorite yet: where to set one.
     Rectangle {
-      visible: root.cabinet !== null && favorite.game === null
+      visible: root.cabinet !== null && favorite.game === null && !root.pickingFavorite
       width: root.width
       height: favoriteHint.height + Commons.Style.space(24)
       radius: Commons.Style.cornerRadius
@@ -1808,7 +1969,7 @@ Column {
         wrapMode: Text.WordWrap
         elide: Text.ElideNone
         opacity: 0.5
-        text: "Open a game in the tracker and click ♡ beside its name to make it your favorite."
+        text: "Choose game above, or click ♡ Favorite in a game's tracker."
       }
     }
 

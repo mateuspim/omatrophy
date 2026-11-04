@@ -97,8 +97,9 @@ Closest and dims in the other sorts until you click **Show**.
 The **Profile** tab shows your library at a glance, in tiles after Steam's
 profile showcases, each one yours to pick from the tracker:
 
-- **Favorite game**: click **♡ Favorite** in a game's tracker. Shows its
-  art, hours, trophies and your six rarest unlocks from it.
+- **Favorite game**: **+ Choose game** on the tile opens a search of your
+  games (or click **♡ Favorite** in a game's tracker). Shows its art,
+  hours, trophies and your six rarest unlocks from it.
 - **Showcase**: click ☆ on up to six earned trophies. Until you do, your
   rarest stand in.
 - **Completionist**: click ☆ beside **Platinum** on up to four finished

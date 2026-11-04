@@ -14,7 +14,8 @@
 - Clicking a rarest unlock opens the tracker on that achievement,
   highlighted and revealed. Needs a shell restart (Panel.qml).
 - A Profile tab, after Steam's profile showcases, picked from the
-  tracker: a favorite game (♡ Favorite: hours, trophies, its six rarest
+  tracker: a favorite game (+ Choose game on the tile searches your
+  games, or ♡ Favorite in the tracker: hours, trophies, its six rarest
   unlocks), a showcase of six trophies (☆; your rarest until you pin
   any), a completionist tile of up to four finished games (☆ beside
   Platinum; your two newest until you pin any) with games completed,
