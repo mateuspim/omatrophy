@@ -802,7 +802,9 @@ Item {
         Component.onCompleted: if (root.cascading) { opacity = 0; entry.start() }
         SequentialAnimation {
           id: entry
-          PauseAnimation { duration: Math.min(row.index, 12) * 22 }
+          // A row leaving the ListModel reports index -1, and a negative
+          // pause floods the shell log with warnings.
+          PauseAnimation { duration: Math.max(0, Math.min(row.index, 12)) * 22 }
           NumberAnimation { target: row; property: "opacity"; to: 1; duration: 180; easing.type: Easing.OutCubic }
         }
 
