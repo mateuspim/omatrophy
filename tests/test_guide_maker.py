@@ -1,0 +1,280 @@
+import json, os, sys, tempfile, unittest
+from unittest import mock
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+import guide_agents, guide_maker, guides
+
+ACHS = [
+    {'api': 'L', 'name': 'Last Lantern', 'desc': 'Carry the lantern to the end', 'unlocked': False, 'time': 0},
+    {'api': 'S', 'name': 'Star Counter', 'desc': 'Count 50 stars', 'unlocked': False, 'time': 0},
+    {'api': 'F', 'name': 'First Light', 'desc': 'Light the first beacon', 'unlocked': True, 'time': 1792990000},
+    {'api': 'Q', 'name': 'Quiet Hours', 'desc': '', 'hidden': True, 'unlocked': False, 'time': 0},
+]
+
+# A stand-in agent: reads the prompt on stdin and answers per stage from
+# canned files beside it; `calls` counts its runs.
+FAKE = r'''
+import os, sys
+here = os.path.dirname(os.path.abspath(__file__))
+prompt = sys.stdin.read()
+with open(os.path.join(here, 'calls'), 'a') as f:
+    f.write('x')
+stage = 'research' if '<research>' in prompt else 'items' if '<items>' in prompt else 'route'
+retry = 'last answer had these problems' in prompt
+name = os.path.join(here, stage + ('.retry' if retry else ''))
+if not os.path.exists(name):
+    name = os.path.join(here, stage)
+print(open(name).read())
+'''
+
+
+class FakeAgent(guide_agents.Adapter):
+    id, name, checked, web = 'fake', 'Fake', True, False
+
+    def __init__(self, folder):
+        self.folder = folder
+
+    def command(self, tmp, web, model, effort):
+        return [sys.executable, os.path.join(self.folder, 'fake.py')], None, {}
+
+
+def read(path):
+    with open(path, encoding='utf-8') as f:
+        return f.read()
+
+
+def write(folder, name, text):
+    os.makedirs(os.path.dirname(os.path.join(folder, name)), exist_ok=True)
+    with open(os.path.join(folder, name), 'w', encoding='utf-8') as f:
+        f.write(text)
+
+
+ITEMS = ('<items>[{"name": "Last Lantern", "phase": "missable", "difficulty": 2, "time": "~20 min",'
+         ' "minutes": [15, 25], "missable": true, "missable_note": "Before chapter 4", "tips": "Keep it lit.",'
+         ' "cites": [{"source": "S1.1", "quote": "carry the lantern before chapter four"}]},'
+         ' {"name": "Star Counter", "phase": "grind", "difficulty": 1, "counter": {"target": 50, "label": "stars"},'
+         ' "tips": "Look up.", "cites": [{"source": "S1.1", "quote": "this quote is not anywhere at all"}]},'
+         ' {"name": "Quiet Hours", "phase": "quick", "difficulty": 3}]</items>')
+ROUTE = '<route>{"order": ["Last Lantern", "Quiet Hours", "Star Counter"], "sections": {"overview": "Short and gentle."}}</route>'
+
+
+class Job(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.agent_dir = os.path.join(self.tmp.name, 'agent')
+        self.guides = os.path.join(self.tmp.name, 'guides')
+        write(self.agent_dir, 'fake.py', FAKE)
+        write(self.agent_dir, 'items', ITEMS)
+        write(self.agent_dir, 'route', ROUTE)
+        write(self.guides, 'sources/starfall-odyssey-1/notes.txt',
+              'You must carry the lantern before chapter four ends. Stars come out at night.')
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def job(self, **kw):
+        return guide_maker.Job('steam', '1', 'Starfall Odyssey', [dict(a) for a in ACHS], FakeAgent(self.agent_dir),
+                               web=False, folder=self.guides, list_guides=lambda app: [], fetch=lambda url: None, **kw)
+
+    def calls(self):
+        with open(os.path.join(self.agent_dir, 'calls')) as f:
+            return len(f.read())
+
+    def test_makes_files_and_verifies_quotes(self):
+        self.assertEqual(guide_maker.make(self.job())['state'], 'done')
+        md = os.path.join(self.guides, 'starfall-odyssey-1.md')
+        notes, rows = guides.parse_markdown(read(md))
+        self.assertIn('Short and gentle.', notes)
+        self.assertEqual(len(rows), 4)
+        plan = json.loads(read(md[:-3] + '.plan.json'))
+        self.assertEqual(plan['format'], 2)
+        self.assertEqual(plan['order'], ['Last Lantern', 'Quiet Hours', 'Star Counter'])
+        lantern, stars = plan['items']['Last Lantern'], plan['items']['Star Counter']
+        self.assertEqual(lantern['api'], 'L')
+        self.assertTrue(lantern['cites'][0]['verified'])
+        self.assertEqual(lantern['cites'][0]['source'], 'file:notes.txt')
+        self.assertFalse(stars['cites'][0]['verified'])
+        self.assertIn('counter', stars['unverified'])
+        self.assertEqual(guide_maker.status(self.guides)['state'], 'done')
+        sources = json.loads(read(md[:-3] + '.sources.json'))
+        self.assertIn('file:notes.txt', sources)
+        answer = guides.guide_answer('steam', '1', ACHS, self.guides)
+        self.assertEqual(answer['next'][0], 'L')
+
+    def test_bad_answer_is_asked_again_once(self):
+        write(self.agent_dir, 'items', 'no tags at all')
+        write(self.agent_dir, 'items.retry', ITEMS)
+        self.assertEqual(guide_maker.make(self.job())['state'], 'done')
+        self.assertEqual(self.calls(), 3)  # items twice, route once
+
+    def test_unparsable_answers_fail_and_write_nothing(self):
+        write(self.agent_dir, 'items', 'nothing useful')
+        self.assertEqual(guide_maker.make(self.job())['state'], 'failed')
+        self.assertFalse(os.path.exists(os.path.join(self.guides, 'starfall-odyssey-1.md')))
+        self.assertIn('failed', guide_maker.status(self.guides)['line'])
+
+    def test_stop_before_a_stage_keeps_the_old_guide(self):
+        write(self.guides, 'starfall-odyssey-1.md', 'old guide\n')
+        job = self.job()
+        real = guide_maker.stop_requested
+        with mock.patch.object(guide_maker, 'stop_requested', lambda folder=None: job.stage == 'gather' or real(folder)):
+            self.assertEqual(guide_maker.make(job)['state'], 'stopped')
+        self.assertEqual(read(os.path.join(self.guides, 'starfall-odyssey-1.md')), 'old guide\n')
+        self.assertEqual(guide_maker.status(self.guides)['state'], 'stopped')
+
+    def test_remake_keeps_hand_ticks_unknown_keys_and_a_previous_copy(self):
+        write(self.guides, 'renamed-1.md', '# Old\n\n## Achievements\n\n- [x] **Star Counter** — Count 50 stars.\n')
+        write(self.guides, 'renamed-1.plan.json', json.dumps(
+            {'items': {'Star Counter': {'name': 'Star Counter', 'details': {'steps': ['a']}}}, 'progress': {'x': 1}}))
+        self.assertEqual(guide_maker.make(self.job())['name'], 'renamed-1')
+        plan = json.loads(read(os.path.join(self.guides, 'renamed-1.plan.json')))
+        self.assertEqual(plan['progress'], {'x': 1})
+        self.assertEqual(plan['items']['Star Counter']['details'], {'steps': ['a']})
+        _, rows = guides.parse_markdown(read(os.path.join(self.guides, 'renamed-1.md')))
+        self.assertTrue(next(r for r in rows if r['name'] == 'Star Counter')['hand'])
+        self.assertTrue(os.path.exists(os.path.join(self.guides, 'renamed-1.md.prev')))
+
+
+class Checks(unittest.TestCase):
+    def test_tagged_takes_the_last_block_and_strips_fences(self):
+        self.assertEqual(guide_maker.tagged('<x>[1]</x> then <x>```json\n[2]\n```</x>', 'x'), [2])
+        with self.assertRaises(ValueError):
+            guide_maker.tagged('<x>{bad</x>', 'x')
+
+    def test_check_item_drops_bad_fields(self):
+        item, errors = guide_maker.check_item({'name': 'A', 'phase': 'nope', 'difficulty': 9, 'minutes': [30, 10],
+                                               'counter': {'target': 1}, 'combine_with': ['B', 'Z', 'A']}, {'A', 'B'})
+        self.assertNotIn('phase', item)
+        self.assertNotIn('difficulty', item)
+        self.assertEqual(item['minutes'], [10, 30])
+        self.assertIsNone(item['counter'])
+        self.assertEqual(item['combine_with'], ['B'])
+        self.assertEqual(len(errors), 2)
+        self.assertEqual(guide_maker.check_item({'name': 'Z'}, {'A'})[0], None)
+
+    def test_check_route(self):
+        route, errors = guide_maker.check_route('<route>{"order": ["A", "Z", "A"], "sections": {}}</route>', {'A'})
+        self.assertEqual(route['order'], ['A'])
+        self.assertEqual(len(errors), 2)  # Z unknown, no overview
+
+    def test_fold_matches_typographic_quotes(self):
+        self.assertIn(guide_maker.fold('don’t  go — "now"'), guide_maker.fold('Don\'t go - “now”!'))
+
+    def test_chunks_cut_long_text(self):
+        pieces = guide_maker.chunk_text('word ' * 1000, 300)
+        self.assertTrue(all(len(p) <= 300 for p in pieces))
+        self.assertEqual(sum(len(p.split()) for p in pieces), 1000)
+
+    def test_excerpts_prefer_the_name_and_research_hints(self):
+        pieces = guide_maker.chunks({'https://a': {'text': 'nothing here about it'},
+                                     'https://b': {'text': 'Last Lantern: carry it far.'},
+                                     'https://c': {'text': 'the hinted words live here'}})
+        ach = {'name': 'Last Lantern', 'desc': 'Carry it'}
+        self.assertEqual(guide_maker.excerpts_for(ach, pieces)[0]['url'], 'https://b')
+        self.assertEqual(guide_maker.excerpts_for(ach, pieces, ['hinted words'])[0]['url'], 'https://c')
+
+    def test_html_text_drops_scripts(self):
+        self.assertEqual(guide_maker.html_text('<p>Hi</p><script>x()</script><p>there</p>'), 'Hi\nthere')
+
+    def test_slug(self):
+        self.assertEqual(guide_maker.slug('DOOM: The Dark Ages™'), 'doom-the-dark-ages')
+
+    def test_steam_guide_urls(self):
+        page = 'href="https://steamcommunity.com/sharedfiles/filedetails/?id=11" ?id=11 sharedfiles/filedetails/?id=22'
+        self.assertEqual(guide_maker.steam_guide_urls('5', get=lambda url: page),
+                         ['https://steamcommunity.com/sharedfiles/filedetails/?id=11',
+                          'https://steamcommunity.com/sharedfiles/filedetails/?id=22'])
+
+    def test_fetch_refuses_plain_http(self):
+        self.assertIsNone(guide_maker.fetch_page('http://example.com/'))
+
+    def test_dead_running_job_reads_failed(self):
+        with tempfile.TemporaryDirectory() as d:
+            guide_maker.write_json(guide_maker.status_path(d), {'state': 'running', 'pid': 2 ** 22 + 12345})
+            self.assertEqual(guide_maker.status(d)['state'], 'failed')
+            self.assertFalse(guide_maker.busy(d))
+
+
+class Agents(unittest.TestCase):
+    def test_claude_lock_flags(self):
+        argv, _, _ = guide_agents.Claude().command('/x', False, 'sonnet', 'high')
+        self.assertEqual(argv[argv.index('--tools') + 1:], [''])
+        self.assertIn('--strict-mcp-config', argv)
+        self.assertNotIn('bypassPermissions', argv)
+        argv, _, _ = guide_agents.Claude().command('/x', True, '', '')
+        self.assertIn('WebFetch', argv)
+        self.assertNotIn('Bash', argv)
+
+    def test_no_adapter_ever_auto_approves(self):
+        for a in guide_agents.ADAPTERS:
+            try:
+                argv, _, env = a.command('/x', True, 'm', 'e')
+            except NotImplementedError:
+                continue
+            text = ' '.join(argv) + json.dumps(env)
+            for flag in ('bypass', 'yolo', '--auto', 'danger', 'approve-for-me'):
+                self.assertNotIn(flag, text, a.id)
+
+    def test_claude_stream_answer(self):
+        lines = [{'type': 'assistant', 'message': {'content': [
+                    {'type': 'tool_use', 'id': 't1', 'name': 'WebFetch', 'input': {'url': 'https://a'}},
+                    {'type': 'tool_use', 'id': 't2', 'name': 'WebSearch', 'input': {'query': 'q'}}]}},
+                 {'type': 'user', 'message': {'content': [
+                    {'type': 'tool_result', 'tool_use_id': 't1', 'content': [{'type': 'text', 'text': 'page'}]},
+                    {'type': 'tool_result', 'tool_use_id': 't2', 'content': 'see https://b/c and more'}]}},
+                 {'type': 'result', 'result': 'done', 'total_cost_usd': 0.5,
+                  'usage': {'input_tokens': 3, 'cache_read_input_tokens': 4, 'output_tokens': 2}}]
+        out = guide_agents.Claude().answer('\n'.join(json.dumps(l) for l in lines) + '\nnoise', '/x')
+        self.assertEqual(out['text'], 'done')
+        self.assertEqual(out['pages'], [{'url': 'https://a', 'text': 'page'}])
+        self.assertEqual(out['links'], ['https://b/c'])
+        self.assertEqual(out['usage'], {'input': 7, 'output': 2, 'cost_usd': 0.5})
+
+    def test_codex_models_cache(self):
+        with tempfile.TemporaryDirectory() as d:
+            write(d, 'models_cache.json', json.dumps({'models': [
+                {'slug': 'gpt-x', 'display_name': 'GPT X', 'visibility': 'list',
+                 'supported_reasoning_levels': [{'effort': 'low'}, {'effort': 'high'}]},
+                {'slug': 'hidden', 'visibility': 'hide'}]}))
+            with mock.patch.dict(os.environ, {'CODEX_HOME': d}):
+                self.assertEqual(guide_agents.Codex().models(),
+                                 [{'id': 'gpt-x', 'name': 'GPT X', 'efforts': ['low', 'high']}])
+
+    def test_resolve_errors_say_what_to_do(self):
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {'HOME': d}):
+            with self.assertRaisesRegex(SystemExit, 'no agent picked'):
+                guide_agents.resolve('')
+            with self.assertRaisesRegex(SystemExit, 'no one-shot'):
+                guide_agents.resolve('openclaw')
+            with self.assertRaisesRegex(SystemExit, 'not an agent'):
+                guide_agents.resolve('vim')
+            with mock.patch.object(guide_agents.Codex, 'installed', lambda self: True):
+                with self.assertRaisesRegex(SystemExit, "can't run locked down yet; pick claude"):
+                    guide_agents.resolve('codex')
+
+    def test_listing_marks_default_and_picks(self):
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {'HOME': d}):
+            write(d, '.config/omarchy/defaults/agent', 'codex\n')
+            with mock.patch.object(guide_agents.Adapter, 'installed', lambda self: False):
+                rows = guide_agents.listing({'guide-models': {'claude': {'model': 'opus', 'effort': 'high'}}})
+        by = {r['agent']: r for r in rows}
+        self.assertNotIn('openclaw', by)
+        self.assertTrue(by['codex']['default'])
+        self.assertEqual((by['claude']['model'], by['claude']['effort']), ('opus', 'high'))
+        self.assertTrue(by['claude']['supported'])
+        self.assertFalse(by['gemini']['supported'])
+
+    def test_run_stops_and_times_out(self):
+        class Sleeper(guide_agents.Adapter):
+            id = 'sleeper'
+            def command(self, folder, web, model, effort):
+                return [sys.executable, '-c', 'import time; time.sleep(30)'], None, {}
+        out = guide_agents.run(Sleeper(), 'hi', stopped=lambda: True)
+        self.assertTrue(out['stopped'])
+        out = guide_agents.run(Sleeper(), 'hi', timeout=0)
+        self.assertFalse(out['ok'])
+        self.assertIn('took over', out['error'])
+
+
+if __name__ == '__main__':
+    unittest.main()
