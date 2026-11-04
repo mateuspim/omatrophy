@@ -39,8 +39,11 @@ client's own cache needs none of that.
   asks.
 - On Hyprland, Steam's window waits on a hidden special workspace
   (`special:omatrophy`) while a load runs, with `focus_on_activate` off
-  for that window only, and goes back to its workspace afterwards; a
-  window the load itself opened (Steam was in the tray) is closed again.
+  for that window only, and goes back to its workspace afterwards with
+  that override dropped (`value = "unset"`), so the user's own rules
+  apply again. A main window the load itself opened (Steam was in the
+  tray) is closed again; any other window that appeared meanwhile
+  (Friends, a sign-in dialog) comes to the active workspace instead.
   This is set at runtime through `hyprctl`; Hyprland's config is never
   written. Elsewhere the window comes forward page by page.
 - Only the owner starts it, from the CLI or the panel, never the watcher.

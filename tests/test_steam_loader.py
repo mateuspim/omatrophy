@@ -207,21 +207,21 @@ class Load(LoaderCache):
 class FakeHyprctl:
     """hyprctl with a fixed client list; records dispatches."""
 
-    def __init__(self, clients, focus_on_activate=1):
-        self.clients, self.focus = clients, focus_on_activate
+    def __init__(self, clients):
+        self.clients = clients
         self.dispatched = []
 
     def __call__(self, *args):
         if args[0] == 'clients':
             return json.dumps(self.clients)
-        if args[0] == 'getoption':
-            return json.dumps({'int': self.focus})
+        if args[0] == 'activeworkspace':
+            return json.dumps({'name': '3'})
         self.dispatched.append(args[1])
         return 'ok'
 
 
-def client(address, workspace, cls='steam'):
-    return {'address': address, 'class': cls, 'workspace': {'name': workspace}}
+def client(address, workspace, cls='steam', title='Steam'):
+    return {'address': address, 'class': cls, 'title': title, 'workspace': {'name': workspace}}
 
 
 class SteamWindowOnHyprland(unittest.TestCase):
@@ -242,15 +242,32 @@ class SteamWindowOnHyprland(unittest.TestCase):
         w.hide()
         self.assertEqual(len(ctl.dispatched), 2)
         w.restore()
-        self.assertIn('value = 1', ctl.dispatched[2])
+        self.assertIn('value = "unset"', ctl.dispatched[2])
         self.assertIn('workspace = "4"', ctl.dispatched[3])
 
-    def test_keeps_the_users_focus_setting(self):
-        ctl = FakeHyprctl([client('0x1', '4')], focus_on_activate=0)
+    def test_drops_the_per_window_override_instead_of_copying_the_global(self):
+        # Regression: restore wrote the global value back as an override,
+        # which outlived any later change to the user's config.
+        ctl = FakeHyprctl([client('0x1', '4')])
         w = steam_loader.SteamWindow(ctl)
         w.hide()
         w.restore()
-        self.assertIn('value = 0', ctl.dispatched[2])
+        self.assertIn('prop = "focus_on_activate", value = "unset"', ctl.dispatched[2])
+
+    def test_a_new_window_that_is_not_the_main_one_comes_back_instead_of_closing(self):
+        # Regression: a Friends list or sign-in dialog opened mid-load was
+        # closed with the main window.
+        ctl = FakeHyprctl([client('0x1', '4')])
+        w = steam_loader.SteamWindow(ctl)
+        w.hide()
+        ctl.clients = [client('0x1', 'special:omatrophy'), client('0x7', '2', title='Friends List')]
+        w.hide()
+        ctl.clients[1]['workspace']['name'] = 'special:omatrophy'
+        w.restore()
+        sent = ''.join(ctl.dispatched)
+        self.assertNotIn('window.close', sent)
+        self.assertIn('window = "address:0x7", workspace = "3"', sent)
+        self.assertIn('window = "address:0x1", workspace = "4"', sent)
 
     def test_a_window_the_load_opened_is_closed_again(self):
         ctl = FakeHyprctl([])

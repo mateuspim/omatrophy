@@ -24,6 +24,10 @@ POLL_SECONDS = 0.25
 HIDDEN_WORKSPACE = 'special:omatrophy'
 # hyprctl answers in milliseconds; a hung compositor shouldn't hang a load.
 HYPRCTL_SECONDS = 4
+# The client's main window. A load closes it again only when it appeared
+# during the load (Steam sat in the tray); any other new window (Friends,
+# a sign-in dialog) is the user's and comes back to their workspace.
+MAIN_TITLE = 'Steam'
 # The panel's progress strip shows this many of the latest results.
 RECENT_KEPT = 6
 
@@ -133,10 +137,11 @@ class SteamWindow:
     misc:focus_on_activate on Hyprland jumps to it. So each Steam window
     moves to HIDDEN_WORKSPACE, with focus_on_activate off for that window
     only (Omarchy turns it off the same way for Telegram), and goes back
-    where it was afterwards. Hyprland's config is never touched. A window
-    that only appeared during the load (Steam sat in the tray) is closed
-    again, which puts Steam back in the tray. Without Hyprland nothing
-    happens and Steam's window comes forward as before."""
+    where it was afterwards. Hyprland's config is never touched. A main
+    window that only appeared during the load (Steam sat in the tray) is
+    closed again, which puts Steam back in the tray; other new windows
+    come to the active workspace. Without Hyprland nothing happens and
+    Steam's window comes forward as before."""
 
     def __init__(self, ctl=None):
         # Looked up now, not at import, so tests can swap the module's hyprctl.
@@ -164,10 +169,14 @@ class SteamWindow:
     def dispatch(self, lua):
         self.ctl('dispatch', lua)
 
-    def set_focus_on_activate(self, address, on):
-        # A Lua `false` reads as a missing value to set_prop; 0 and 1 work.
+    def set_focus_on_activate(self, address, value):
+        # A Lua `false` reads as a missing value to set_prop; 0 and 1 work,
+        # and "unset" drops the window's override (checked on Hyprland
+        # 0.56.2: border_size 7 went back to the global 2; other strings
+        # are ignored).
+        value = lua_string(value) if isinstance(value, str) else int(value)
         self.dispatch(f'hl.dsp.window.set_prop({{ window = {lua_string("address:" + address)}, '
-                      f'prop = "focus_on_activate", value = {1 if on else 0} }})')
+                      f'prop = "focus_on_activate", value = {value} }})')
 
     def move(self, address, workspace):
         self.dispatch(f'hl.dsp.window.move({{ window = {lua_string("address:" + address)}, '
@@ -186,25 +195,36 @@ class SteamWindow:
             if name == HIDDEN_WORKSPACE:
                 continue
             self.moved.setdefault(c['address'], name)
-            self.set_focus_on_activate(c['address'], False)
+            self.set_focus_on_activate(c['address'], 0)
             self.move(c['address'], HIDDEN_WORKSPACE)
 
-    def global_focus_on_activate(self):
+    def active_workspace(self):
+        """The workspace the user is on, or None when hyprctl didn't say."""
         try:
-            return bool(json.loads(self.ctl('getoption', 'misc:focus_on_activate', '-j') or '{}').get('int', 1))
+            name = json.loads(self.ctl('activeworkspace', '-j') or '{}').get('name')
         except (ValueError, AttributeError):
-            return True
+            return None
+        return name if isinstance(name, str) and name else None
 
     def restore(self):
         if not self.enabled or not self.moved:
             return
-        on = self.global_focus_on_activate()
+        # Titles as they are now; unknown (hyprctl silent) is never "main",
+        # so a window is moved rather than closed when in doubt.
+        titles = {c['address']: c.get('title') for c in self.windows() or []}
+        active = None
         for address, workspace in self.moved.items():
-            self.set_focus_on_activate(address, on)
+            # Unset, not the global value: a window rule of the user's
+            # (or a later config change) applies again.
+            self.set_focus_on_activate(address, 'unset')
             if address in (self.before or set()):
                 self.move(address, workspace)
-            else:
+            elif titles.get(address) == MAIN_TITLE:
                 self.dispatch(f'hl.dsp.window.close({{ window = {lua_string("address:" + address)} }})')
+            else:
+                active = active or self.active_workspace()
+                if active:
+                    self.move(address, active)
         self.moved = {}
 
 
