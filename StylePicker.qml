@@ -129,6 +129,15 @@ Column {
     return cabinet.stores.find(function(s) { return s.id === id }) || null
   }
 
+  // A view choice (a sort, the rarest list) shows at once and is kept in
+  // config.json, written only when it changes, so the next open shows the
+  // same view.
+  function remember(key, property, value) {
+    if (root[property] === value) return
+    root[property] = value
+    runner.exec(["python3", helperPath, "set", key, value])
+  }
+
   // The rows of a list whose game isn't hidden.
   function unhidden(rows) {
     return rows.filter(function(g) { return !isHidden(g) })
@@ -247,6 +256,8 @@ Column {
       if (c.chimes) root.chimes = c.chimes
       if (c.glass) root.glass = c.glass
       root.community = c.community === true
+      if (c["games-sort"]) root.sort = c["games-sort"]
+      if (c.rarest) root.rarestRange = c.rarest
       var shows = {}
       root.nowSections.forEach(function(n) { shows[n.value] = c["now-" + n.value] !== false })
       root.nowShows = shows
@@ -1357,7 +1368,7 @@ Column {
           { value: "platinum", label: "Platinums" }
         ]
         value: root.rarestRange
-        onPicked: value => root.rarestRange = value
+        onPicked: value => root.remember("rarest", "rarestRange", value)
       }
     }
 
@@ -1647,7 +1658,7 @@ Column {
           { value: "name", label: "Name" }
         ]
         value: root.sort
-        onPicked: value => root.sort = value
+        onPicked: value => root.remember("games-sort", "sort", value)
       }
     }
 

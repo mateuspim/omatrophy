@@ -15,6 +15,8 @@ Usage:
   omatrophy.py set sound on|off|omatrophy|classic
   omatrophy.py set icons omarchy|vector|painted
   omatrophy.py set tracker-sort recent|rarity|name|game
+  omatrophy.py set games-sort recent|closest|name
+  omatrophy.py set rarest ever|month|platinum
   omatrophy.py set community on|off   fill in games this machine never ran from your public Steam profile
   omatrophy.py sync                   run that backfill now, with progress
   omatrophy.py hide <store> <game>    keep a game you won't finish out of "closest to platinum"
@@ -653,6 +655,9 @@ SETTINGS = {'position': ('top-center', 'top-left', 'top-right'),
             'icons': ('omarchy', 'vector', 'painted'),
             'glass': ('clear', 'frosted', 'solid'),
             'tracker-sort': ('recent', 'rarity', 'name', 'game'),
+            # The panel's last picks, so the next open shows the same view.
+            'games-sort': ('recent', 'closest', 'name'),
+            'rarest': ('ever', 'month', 'platinum'),
             'community': ('on', 'off')}
 # The Now tab's sections, each shown unless switched off in Settings.
 NOW_SECTIONS = ('metals', 'recent', 'rarest', 'shelf')
@@ -670,6 +675,8 @@ def set_option(key, value):
                          f'       omatrophy.py set icons {"|".join(SETTINGS["icons"])}\n'
                          f'       omatrophy.py set glass {"|".join(SETTINGS["glass"])}\n'
                          f'       omatrophy.py set tracker-sort {"|".join(SETTINGS["tracker-sort"])}\n'
+                         f'       omatrophy.py set games-sort {"|".join(SETTINGS["games-sort"])}\n'
+                         f'       omatrophy.py set rarest {"|".join(SETTINGS["rarest"])}\n'
                          f'       omatrophy.py set community on|off\n'
                          f'       omatrophy.py set now-{{{",".join(NOW_SECTIONS)}}} on|off')
     path = config_path()

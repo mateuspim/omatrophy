@@ -13,6 +13,8 @@
   games show "+N" after their latest unlock icons.
 - Clicking a rarest unlock opens the tracker on that achievement,
   highlighted and revealed. Needs a shell restart (Panel.qml).
+- The panel remembers the Games sort and the rarest list you picked last
+  (`games-sort`, `rarest`), so it opens on the same view.
 - Settings has a Now tab row to show or hide the metal tally, recently
   played, rarest unlocks and the platinum shelf (`set now-<section>`).
 - The platinum shelf's empty slots show the games closest to platinum:

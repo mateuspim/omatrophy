@@ -1059,6 +1059,16 @@ class Settings(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 omatrophy.set_option('now-playing', 'off')
 
+    def test_panel_view_picks_are_kept(self):
+        with tempfile.TemporaryDirectory() as home, mock.patch.dict(os.environ, {'HOME': home}):
+            with redirect_stdout(io.StringIO()):
+                omatrophy.set_option('games-sort', 'closest')
+                omatrophy.set_option('rarest', 'platinum')
+            with open(f'{home}/.config/omatrophy/config.json') as f:
+                self.assertEqual(json.load(f), {'games-sort': 'closest', 'rarest': 'platinum'})
+            with self.assertRaises(SystemExit):
+                omatrophy.set_option('rarest', 'yesterday')
+
 class BackfillLoop(unittest.TestCase):
     def test_wait_doubles_after_failures_up_to_a_cap(self):
         wait = omatrophy.BACKFILL_WAIT
