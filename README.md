@@ -83,7 +83,9 @@ you're playing: its art and progress, what you've unlocked this session and
 the three locked achievements most players have. With nothing running it
 shows the last three games you played instead (a finished one carries its
 platinum date). Below them come your three rarest unlocks across every game,
-ever or this month, and your platinum shelf. The **Games** tab lists every
+ever or this month, and your platinum shelf. Before any game has
+achievements, the tab says where they come from and points to the Steam
+profile switch. The **Games** tab lists every
 game with its count, sorted by last played, closest to platinum or name.
 Type (or press `/`) to filter by name; Enter opens the first match. Hover a
 game and click **Hide** to set aside one you won't finish: it leaves

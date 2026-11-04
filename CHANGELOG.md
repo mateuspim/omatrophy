@@ -6,6 +6,8 @@
   month, each opening its game in the tracker. Rarity comes from the
   cache, so the panel makes no extra requests; the watcher fetches it
   once for games that have none.
+- Before any game has achievements, the Now tab says where they come
+  from and points to the Steam profile switch in Settings.
 - Settings groups the Steam rows under their own header, and the "applies
   to the next toast" note sits under the toast settings it is about.
 

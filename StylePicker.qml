@@ -677,6 +677,67 @@ Column {
       }
     }
 
+    // ------------------------------------------------ first run
+
+    // No game with achievements yet: say where they come from instead of
+    // an empty tab, and point at the Steam profile switch, which fills in
+    // games this machine never ran.
+    Rectangle {
+      id: firstRun
+      visible: root.cabinet !== null && root.cabinet.games === 0
+      width: root.width
+      height: firstRunBody.height + Commons.Style.space(28)
+      radius: Commons.Style.cornerRadius
+      color: Qt.alpha(root.foreground, 0.04)
+      border.width: 1
+      border.color: Qt.alpha(root.foreground, 0.12)
+      Column {
+        id: firstRunBody
+        x: Commons.Style.space(14)
+        y: Commons.Style.space(14)
+        width: parent.width - Commons.Style.space(28)
+        spacing: Commons.Style.space(8)
+        Text {
+          textFormat: Text.PlainText
+          text: "No achievements yet"
+          color: root.foreground
+          font.family: Commons.Style.font.family
+          font.pixelSize: Commons.Style.font.body
+          font.bold: true
+        }
+        Caption {
+          width: parent.width
+          wrapMode: Text.WordWrap
+          elide: Text.ElideNone
+          text: "Play a game with achievements on Steam, or on GOG through Heroic, and it shows up here. Your first unlock brings a toast."
+        }
+        Caption {
+          width: parent.width
+          wrapMode: Text.WordWrap
+          elide: Text.ElideNone
+          text: root.community
+            ? "Steam profile fill-in is on: games you played on other machines arrive over the next hours."
+            : "Played on another machine? Turn on Steam profile in Settings to fill in those games."
+        }
+        Caption {
+          visible: !root.community
+          text: "Open Settings →"
+          color: Commons.Color.accent
+          opacity: firstRunHit.containsMouse ? 1 : 0.8
+          Accessible.role: Accessible.Button
+          Accessible.name: "Open Settings"
+          MouseArea {
+            id: firstRunHit
+            anchors.fill: parent
+            anchors.margins: -4
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.tab = "settings"
+          }
+        }
+      }
+    }
+
     // ------------------------------------------------ now playing
 
     // No section header: the banner's PLAYING chip says it.
