@@ -980,6 +980,9 @@ Column {
     readonly property int total: load.total || 0
     readonly property int found: load.loaded || 0
     readonly property int empty: load.none || 0
+    // The newest result that has already dropped in; the row is rebuilt on
+    // every status change, and only a new arrival should animate.
+    property string arrived: ""
     width: root.width
     height: visible ? stripBody.height + Commons.Style.space(20) : 0
     visible: root.steamLoading
@@ -1017,18 +1020,56 @@ Column {
       Item {
         width: parent.width
         height: Commons.Style.space(40)
-        Art {
+        // The cover of the game being checked: a shimmer until it loads,
+        // then the cover settles in, with an accent line sweeping across
+        // it while Steam looks for achievements.
+        Rectangle {
           id: stripArt
           width: Math.round(height * 460 / 215)
           height: parent.height
-          source: steamLoadStrip.currentArt
-          label: ""
-          // A soft breathing while Steam opens the page.
-          SequentialAnimation on opacity {
-            running: steamLoadStrip.visible
-            loops: Animation.Infinite
-            NumberAnimation { to: 0.6; duration: 700; easing.type: Easing.InOutSine }
-            NumberAnimation { to: 1; duration: 700; easing.type: Easing.InOutSine }
+          radius: Commons.Style.cornerRadius
+          color: "transparent"
+          clip: true
+          Bone {
+            anchors.fill: parent
+            radius: parent.radius
+            visible: stripCover.status !== Image.Ready
+          }
+          Image {
+            id: stripCover
+            anchors.fill: parent
+            source: steamLoadStrip.currentArt
+            fillMode: Image.PreserveAspectCrop
+            asynchronous: true
+            sourceSize.width: 460
+            opacity: 0
+            // Each new cover fades in and settles from a slight zoom.
+            onStatusChanged: if (status === Image.Ready) coverIn.restart()
+            onSourceChanged: { coverIn.stop(); opacity = 0 }
+            ParallelAnimation {
+              id: coverIn
+              NumberAnimation { target: stripCover; property: "opacity"; from: 0; to: 1; duration: 320; easing.type: Easing.OutCubic }
+              NumberAnimation { target: stripCover; property: "scale"; from: 1.12; to: 1; duration: 520; easing.type: Easing.OutCubic }
+            }
+          }
+          Rectangle {
+            id: scanLine
+            width: Math.max(24, stripArt.width * 0.35)
+            height: stripArt.height
+            gradient: Gradient {
+              orientation: Gradient.Horizontal
+              GradientStop { position: 0; color: "transparent" }
+              GradientStop { position: 0.85; color: Qt.alpha(Commons.Color.accent, 0.22) }
+              GradientStop { position: 1; color: Qt.alpha(Commons.Color.accent, 0.7) }
+            }
+            NumberAnimation on x {
+              from: -scanLine.width
+              to: stripArt.width
+              duration: 1400
+              easing.type: Easing.InOutSine
+              loops: Animation.Infinite
+              running: steamLoadStrip.visible
+            }
           }
         }
         Column {
@@ -1125,12 +1166,27 @@ Column {
         Repeater {
           model: steamLoadStrip.load.recent || []
           delegate: Art {
+            id: recentCover
             required property var modelData
+            required property int index
             width: stripRecent.tile
             height: Math.round(width * 215 / 460)
-            source: modelData.art || ""
+            source: modelData.art || "https://cdn.fastly.steamstatic.com/steam/apps/" + modelData.app + "/header.jpg"
             label: modelData.name || ""
-            opacity: modelData.found ? 1 : 0.3
+            readonly property real rest: modelData.found ? 1 : 0.3
+            opacity: rest
+            // The list is rebuilt on every result; only the newest, first,
+            // arrives, so the row reads as games dropping in one by one.
+            Component.onCompleted: {
+              if (index !== 0 || steamLoadStrip.arrived === modelData.app) return
+              steamLoadStrip.arrived = modelData.app
+              arrive.start()
+            }
+            ParallelAnimation {
+              id: arrive
+              NumberAnimation { target: recentCover; property: "opacity"; from: 0; to: recentCover.rest; duration: 360; easing.type: Easing.OutCubic }
+              NumberAnimation { target: recentCover; property: "scale"; from: 0.7; to: 1; duration: 420; easing.type: Easing.OutBack }
+            }
             Rectangle {
               visible: parent.modelData.found
               anchors.right: parent.right
