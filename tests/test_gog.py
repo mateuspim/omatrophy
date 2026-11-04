@@ -306,6 +306,19 @@ class LockedDatabase(unittest.TestCase):
                 self.assertEqual(reads.call_count, 1)
             self.assertNotIn(CLIENT, store.retry)
 
+    def test_a_hot_journal_keeps_the_last_copy(self):
+        with HeroicDir() as h:
+            db = h.database([row('A', unlock='2026-11-03T23:59:46+00:00')])
+            h.install()
+            store = gog.Gog()
+            self.assertEqual(len(store.achievements(PRODUCT)), 1)
+            # What a read-only open says after Comet died mid-transaction.
+            hot = sqlite3.OperationalError('attempt to write a readonly database')
+            os.utime(db, (time.time() + 5, time.time() + 5))
+            with mock.patch.object(gog, 'read_rows', side_effect=hot):
+                self.assertEqual([a['api'] for a in store.achievements(PRODUCT) if a['unlocked']], ['A'])
+            self.assertNotIn(PRODUCT, store.retry)
+
     def test_only_a_lock_is_busy(self):
         self.assertTrue(gog.busy(sqlite3.OperationalError('database is locked')))
         self.assertFalse(gog.busy(sqlite3.OperationalError('no such table: achievement')))

@@ -290,8 +290,11 @@ class Gog(Store):
         except sqlite3.Error as e:
             if not busy(e):
                 # Not Comet's layout, or not a database: nothing to read
-                # until the file changes again.
-                rows = []
+                # until the file changes again. A Comet killed mid-write
+                # leaves a hot journal that only a writer may roll back
+                # (SQLITE_READONLY_ROLLBACK) until Comet opens the file
+                # again, so the last good copy stands in until then.
+                rows = old[1] if old else []
             else:
                 self.retry.add(game)
                 if old:
