@@ -14,3 +14,6 @@ design/hero/ref/
 design/hero/captures/
 design/hero/preview.png
 design/review/
+
+# The owner's private ids, checked by tests/test_hygiene.py; never commit
+.private-strings

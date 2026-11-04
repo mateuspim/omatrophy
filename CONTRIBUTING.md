@@ -44,7 +44,7 @@ body that explains why.
 
 - [ ] Tests pass and `omarchy plugin validate .` exits 0
 - [ ] Docs and CHANGELOG (Unreleased) updated
-- [ ] No personal paths, account ids or screenshots in tracked files
+- [ ] No personal paths, account ids or screenshots in tracked files (`tests/test_hygiene.py` checks; put your own ids in the gitignored `.private-strings`)
 
 ## License
 
