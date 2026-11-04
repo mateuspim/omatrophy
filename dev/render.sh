@@ -43,11 +43,16 @@ ln -s /usr/share/omarchy/shell/Ui "$dir/Ui"
 case $target in
   now|idle|empty|profile|settings|games|loading)
     w=460 h=900 at=2500
+    [[ $target == settings ]] && h=1400
     tab=now; [[ $target == settings || $target == games || $target == profile ]] && tab=$target
     data=now.json; [[ $target == idle || $target == empty ]] && data=$target.json; [[ $target == games ]] && data=games.json
     feed="item.cabinet = JSON.parse(sample.text())"
     [[ $target == games ]] && feed="item.games = JSON.parse(sample.text())"
     [[ $target == loading ]] && feed=""
+    if [[ $target == settings ]]; then
+      extra="FileView { id: agentSample; path: \"$repo/dev/samples/agents.json\"; blockLoading: true }"
+      feed="$feed; item.guideAgents = JSON.parse(agentSample.text()); item.guideModels = ({ claude: { model: \"sonnet\", effort: \"medium\" } })"
+    fi
     view="Loader {
         x: 20; y: 20; width: 420
         source: \"file:$repo/StylePicker.qml\"
