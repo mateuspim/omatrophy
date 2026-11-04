@@ -33,7 +33,7 @@ achievement list.
   progress through the game, filling in as you watch.
 - A trophy cabinet in the bar: the game you're playing with this session's
   unlocks and the likeliest next ones, or the last three games you played,
-  and a shelf of your platinums; every game, eight to a page, filtered as you
+  your rarest unlocks ever or this month, and a shelf of your platinums; every game, eight to a page, filtered as you
   type and sorted by recent, closest to platinum or name, with games you
   won't finish set aside, and platinums you'd rather not show taken off
   the shelf.
@@ -78,15 +78,38 @@ each). GOG needs no network at all. No root, no API key, no login. Details in
 
 ## Trophy cabinet and tracker
 
-Click the trophy in the bar. The **Now** tab shows your totals, then the game
+Click the trophy in the bar. The **Now** tab shows your totals, split by
+metal with your average completion, then the game
 you're playing: its art and progress, what you've unlocked this session and
 the three locked achievements most players have. With nothing running it
 shows the last three games you played instead (a finished one carries its
-platinum date). Below sits your platinum shelf. The **Games** tab lists every
+platinum date). Below them come your three rarest unlocks across every game,
+ever, this month or from your platinums only (click one to open it in the
+tracker), and your platinum shelf,
+whose empty slots tease the games you're closest to finishing ("2 left"). Before any game has
+achievements, the tab says where they come from and points to the Steam
+profile switch. The **Games** tab lists every
 game with its count, sorted by last played, closest to platinum or name.
 Type (or press `/`) to filter by name; Enter opens the first match. Hover a
 game and click **Hide** to set aside one you won't finish: it leaves
 Closest and dims in the other sorts until you click **Show**.
+
+The **Profile** tab shows your library at a glance, in tiles after Steam's
+profile showcases, each one yours to pick from the tracker:
+
+- **Favorite game**: **+ Choose game** on the tile opens a search of your
+  games. Shows its art, hours, trophies and your six rarest unlocks from
+  it.
+- **Showcase**: click ☆ on up to six earned trophies. Until you do, your
+  rarest stand in.
+- **Completionist**: click **☆ Completionist** beside a finished game's
+  Platinum in the tracker, for up to four games. Until you do, your two newest platinums stand in. Below it:
+  games completed, started and average completion.
+- **Playtime**: hours in the past two weeks and in all, from the
+  launchers' own files.
+
+Hover a pinned tile for **×** to take it off; drag a showcase trophy
+sideways to move it.
 
 On multiple monitors, each trophy button opens its own panel. Direct IPC
 (`omarchy-shell pym.omatrophy toggle`, also `open` or `close`) controls the
@@ -114,9 +137,14 @@ omarchy-shell shell summon pym.omatrophy '{}'   # the running or last game
 
 ## Settings
 
-The panel's **Settings** tab holds the trophy style, previews of every tier,
-position, glass and sound. Each choice applies to the next toast. Steam
-also shows its own popup for each unlock; **Turn off in Steam** opens
+The panel's **Settings** tab holds the trophy style, then position, glass
+and sound as rows of choices, and **Try it** tiles that show a toast of
+each tier with your settings. Each choice applies to the next toast.
+**Now tab** picks which sections the Now tab shows. Under
+**Stores**, a card per store says whether OmaTrophy found it and how many
+games it has, or what to do when it didn't. In Steam's card, **Profile**
+fills in games this machine never ran from your public Steam profile (off
+by default). GOG has nothing to set. Steam also shows its own popup for each unlock; **Turn off in Steam** opens
 Steam's Notifications settings: untick Show Toast (and Play Sound) on
 "When I unlock an achievement".
 

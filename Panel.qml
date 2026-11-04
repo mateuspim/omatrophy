@@ -15,10 +15,13 @@ Panel {
 
   // The tracker is this plugin's overlay entry point; the shell hands its
   // summon to Tracker.qml.
-  function openTracker(store, app) {
+  // `api`, when given, is one achievement for the tracker to highlight.
+  function openTracker(store, app, api) {
     root.close()
+    var request = { store: store, app: app }
+    if (api) request.api = api
     if (root.bar && root.bar.shell)
-      root.bar.shell.summon("pym.omatrophy", JSON.stringify({ store: store, app: app }))
+      root.bar.shell.summon("pym.omatrophy", JSON.stringify(request))
   }
 
   implicitWidth: button.implicitWidth

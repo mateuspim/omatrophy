@@ -14,8 +14,14 @@ bar panel).
 | `chimes` | `"omatrophy"` (`assets/sounds/<tier>.wav`), `"classic"` (freedesktop sounds) | `"omatrophy"` |
 | `icons` | `"omarchy"`, `"vector"`, `"painted"` | `"omarchy"` |
 | `glass` | How much of the screen shows through a toast: `"clear"`, `"frosted"`, `"solid"` (the platinum card stays solid) | `"frosted"` |
+| `games-sort` | The Games tab's last sort: `"recent"`, `"closest"`, `"name"`. Written when you pick one. | `"recent"` |
+| `rarest` | The Now tab's last rarest-unlocks list: `"ever"`, `"month"`, `"platinum"`. Written when you pick one. | `"ever"` |
 | `tracker-sort` | `"recent"`, `"rarity"`, `"name"`, `"game"` (the store's own order) | `"recent"` |
 | `community` | `true`, `false`: fill in games that never ran here from your public Steam profile (ADR 11) | `false` |
+| `now-metals`, `now-recent`, `now-rarest`, `now-shelf` | `true`, `false`: show the bar panel's Now-tab section (the metal tally, recently played, rarest unlocks, the platinum shelf). The game you're playing always shows. | `true` |
+| `showcase` | Up to six trophies on the Profile tab's showcase, in the order pinned: `"store:game:api"` for one achievement, `"store:game"` for a game's platinum. Written by `omatrophy.py showcase` and the tracker's ☆; empty shows your rarest instead. | `[]` |
+| `favorite` | The Profile tab's favorite game, `"store:game"`, or `""` for none. Written by `omatrophy.py favorite` and the Profile tab's Choose game. | `""` |
+| `completionist` | Up to four finished games on the Profile's completionist tile, `"store:game"`, in the order pinned. Written by `omatrophy.py completionist` and the tracker's ☆ Completionist; empty shows your two newest platinums. | `[]` |
 | `hidden` | Games left out of "closest to platinum" and, once finished, off the bar panel's platinum shelf (totals still count them), as `"store:game"` (`"steam:20920"`), sorted. Written by `omatrophy.py hide`/`unhide` and the Games tab. | `[]` |
 
 ```json

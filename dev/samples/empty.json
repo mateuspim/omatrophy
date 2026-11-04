@@ -1,0 +1,32 @@
+{
+ "games": 0,
+ "trophies": 0,
+ "platinums": 0,
+ "playing": null,
+ "recent": [],
+ "shelf": [],
+ "rarest": {
+  "ever": [],
+  "month": []
+ },
+ "stores": [
+  {
+   "id": "steam",
+   "name": "Steam",
+   "found": true,
+   "games": 0
+  },
+  {
+   "id": "gog",
+   "name": "GOG",
+   "found": false,
+   "games": 0
+  }
+ ],
+ "metals": {
+  "bronze": 0,
+  "silver": 0,
+  "gold": 0
+ },
+ "completion": 0
+}

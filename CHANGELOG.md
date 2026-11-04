@@ -1,5 +1,45 @@
 # Changelog
 
+## Unreleased
+
+- The Now tab lists your rarest unlocks across every game, ever, this
+  month or from platinumed games only, each opening its game in the tracker; hidden games stay out. Rarity comes from the
+  cache, so the panel makes no extra requests; the watcher fetches it
+  once for games that have none.
+- Before any game has achievements, the Now tab says where they come
+  from and points to the Steam profile switch in Settings.
+- The Now tab's totals are split by metal in one bar (gold, silver,
+  bronze, from cached rarity) with your average completion, and recent
+  games show "+N" after their latest unlock icons.
+- Clicking a rarest unlock opens the tracker on that achievement,
+  highlighted and revealed. Needs a shell restart (Panel.qml).
+- A Profile tab, after Steam's profile showcases, picked from the
+  tracker: a favorite game (+ Choose game on the tile searches your
+  games: hours, trophies, its six rarest unlocks), a showcase of six trophies (☆; your rarest until you pin
+  any), a completionist tile of up to four finished games (☆ Completionist
+  beside Platinum; your two newest until you pin any) with games completed,
+  started and average completion, and hours played in two weeks and in
+  all. Drag showcase trophies to reorder them. New commands `favorite`,
+  `showcase`, `completionist` (each pin list also takes `order`). Stores gain
+  an optional `playtime()`: Steam's localconfig.vdf and Heroic's
+  timestamp.json. Recent games on the Now tab show their hours.
+- The panel remembers the Games sort and the rarest list you picked last
+  (`games-sort`, `rarest`), so it opens on the same view.
+- Settings has a Now tab row to show or hide the metal tally, recently
+  played, rarest unlocks and the platinum shelf (`set now-<section>`).
+- The platinum shelf's empty slots show the games closest to platinum:
+  dimmed art, how many are left and a bar, each opening the tracker.
+- Settings is one list of choices: style, then position, glass and sound
+  as chip rows (no more screen drawing or slider), then Try it, with the
+  "applies to the next toast" note under the toast settings it is about.
+- Settings has a Stores section: a card per store saying whether it was
+  found and how many games it has, or what to do when it wasn't. Steam's
+  card holds its Profile and Popups rows. `now` carries `stores`.
+- Switching panel tabs no longer jumps: the page fades in from hidden
+  without the rise, instead of flashing at full opacity first.
+- The tracker no longer fills the shell log with "Cannot set a duration
+  of < 0" when rows leave the list.
+
 ## 0.3.0 - 2026-11-03
 
 - GOG support: games played through Heroic Games Launcher toast, show

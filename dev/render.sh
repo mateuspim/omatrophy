@@ -4,6 +4,8 @@
 #
 #   dev/render.sh now out.png            the bar panel's Now tab, mid-game
 #   dev/render.sh idle out.png           the Now tab with nothing running
+#   dev/render.sh empty out.png          the Now tab before any game has achievements
+#   dev/render.sh profile out.png        the Profile tab
 #   dev/render.sh games out.png          the Games tab
 #   dev/render.sh loading out.png        the Now tab's skeleton, before data
 #   dev/render.sh tracker-loading out.png
@@ -20,7 +22,7 @@ set -euo pipefail
 repo=$(cd "$(dirname "$0")/.." && pwd)
 live=false
 if [[ ${1:-} == --live ]]; then live=true; shift; fi
-[[ $# -eq 2 ]] || { sed -n '5,14p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+[[ $# -eq 2 ]] || { sed -n '5,16p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 target=$1
 out=$(realpath -m "$2")
 theme=$HOME/.local/state/omarchy/current/theme
@@ -37,10 +39,10 @@ ln -s /usr/share/omarchy/shell/Commons "$dir/Commons"
 ln -s /usr/share/omarchy/shell/Ui "$dir/Ui"
 
 case $target in
-  now|idle|settings|games|loading)
+  now|idle|empty|profile|settings|games|loading)
     w=460 h=900 at=2500
-    tab=now; [[ $target == settings || $target == games ]] && tab=$target
-    data=now.json; [[ $target == idle ]] && data=idle.json; [[ $target == games ]] && data=games.json
+    tab=now; [[ $target == settings || $target == games || $target == profile ]] && tab=$target
+    data=now.json; [[ $target == idle || $target == empty ]] && data=$target.json; [[ $target == games ]] && data=games.json
     feed="item.cabinet = JSON.parse(sample.text())"
     [[ $target == games ]] && feed="item.games = JSON.parse(sample.text())"
     [[ $target == loading ]] && feed=""

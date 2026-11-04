@@ -373,6 +373,14 @@ class Library(unittest.TestCase):
                                              '50000000000000002': {'lastPlayed': ''}, 'x/y': {}})
             self.assertEqual(gog.Gog().recent(), [(1793747897, PRODUCT), (3000, '50000000000000002')])
 
+    def test_playtime_is_heroics_total_with_no_two_week_figure(self):
+        with HeroicDir() as h:
+            h.database([row('A')])
+            h.install()
+            h.write('store/timestamp.json', {PRODUCT: {'totalPlayed': 56}, 'x/y': {'totalPlayed': 9},
+                                             '50000000000000002': {'totalPlayed': 'lots'}})
+            self.assertEqual(gog.Gog().playtime(), {PRODUCT: {'total': 56, 'recent': None}})
+
     def test_gogs_image_hosts_are_trusted(self):
         self.assertTrue(base.trusted_url('https://images.gog.com/a_gac_60.jpg'))
         self.assertTrue(base.trusted_url('https://images.gog-statics.com/a.jpg'))

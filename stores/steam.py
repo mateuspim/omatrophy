@@ -111,6 +111,20 @@ def last_played(text):
     return sorted(rows, reverse=True)
 
 
+def playtimes(text):
+    """{appid: {'total', 'recent'}} in minutes from localconfig.vdf's text.
+    Steam writes Playtime2wks only for games played in the past two
+    weeks, so a missing one is 0."""
+    apps = find_apps(parse_text_vdf(text)) or {}
+    out = {}
+    for k, v in apps.items():
+        if not (app_id(k) and isinstance(v, dict) and str(v.get('Playtime', '')).isdigit()):
+            continue
+        recent = str(v.get('Playtime2wks', '0'))
+        out[k] = {'total': int(v['Playtime']), 'recent': int(recent) if recent.isdigit() else 0}
+    return out
+
+
 def launched_app(cmdline):
     """The appid in a `reaper SteamLaunch AppId=N -- ...` command line (NUL-separated), or None.
     Matches whole arguments so a shell that merely mentions SteamLaunch doesn't count."""
@@ -342,6 +356,13 @@ class Steam(Store):
         except OSError:
             return []
 
+    def playtime(self):
+        try:
+            with open(f'{self.root}/userdata/{self.uid}/config/localconfig.vdf', encoding='utf8', errors='replace') as f:
+                return playtimes(f.read())
+        except OSError:
+            return {}
+
     def game_name(self, app):
         """Store name, cached in the state folder; the appid when offline."""
         if not app_id(app):
@@ -387,6 +408,12 @@ class Steam(Store):
             return old.get('percents', {})
         write_json(path, {'time': int(time.time()), 'percents': pcts})
         return pcts
+
+    def known_percents(self, app):
+        """The cached rarity at any age, {} before the first fetch."""
+        if not app_id(app):
+            return {}
+        return read_json(f'{CACHE}/rarity/{app}.json', {}).get('percents', {})
 
     def library_art(self, app, name):
         """Art Steam already keeps for its library view, if any (newer clients nest it in a hashed folder)."""

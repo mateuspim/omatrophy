@@ -15,10 +15,20 @@ Usage:
   omatrophy.py set sound on|off|omatrophy|classic
   omatrophy.py set icons omarchy|vector|painted
   omatrophy.py set tracker-sort recent|rarity|name|game
+  omatrophy.py set games-sort recent|closest|name
+  omatrophy.py set rarest ever|month|platinum
   omatrophy.py set community on|off   fill in games this machine never ran from your public Steam profile
   omatrophy.py sync                   run that backfill now, with progress
   omatrophy.py hide <store> <game>    keep a game you won't finish out of "closest to platinum"
   omatrophy.py unhide <store> <game>  bring it back
+  omatrophy.py favorite <store> <game>|clear
+                                      the Profile tab's favorite game
+  omatrophy.py completionist add|remove <store> <game>
+                                      pin a finished game to the Profile's completionist tile
+  omatrophy.py showcase|completionist order <key>...
+                                      save a new order for the pins (every key once)
+  omatrophy.py showcase add|remove <store> <game> [api]
+                                      pin a trophy (or, with no api, the game's platinum) to the Profile showcase
 
 Each store (stores/) reads its launcher's own files; this file diffs them and
 turns new unlocks into events. Steam and GOG (through Heroic) so far.
@@ -154,6 +164,19 @@ def warm_names(pairs, threads=8):
         list(pool.map(lookup, pairs))
 
 
+def warm_rarity(pairs, threads=8):
+    """Fetch rarity once for games that have none cached yet, so the
+    panel's rarest unlocks can read every game from the cache."""
+    def lookup(pair):
+        try:
+            if not pair[0].known_percents(pair[1]):
+                pair[0].percents(pair[1])
+        except Exception:
+            pass
+    with ThreadPoolExecutor(threads) as pool:
+        list(pool.map(lookup, pairs))
+
+
 # The backfill runs hourly, each run a small budget of pages. After a
 # failed run (most often Steam's 429) it waits BACKFILL_LIMITED_WAIT, then
 # doubles up to BACKFILL_MAX_WAIT: on 2026-10-27 a 429 lasted close to three
@@ -185,10 +208,11 @@ def backfill_once(found):
 
 
 def background(found, pairs, sleep=time.sleep):
-    """The watcher's slow chores, after `ready`: warm the name cache, then
+    """The watcher's slow chores, after `ready`: warm the name and rarity caches, then
     let each store backfill games it has no local data for, again and
     again for as long as the watcher runs."""
     warm_names(pairs)
+    warm_rarity(pairs)
     wait = BACKFILL_WAIT
     while True:
         wait = next_backfill_wait(backfill_once(found), wait)
@@ -312,6 +336,30 @@ def totals(rows):
             'platinums': sum(r['unlocked'] == r['total'] for r in rows)}
 
 
+def average_completion(rows):
+    """Mean share unlocked, in whole percent, over the games you've started
+    (Steam's "average game completion rate" counts the same games)."""
+    started = [r['unlocked'] / r['total'] for r in rows if r['unlocked'] and r['total']]
+    # Half up, not Python's round-half-to-even, so 62.5 shows as 63.
+    return int(100 * sum(started) / len(started) + 0.5) if started else 0
+
+
+def metal_tally(lib):
+    """Every unlock counted by the metal its toast would have, from cached
+    rarity (no network); an unlock with no known rarity counts as bronze,
+    as its toast would."""
+    tally = {'bronze': 0, 'silver': 0, 'gold': 0}
+    for s, g, achs in lib:
+        pcts = None
+        for a in achs:
+            if not a['unlocked']:
+                continue
+            if pcts is None:
+                pcts = s.known_percents(g)
+            tally[tier(pcts.get(a['api']))] += 1
+    return tally
+
+
 def cabinet(n=4):
     """Totals plus the games nearest platinum, named and with art, for the bar panel.
     Names only the few games it shows, since a name can cost a request."""
@@ -341,6 +389,92 @@ def next_up(achs, pcts, n):
     """The n locked achievements most players have, the likeliest next unlocks."""
     locked = [a for a in achs if not a['unlocked']]
     return sorted(locked, key=lambda a: -(pcts.get(a['api']) or 0))[:n]
+
+
+def month_start(now):
+    """Unix time the local calendar month of `now` began."""
+    t = time.localtime(now)
+    return int(time.mktime((t.tm_year, t.tm_mon, 1, 0, 0, 0, 0, 0, -1)))
+
+
+def rarest_unlocks(unlocks, n, since=0):
+    """The n unlocks fewest players have (at or after `since`), rarest
+    first, ties to the newest. Each unlock is a dict with `percent` and
+    `time`; one with no known rarity can't rank and is left out."""
+    ranked = [u for u in unlocks if u['percent'] is not None and u['time'] >= since]
+    return sorted(ranked, key=lambda u: (u['percent'], -u['time']))[:n]
+
+
+def library_unlocks(lib, hidden=()):
+    """Every unlock with a date across the library, with its rarity from
+    the cache (no network) and where it came from; games in `hidden`
+    ("store:game") are set aside, so they stay out."""
+    out = []
+    for s, g, achs in lib:
+        if game_key(s.id, g) in hidden:
+            continue
+        pcts = None
+        for a in achs:
+            if not (a['unlocked'] and a['time']):
+                continue
+            if pcts is None:
+                pcts = s.known_percents(g)
+            out.append(dict(brief(a), api=a['api'], percent=pcts.get(a['api']), store=s.id, app=g))
+    return out
+
+
+def rarest_cards(lib, n, now_time, hidden=()):
+    """The panel's rarest unlocks, ever, this month and from finished games only,
+    each named with its game."""
+    unlocks = library_unlocks(lib, hidden)
+    stores_by_id = {s.id: s for s, _, _ in lib}
+    def card(u):
+        return dict(u, tier=tier(u['percent']), game=stores_by_id[u['store']].game_name(u['app']))
+    finished = {(s.id, g) for s, g, achs in lib if platinum_time(achs)}
+    platinum = [u for u in unlocks if (u['store'], u['app']) in finished]
+    return {'ever': [card(u) for u in rarest_unlocks(unlocks, n)],
+            'month': [card(u) for u in rarest_unlocks(unlocks, n, month_start(now_time))],
+            'platinum': [card(u) for u in rarest_unlocks(platinum, n)]}
+
+
+def store_rows(classes, found, lib):
+    """Every store OmaTrophy knows, for Settings: whether it was found here
+    and how many of its games have achievements."""
+    counts = {}
+    for s, _, _ in lib:
+        counts[s.id] = counts.get(s.id, 0) + 1
+    found_ids = {s.id for s in found}
+    return [{'id': c.id, 'name': c.name, 'found': c.id in found_ids, 'games': counts.get(c.id, 0)} for c in classes]
+
+
+def library_playtime(found):
+    """{(store id, game): {'total', 'recent'}} minutes for every game a store
+    keeps playtime for, achievements or not."""
+    out = {}
+    for s in found:
+        try:
+            out.update({(s.id, g): v for g, v in s.playtime().items()})
+        except Exception:
+            continue
+    return out
+
+
+def playtime_totals(playtime):
+    """Minutes played in all and in the past two weeks, over every game; a
+    store that keeps no two-week figure adds nothing to `recent`."""
+    return {'total': sum(v['total'] for v in playtime.values()),
+            'recent': sum(v['recent'] or 0 for v in playtime.values())}
+
+
+def favorite_card(s, game, achs, minutes, n=6):
+    """The Profile tab's favorite game: its card, hours, how many of its
+    unlocks are rare (gold), and its n rarest unlocks, rarest first."""
+    pcts = s.known_percents(game)
+    unlocked = [dict(brief(a), api=a['api'], percent=pcts.get(a['api']), tier=tier(pcts.get(a['api'])),
+                     store=s.id, app=game) for a in achs if a['unlocked']]
+    ranked = sorted((u for u in unlocked if u['percent'] is not None), key=lambda u: (u['percent'], -u['time']))
+    return dict(game_card(s, game, achs), minutes=minutes, rarest=ranked[:n],
+                rare=sum(1 for u in unlocked if u['tier'] == 'gold'))
 
 
 def recent_games(played, owned, skip, n):
@@ -375,7 +509,7 @@ def playing_card(store, game, achs, since):
     return card
 
 
-def now(recent_n=3):
+def now(recent_n=3, rarest_n=8, nearest_n=4):
     """Everything the panel's Now tab shows, in one read of every store."""
     found = found_stores()
     lib = library(found)
@@ -389,13 +523,35 @@ def now(recent_n=3):
             playing = playing_card(s, run['game'], by_key[skip][1], run['since'])
             break
     played = sorted(((t, (s.id, g)) for s in found for t, g in s.recent()), key=lambda r: -r[0])
+    playtime = library_playtime(found)
+    def minutes(key):
+        return playtime.get(key, {}).get('total', 0)
     recent = []
     for when, key in recent_games(played, by_key, skip, recent_n):
         s, achs = by_key[key]
-        recent.append(game_card(s, key[1], achs, when))
+        recent.append(dict(game_card(s, key[1], achs, when), minutes=minutes(key)))
     shelf = sorted((dict(game_card(s, g, achs), latest=[]) for s, g, achs in lib if platinum_time(achs)),
                    key=lambda c: -c['platinum'])
-    return dict(totals(rows), playing=playing, recent=recent, shelf=shelf)
+    # The panel hides games live, before the next read: a few extra rarest
+    # unlocks and nearest games let it drop a hidden one and still fill.
+    # The rarest list shows three and the Profile showcase six.
+    hidden = hidden_games()
+    favorite = None
+    store_id, _, game = favorite_key().partition(':')
+    if (store_id, game) in by_key:
+        s, achs = by_key[(store_id, game)]
+        favorite = favorite_card(s, game, achs, minutes((store_id, game)))
+    nearest = []
+    for r in nearest_platinum(rows, nearest_n + 2, hidden):
+        s, achs = by_key[(r['store'], r['app'])]
+        nearest.append(dict(game_card(s, r['app'], achs), latest=[]))
+    return dict(totals(rows), metals=metal_tally(lib), completion=average_completion(rows),
+                started=sum(1 for r in rows if r['unlocked']), playtime=playtime_totals(playtime),
+                favorite=favorite, showcase=showcase_items(showcase_keys(), by_key),
+                completionist=completionist_cards(completionist_keys(), by_key),
+                playing=playing, recent=recent, shelf=shelf, nearest=nearest,
+                stores=store_rows(stores.STORES, found, lib),
+                rarest=rarest_cards(lib, rarest_n, time.time(), hidden))
 
 
 def games():
@@ -549,7 +705,15 @@ SETTINGS = {'position': ('top-center', 'top-left', 'top-right'),
             'icons': ('omarchy', 'vector', 'painted'),
             'glass': ('clear', 'frosted', 'solid'),
             'tracker-sort': ('recent', 'rarity', 'name', 'game'),
+            # The panel's last picks, so the next open shows the same view.
+            'games-sort': ('recent', 'closest', 'name'),
+            'rarest': ('ever', 'month', 'platinum'),
             'community': ('on', 'off')}
+# The Now tab's sections, each shown unless switched off in Settings.
+NOW_SECTIONS = ('metals', 'recent', 'rarest', 'shelf')
+SETTINGS.update({f'now-{name}': ('on', 'off') for name in NOW_SECTIONS})
+# Settings stored as true/false rather than the word given.
+SWITCHES = {'community'} | {f'now-{name}' for name in NOW_SECTIONS}
 
 
 def set_option(key, value):
@@ -561,15 +725,18 @@ def set_option(key, value):
                          f'       omatrophy.py set icons {"|".join(SETTINGS["icons"])}\n'
                          f'       omatrophy.py set glass {"|".join(SETTINGS["glass"])}\n'
                          f'       omatrophy.py set tracker-sort {"|".join(SETTINGS["tracker-sort"])}\n'
-                         f'       omatrophy.py set community on|off')
+                         f'       omatrophy.py set games-sort {"|".join(SETTINGS["games-sort"])}\n'
+                         f'       omatrophy.py set rarest {"|".join(SETTINGS["rarest"])}\n'
+                         f'       omatrophy.py set community on|off\n'
+                         f'       omatrophy.py set now-{{{",".join(NOW_SECTIONS)}}} on|off')
     path = config_path()
     cfg = read_json(path, {})
     if key == 'sound':
         cfg['sound'] = value != 'off'
         if value not in ('on', 'off'):
             cfg['chimes'] = value
-    elif key == 'community':
-        cfg['community'] = value == 'on'
+    elif key in SWITCHES:
+        cfg[key] = value == 'on'
     else:
         cfg[key] = value
     write_json(path, cfg, indent=2)
@@ -605,6 +772,154 @@ def set_hidden(store_id, game, hide):
     print(f'{"hidden" if hide else "shown"}: {game_key(store_id, game)}')
 
 
+def favorite_key():
+    """The owner's favorite game as "store:game", or "" when none is set."""
+    key = read_json(config_path(), {}).get('favorite', '')
+    return key if isinstance(key, str) else ''
+
+
+def set_favorite(store_id, game):
+    """Make one game the Profile tab's favorite; no game clears it."""
+    if store_id == 'clear' and not game:
+        key = ''
+    elif store_id in [cls.id for cls in stores.STORES] and game and ':' not in game:
+        key = game_key(store_id, game)
+    else:
+        raise SystemExit('usage: omatrophy.py favorite '
+                         f'{"|".join(cls.id for cls in stores.STORES)} <game id>\n'
+                         '       omatrophy.py favorite clear')
+    path = config_path()
+    cfg = read_json(path, {})
+    cfg['favorite'] = key
+    write_json(path, cfg, indent=2)
+    print(f'favorite: {key or "none"}')
+
+
+# The Profile tab's showcase holds as many picks as one row of tiles.
+SHOWCASE_MAX = 6
+
+
+def showcase_keys():
+    """The owner's showcase picks, in the order picked: "store:game:api" for
+    one achievement, "store:game" for a game's platinum."""
+    keys = read_json(config_path(), {}).get('showcase', [])
+    return [k for k in keys if isinstance(k, str)] if isinstance(keys, list) else []
+
+
+def with_showcase(keys, key, add, limit=SHOWCASE_MAX):
+    """A pin list (showcase, completionist) with `key` added at the end or
+    removed; None when adding to a full list, so the caller can say so."""
+    # A hand-edited list can be anything; a string would read letter by letter.
+    out = [k for k in keys if isinstance(k, str) and k != key] if isinstance(keys, list) else []
+    if not add:
+        return out
+    if len(out) >= limit:
+        return None
+    return out + [key]
+
+
+def set_showcase(store_id, game, api, add):
+    """Pin or unpin one achievement (or, with no api, a game's platinum)."""
+    if store_id not in [cls.id for cls in stores.STORES] or not game or ':' in game:
+        raise SystemExit('usage: omatrophy.py showcase add|remove '
+                         f'{"|".join(cls.id for cls in stores.STORES)} <game id> [achievement api]')
+    key = game_key(store_id, game) + (f':{api}' if api else '')
+    path = config_path()
+    cfg = read_json(path, {})
+    keys = with_showcase(cfg.get('showcase', []), key, add)
+    if keys is None:
+        raise SystemExit(f'The showcase is full ({SHOWCASE_MAX}); remove one first: omatrophy.py showcase remove ...')
+    cfg['showcase'] = keys
+    write_json(path, cfg, indent=2)
+    print(f'{"pinned" if add else "unpinned"}: {key}')
+
+
+# The completionist tile shows finished games two to a row, two rows.
+COMPLETIONIST_MAX = 4
+
+
+def completionist_keys():
+    """The finished games the owner pinned to the completionist tile, as
+    "store:game", in the order pinned."""
+    keys = read_json(config_path(), {}).get('completionist', [])
+    return [k for k in keys if isinstance(k, str)] if isinstance(keys, list) else []
+
+
+def set_completionist(store_id, game, add):
+    """Pin or unpin one finished game on the completionist tile."""
+    if store_id not in [cls.id for cls in stores.STORES] or not game or ':' in game:
+        raise SystemExit('usage: omatrophy.py completionist add|remove '
+                         f'{"|".join(cls.id for cls in stores.STORES)} <game id>')
+    key = game_key(store_id, game)
+    path = config_path()
+    cfg = read_json(path, {})
+    keys = with_showcase(cfg.get('completionist', []), key, add, COMPLETIONIST_MAX)
+    if keys is None:
+        raise SystemExit(f'The completionist tile is full ({COMPLETIONIST_MAX}); remove one first: '
+                         'omatrophy.py completionist remove ...')
+    cfg['completionist'] = keys
+    write_json(path, cfg, indent=2)
+    print(f'{"pinned" if add else "unpinned"}: {key}')
+
+
+def completionist_cards(keys, by_key):
+    """The pinned games still at 100%, as shelf cards; others are skipped."""
+    out = []
+    for key in keys:
+        store_id, _, game = key.partition(':')
+        found = by_key.get((store_id, game))
+        if found and platinum_time(found[1]):
+            out.append(dict(game_card(found[0], game, found[1]), key=key, latest=[]))
+    return out
+
+
+def reordered(keys, order):
+    """`order` when it holds exactly the pins in `keys`, else None: a
+    reorder never adds or drops one."""
+    current = [k for k in keys if isinstance(k, str)] if isinstance(keys, list) else []
+    return list(order) if sorted(order) == sorted(current) and len(set(order)) == len(order) else None
+
+
+def set_pin_order(name, order):
+    """Save a new order for the `showcase` or `completionist` pins."""
+    path = config_path()
+    cfg = read_json(path, {})
+    keys = reordered(cfg.get(name, []), order)
+    if keys is None:
+        raise SystemExit(f'omatrophy.py {name} order: give every pinned key once, in the new order '
+                         f'(now: {" ".join(cfg.get(name, [])) or "none"})')
+    cfg[name] = keys
+    write_json(path, cfg, indent=2)
+    print(f'{name}: {" ".join(keys)}')
+
+
+def showcase_items(keys, by_key):
+    """The picks still earned, as tiles: an unlocked achievement with its
+    rarity, or a finished game's platinum with its art. Picks whose game
+    or unlock is gone are skipped, not shown broken."""
+    out = []
+    for key in keys:
+        store_id, _, rest = key.partition(':')
+        game, _, api = rest.partition(':')
+        found = by_key.get((store_id, game))
+        if not found:
+            continue
+        s, achs = found
+        if not api:
+            when = platinum_time(achs)
+            if when:
+                out.append({'key': key, 'store': store_id, 'app': game, 'api': '', 'name': 'Platinum',
+                            'icon': s.art(game)['header'], 'time': when, 'percent': None, 'tier': 'platinum',
+                            'game': s.game_name(game)})
+            continue
+        a = next((a for a in achs if a['api'] == api and a['unlocked']), None)
+        if a:
+            pct = s.known_percents(game).get(api)
+            out.append(dict(brief(a), key=key, store=store_id, app=game, api=api, percent=pct,
+                            tier=tier(pct), game=s.game_name(game)))
+    return out
+
+
 def main(argv):
     cmd = argv[1] if len(argv) > 1 else 'watch'
     if cmd == 'watch':
@@ -627,6 +942,14 @@ def main(argv):
         set_option(argv[2], argv[3])
     elif cmd == 'sync':
         sync()
+    elif cmd == 'favorite' and len(argv) in (3, 4):
+        set_favorite(argv[2], argv[3] if len(argv) == 4 else '')
+    elif cmd in ('showcase', 'completionist') and len(argv) >= 3 and argv[2] == 'order':
+        set_pin_order(cmd, argv[3:])
+    elif cmd == 'completionist' and len(argv) == 5 and argv[2] in ('add', 'remove'):
+        set_completionist(argv[3], argv[4], argv[2] == 'add')
+    elif cmd == 'showcase' and len(argv) in (5, 6) and argv[2] in ('add', 'remove'):
+        set_showcase(argv[3], argv[4], argv[5] if len(argv) == 6 else '', argv[2] == 'add')
     elif cmd in ('hide', 'unhide') and len(argv) == 4:
         set_hidden(argv[2], argv[3], cmd == 'hide')
     else:

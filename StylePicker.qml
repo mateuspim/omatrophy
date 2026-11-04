@@ -13,8 +13,16 @@ import qs.Commons as Commons
 // tracker. Settings read and write the same ~/.config/omatrophy/config.json
 // the service watches, through `omatrophy.py set`, so a choice applies to the
 // next toast. Bones shimmer in place of what's still loading.
+//
+// Sections, in order, each under a "// ---- Name" banner: State, Helpers,
+// Files and processes, Building blocks, Tab strip, Now, Profile, Games,
+// Settings.
 Column {
   id: root
+  spacing: Commons.Style.space(8)
+
+  // ------------------------------------------------------------------ State
+
   property color foreground: Commons.Color.popups.text
 
   readonly property string helperPath: decodeURIComponent(String(Qt.resolvedUrl("omatrophy.py")).replace(/^file:\/\//, ""))
@@ -49,6 +57,18 @@ Column {
   // From `omatrophy.py games`, read the first time the Games tab opens.
   property var games: null
   property string sort: "recent"
+  // The Now tab's sections, from config.json's now-* switches (all on
+  // unless switched off in Settings).
+  readonly property var nowSections: [
+    { value: "metals", label: "Metals" },
+    { value: "recent", label: "Recent" },
+    { value: "rarest", label: "Rarest" },
+    { value: "shelf", label: "Shelf" }
+  ]
+  property var nowShows: ({ metals: true, recent: true, rarest: true, shelf: true })
+  // Which rarest unlocks the Now tab lists: "ever", "month" or "platinum"
+  // (from finished games only).
+  property string rarestRange: "ever"
   // Typed into the Games tab's filter field; matches game names.
   property string gameFilter: ""
   // "store:app" keys from config.json's `hidden`, kept live so a toggle
@@ -69,7 +89,7 @@ Column {
   onGamesPageCountChanged: gamesPageIndex = Math.min(gamesPageIndex, gamesPageCount - 1)
   // True while the filter field has the keyboard; Panel.qml then lets keys
   // through to it instead of its own shortcuts.
-  readonly property bool typing: filterField.activeFocus
+  readonly property bool typing: filterField.activeFocus || favoriteField.activeFocus
 
   // The Games tab reads once per open; a copy from the last read (below)
   // shows until it answers.
@@ -78,13 +98,20 @@ Column {
 
   // Asks Panel.qml to open the tracker on one game; the panel owns the
   // shell handle, this file only knows the game.
-  signal track(string store, string app)
+  signal track(string store, string app, string api)
+
+  // ---------------------------------------------------------------- Helpers
 
   function set(key, value) {
     if (key === "icons") iconSet = value
     if (key === "position") position = value
     if (key === "glass") glass = value
     if (key === "community") community = value === "on"
+    if (key.indexOf("now-") === 0) {
+      var shows = Object.assign({}, nowShows)
+      shows[key.slice(4)] = value === "on"
+      nowShows = shows
+    }
     if (key === "sound") {
       sound = value !== "off"
       if (value !== "on" && value !== "off") chimes = value
@@ -94,6 +121,85 @@ Column {
 
   function isHidden(g) {
     return !!hiddenKeys[g.store + ":" + g.app]
+  }
+
+  // One store's row from `now` ({id, name, found, games}), or null before
+  // the first read.
+  function storeInfo(id) {
+    if (!cabinet || !cabinet.stores) return null
+    return cabinet.stores.find(function(s) { return s.id === id }) || null
+  }
+
+  // A view choice (a sort, the rarest list) shows at once and is kept in
+  // config.json, written only when it changes, so the next open shows the
+  // same view.
+  function remember(key, property, value) {
+    if (root[property] === value) return
+    root[property] = value
+    runner.exec(["python3", helperPath, "set", key, value])
+  }
+
+  // Minutes as whole hours, "552 h"; under an hour, "42 min".
+  function hours(minutes) {
+    if (minutes < 60) return minutes + " min"
+    return Math.round(minutes / 60).toLocaleString(Qt.locale(), "f", 0) + " h"
+  }
+
+  // Showcase picks taken off since the last read: gone at once, without
+  // rebuilding the whole tab.
+  property var unpinned: ({})
+
+  // The showcase's order after a drag, until the next read carries it.
+  property var showcaseOrder: []
+
+  // `rows` sorted by their place in `order` (keys); rows not in it last.
+  function ordered(rows, order) {
+    if (!order.length) return rows
+    return rows.slice().sort(function(a, b) {
+      var i = order.indexOf(a.key), j = order.indexOf(b.key)
+      return (i < 0 ? 999 : i) - (j < 0 ? 999 : j)
+    })
+  }
+
+  // True while the favorite game picker is open on the Profile tab.
+  property bool pickingFavorite: false
+  property string favoriteSearch: ""
+  // Games matching the picker's search, most recently played first.
+  readonly property var favoriteMatches: {
+    if (!games) return []
+    var q = favoriteSearch.toLowerCase()
+    return games.filter(function(g) { return !q || (g.game || "").toLowerCase().indexOf(q) >= 0 })
+                .sort(function(a, b) { return b.played - a.played || (a.game || "").localeCompare(b.game || "") })
+                .slice(0, 6)
+  }
+
+  // Opens the picker, reading the games list if the Games tab hasn't.
+  function chooseFavorite() {
+    pickingFavorite = true
+    favoriteSearch = ""
+    if (!gamesRead && live) { gamesRead = true; gamesReader.running = true }
+    Qt.callLater(function() { favoriteField.forceActiveFocus() })
+  }
+
+  // Saves the pick, then reads `now` again so the tile fills with it.
+  function pickFavorite(g) {
+    pickingFavorite = false
+    favoriteSetter.command = ["python3", helperPath, "favorite", String(g.store), String(g.app)]
+    favoriteSetter.running = true
+  }
+
+  // `list` is "showcase" or "completionist", the omatrophy.py command.
+  function unpin(pick, list) {
+    var gone = Object.assign({}, unpinned)
+    gone[list + "/" + pick.key] = true
+    unpinned = gone
+    var args = ["python3", helperPath, list, "remove", String(pick.store), String(pick.app)]
+    runner.exec(pick.api ? args.concat([pick.api]) : args)
+  }
+
+  // The rows of a list whose game isn't hidden.
+  function unhidden(rows) {
+    return rows.filter(function(g) { return !isHidden(g) })
   }
 
   function showGame(g) {
@@ -177,7 +283,23 @@ Column {
     return Math.floor(m / 60) + " h " + (rest < 10 ? "0" : "") + rest
   }
 
-  spacing: Commons.Style.space(8)
+  // What the backfill row says under its switch: what turning it on sends
+  // while off, then the latest run, so a slow fill or Steam's rate limit
+  // is visible without the shell log.
+  function backfillText() {
+    if (!community)
+      return "Fills in games this machine never ran from your public Steam profile. On sends your SteamID64 to steamcommunity.com."
+    var b = backfill
+    if (!b || !b.time) return "On. The first pages come within the hour, then more every hour."
+    var at = Qt.formatTime(new Date(b.time * 1000), "hh:mm")
+    if (b.limited)
+      return "Steam asked for a pause at " + at + ". The next run waits a few hours and fetches fewer pages."
+    return "Last run " + at + " · " + b.line
+  }
+
+  // ---------------------------------------------------- Files and processes
+  // What the panel reads (settings, the last answers, the backfill's
+  // status) and the omatrophy.py calls that fill it.
 
   FileView {
     path: Quickshell.env("HOME") + "/.config/omatrophy/config.json"
@@ -193,6 +315,11 @@ Column {
       if (c.chimes) root.chimes = c.chimes
       if (c.glass) root.glass = c.glass
       root.community = c.community === true
+      if (c["games-sort"]) root.sort = c["games-sort"]
+      if (c.rarest) root.rarestRange = c.rarest
+      var shows = {}
+      root.nowSections.forEach(function(n) { shows[n.value] = c["now-" + n.value] !== false })
+      root.nowShows = shows
       var keys = {}
       if (Array.isArray(c.hidden)) c.hidden.forEach(function(k) { keys[k] = true })
       root.hiddenKeys = keys
@@ -232,21 +359,13 @@ Column {
     }
   }
 
-  // What the backfill row says under its switch: what turning it on sends
-  // while off, then the latest run, so a slow fill or Steam's rate limit
-  // is visible without the shell log.
-  function backfillText() {
-    if (!community)
-      return "Fills in games this machine never ran from your public Steam profile. On sends your SteamID64 to steamcommunity.com."
-    var b = backfill
-    if (!b || !b.time) return "On. The first pages come within the hour, then more every hour."
-    var at = Qt.formatTime(new Date(b.time * 1000), "hh:mm")
-    if (b.limited)
-      return "Steam asked for a pause at " + at + ". The next run waits a few hours and fetches fewer pages."
-    return "Last run " + at + " · " + b.line
-  }
-
   Process { id: runner }
+
+  // `favorite` then a fresh `now`, in order, so the new favorite shows.
+  Process {
+    id: favoriteSetter
+    onExited: if (root.live) nowReader.running = true
+  }
 
   Process {
     id: gamesReader
@@ -261,6 +380,7 @@ Column {
   }
 
   Process {
+    id: nowReader
     running: root.live
     command: ["python3", root.helperPath, "now"]
     stdout: StdioCollector {
@@ -270,6 +390,10 @@ Column {
       }
     }
   }
+
+  // -------------------------------------------------------- Building blocks
+  // Inline components, kept in this file because FreshObject builds it
+  // from its text alone (ADR 10): it can't load sibling QML types.
 
   // One trophy, drawn the way the cards draw it (the omarchy set's inlay
   // painted in the theme accent).
@@ -309,6 +433,8 @@ Column {
     property real value: -1
     property string label: ""
     property color tint: root.foreground
+    // Put after the number ("%").
+    property string suffix: ""
     property real shown: 0
     onValueChanged: if (value >= 0) shown = value
     Component.onCompleted: if (value >= 0) shown = value
@@ -316,7 +442,7 @@ Column {
     spacing: Commons.Style.space(1)
     Text {
       textFormat: Text.PlainText
-      text: stat.value < 0 ? "–" : Math.round(stat.shown).toLocaleString(Qt.locale(), "f", 0)
+      text: stat.value < 0 ? "–" : Math.round(stat.shown).toLocaleString(Qt.locale(), "f", 0) + stat.suffix
       color: parent.tint
       font.family: Commons.Style.font.family
       font.pixelSize: Commons.Style.font.display
@@ -420,18 +546,24 @@ Column {
     }
   }
 
-  // A tab's content, faded in and risen a few pixels each time it shows.
+  // A tab's content, faded in each time it shows. It goes to opacity 0 as
+  // it hides, so it never shows a frame at full opacity before the fade
+  // starts; that frame, plus a rise on top of the panel snapping to the new
+  // tab's height, read as a jump.
   component TabPage: Column {
     id: page
-    property real rise: 0
     width: root.width
-    transform: Translate { y: page.rise }
-    onVisibleChanged: if (visible) enter.restart()
-    ParallelAnimation {
-      id: enter
-      NumberAnimation { target: page; property: "opacity"; from: 0; to: 1; duration: 220; easing.type: Easing.OutCubic }
-      NumberAnimation { target: page; property: "rise"; from: 8; to: 0; duration: 260; easing.type: Easing.OutCubic }
+    // Tabs that start hidden fade in on their first show too.
+    Component.onCompleted: if (!visible) opacity = 0
+    onVisibleChanged: {
+      if (visible) {
+        enter.restart()
+        return
+      }
+      enter.stop()
+      opacity = 0
     }
+    NumberAnimation { id: enter; target: page; property: "opacity"; to: 1; duration: 160; easing.type: Easing.OutCubic }
   }
 
   // A loading placeholder, like a web skeleton: a dim block with a band of
@@ -484,7 +616,8 @@ Column {
     anchors.fill: parent
     hoverEnabled: true
     cursorShape: Qt.PointingHandCursor
-    onClicked: if (game) root.track(game.store, game.app)
+    // A row naming one achievement (a rarest unlock) opens on it.
+    onClicked: if (game) root.track(game.store, game.app, game.api || "")
   }
 
   // A quiet choice of a few options (the Games sort): plain words, the
@@ -536,7 +669,7 @@ Column {
   component SettingRow: Item {
     property string label: ""
     default property alias control: slot.data
-    width: root.width
+    width: parent ? parent.width : root.width
     height: Math.max(labelText.height, slot.childrenRect.height)
     MiniLabel {
       id: labelText
@@ -552,11 +685,83 @@ Column {
     }
   }
 
+  // A store in Settings: a card with its name and what OmaTrophy found
+  // there, then that store's own rows, shown only once it is found.
+  component StoreCard: Rectangle {
+    id: card
+    property string storeId: ""
+    // What to do when the store isn't found, and a line once it is.
+    property string missing: ""
+    property string note: ""
+    default property alias rows: storeRows.data
+    readonly property var info: root.storeInfo(storeId)
+    readonly property bool found: info !== null && info.found
+    width: root.width
+    height: storeBody.height + Commons.Style.space(24)
+    radius: Commons.Style.cornerRadius
+    color: Qt.alpha(root.foreground, 0.04)
+    border.width: 1
+    border.color: Qt.alpha(root.foreground, 0.12)
+    Column {
+      id: storeBody
+      x: Commons.Style.space(12)
+      y: Commons.Style.space(12)
+      width: parent.width - Commons.Style.space(24)
+      spacing: Commons.Style.space(8)
+      Item {
+        width: parent.width
+        height: storeName.height
+        Text {
+          textFormat: Text.PlainText
+          id: storeName
+          text: card.info ? card.info.name : ""
+          color: root.foreground
+          font.family: Commons.Style.font.family
+          font.pixelSize: Commons.Style.font.body
+          font.bold: true
+        }
+        Row {
+          anchors.right: parent.right
+          anchors.verticalCenter: parent.verticalCenter
+          spacing: Commons.Style.space(6)
+          Rectangle {
+            anchors.verticalCenter: parent.verticalCenter
+            width: 6
+            height: 6
+            radius: 3
+            color: card.found ? Commons.Color.accent : Qt.alpha(root.foreground, 0.3)
+          }
+          Caption {
+            text: card.info === null ? "…" : card.found
+              ? card.info.games + (card.info.games === 1 ? " game" : " games")
+              : "Not found"
+          }
+        }
+      }
+      Caption {
+        width: parent.width
+        visible: text !== ""
+        wrapMode: Text.WordWrap
+        elide: Text.ElideNone
+        opacity: 0.45
+        text: card.info === null ? "" : card.found ? card.note : card.missing
+      }
+      Column {
+        id: storeRows
+        visible: card.found
+        width: parent.width
+        spacing: Commons.Style.space(8)
+      }
+    }
+  }
+
+  // -------------------------------------------------------------- Tab strip
+
   // The tabs as an underlined strip, so they read as places in the panel
   // and the Games tab's sort buttons below them as controls.
   Item {
     id: tabStrip
-    readonly property var tabs: [{ value: "now", label: "Now" }, { value: "games", label: "Games" }, { value: "settings", label: "Settings" }]
+    readonly property var tabs: [{ value: "now", label: "Now" }, { value: "profile", label: "Profile" }, { value: "games", label: "Games" }, { value: "settings", label: "Settings" }]
     readonly property real tabWidth: width / tabs.length
     readonly property int current: Math.max(0, tabs.findIndex(function(t) { return t.value === root.tab }))
     width: root.width
@@ -614,7 +819,7 @@ Column {
     }
   }
 
-  // ---------------------------------------------------------------- Now
+  // -------------------------------------------------------------------- Now
 
   TabPage {
     id: nowTab
@@ -671,6 +876,127 @@ Column {
         Stat {
           value: root.cabinet ? root.cabinet.games : -1
           label: "GAMES"
+        }
+      }
+    }
+
+    // Every trophy by the metal its toast would have, as one bar, with the
+    // average completion of the games you've started beside it.
+    Column {
+      id: metalTally
+      readonly property var metals: root.cabinet && root.cabinet.metals ? root.cabinet.metals : null
+      readonly property int total: metals ? metals.bronze + metals.silver + metals.gold : 0
+      property bool grown: false
+      visible: total > 0 && root.nowShows.metals
+      width: root.width
+      spacing: Commons.Style.space(6)
+      Component.onCompleted: grown = true
+      Row {
+        width: parent.width
+        height: 4
+        spacing: 2
+        Repeater {
+          model: ["gold", "silver", "bronze"]
+          delegate: Rectangle {
+            required property string modelData
+            readonly property int count: metalTally.metals ? metalTally.metals[modelData] : 0
+            visible: count > 0
+            height: 4
+            radius: 2
+            width: metalTally.grown && metalTally.total > 0 ? Math.max(4, (metalTally.width - 4) * count / metalTally.total) : 0
+            color: root.metalColors[modelData]
+            Behavior on width { NumberAnimation { duration: 650; easing.type: Easing.OutCubic } }
+          }
+        }
+      }
+      Item {
+        width: parent.width
+        height: metalLegend.height
+        Row {
+          id: metalLegend
+          spacing: Commons.Style.space(12)
+          Repeater {
+            model: ["gold", "silver", "bronze"]
+            delegate: Row {
+              required property string modelData
+              spacing: Commons.Style.space(5)
+              Rectangle {
+                anchors.verticalCenter: parent.verticalCenter
+                width: 6
+                height: 6
+                radius: 3
+                color: root.metalColors[modelData]
+              }
+              Caption {
+                text: (metalTally.metals ? metalTally.metals[modelData].toLocaleString(Qt.locale(), "f", 0) : "") + " " + modelData
+              }
+            }
+          }
+        }
+        Caption {
+          anchors.right: parent.right
+          text: (root.cabinet ? root.cabinet.completion : 0) + "% avg completion"
+        }
+      }
+    }
+
+    // ------------------------------------------------ first run
+
+    // No game with achievements yet: say where they come from instead of
+    // an empty tab, and point at the Steam profile switch, which fills in
+    // games this machine never ran.
+    Rectangle {
+      id: firstRun
+      visible: root.cabinet !== null && root.cabinet.games === 0
+      width: root.width
+      height: firstRunBody.height + Commons.Style.space(28)
+      radius: Commons.Style.cornerRadius
+      color: Qt.alpha(root.foreground, 0.04)
+      border.width: 1
+      border.color: Qt.alpha(root.foreground, 0.12)
+      Column {
+        id: firstRunBody
+        x: Commons.Style.space(14)
+        y: Commons.Style.space(14)
+        width: parent.width - Commons.Style.space(28)
+        spacing: Commons.Style.space(8)
+        Text {
+          textFormat: Text.PlainText
+          text: "No achievements yet"
+          color: root.foreground
+          font.family: Commons.Style.font.family
+          font.pixelSize: Commons.Style.font.body
+          font.bold: true
+        }
+        Caption {
+          width: parent.width
+          wrapMode: Text.WordWrap
+          elide: Text.ElideNone
+          text: "Play a game with achievements on Steam, or on GOG through Heroic, and it shows up here. Your first unlock brings a toast."
+        }
+        Caption {
+          width: parent.width
+          wrapMode: Text.WordWrap
+          elide: Text.ElideNone
+          text: root.community
+            ? "Steam profile fill-in is on: games you played on other machines arrive over the next hours."
+            : "Played on another machine? Turn on Steam profile in Settings to fill in those games."
+        }
+        Caption {
+          visible: !root.community
+          text: "Open Settings →"
+          color: Commons.Color.accent
+          opacity: firstRunHit.containsMouse ? 1 : 0.8
+          Accessible.role: Accessible.Button
+          Accessible.name: "Open Settings"
+          MouseArea {
+            id: firstRunHit
+            anchors.fill: parent
+            anchors.margins: -4
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.tab = "settings"
+          }
         }
       }
     }
@@ -956,7 +1282,7 @@ Column {
     Repeater {
       id: recent
       // The game you're playing takes this space; the rest wait for it to end.
-      model: root.cabinet && !root.cabinet.playing ? root.cabinet.recent : []
+      model: root.cabinet && !root.cabinet.playing && root.nowShows.recent ? root.cabinet.recent : []
       // A recent game: art, its latest unlocks, progress. A finished game
       // gets the platinum edge and date instead of a count.
       delegate: Rectangle {
@@ -1036,6 +1362,25 @@ Column {
                 height: 18
               }
             }
+            // How many more unlocks than the icons show, like Steam's "+8".
+            Rectangle {
+              readonly property int more: recentCard.modelData.unlocked - recentCard.modelData.latest.length
+              visible: more > 0
+              width: moreText.implicitWidth + 8
+              height: 18
+              radius: 3
+              color: Qt.alpha(root.foreground, 0.08)
+              Text {
+                textFormat: Text.PlainText
+                id: moreText
+                anchors.centerIn: parent
+                text: "+" + parent.more
+                color: root.foreground
+                opacity: 0.7
+                font.family: Commons.Style.font.family
+                font.pixelSize: 10
+              }
+            }
           }
           Bar {
             width: parent.width
@@ -1054,10 +1399,110 @@ Column {
             Caption {
               anchors.right: parent.right
               visible: !recentCard.platinum
-              text: root.ago(recentCard.modelData.played)
+              // Hours on record first, when the store keeps them.
+              text: (recentCard.modelData.minutes > 0 ? root.hours(recentCard.modelData.minutes) + " · " : "")
+                    + root.ago(recentCard.modelData.played)
             }
           }
         }
+      }
+    }
+
+    // ------------------------------------------------ rarest unlocks
+
+    // The rarest trophies across the whole library, ever or this month.
+    // Rarity comes from the watcher's cache, so this costs no request.
+    Item {
+      id: rarestHeader
+      readonly property var lists: root.cabinet && root.cabinet.rarest ? root.cabinet.rarest : null
+      // A game hidden since the last read leaves at once; `now` sends a
+      // couple spare unlocks so three still show.
+      readonly property var ever: lists ? root.unhidden(lists.ever).slice(0, 3) : []
+      readonly property var month: lists ? root.unhidden(lists.month).slice(0, 3) : []
+      readonly property var platinum: lists && lists.platinum ? root.unhidden(lists.platinum).slice(0, 3) : []
+      visible: ever.length > 0 && root.nowShows.rarest
+      width: root.width
+      height: rarestChips.height
+      PanelSectionHeader {
+        anchors.left: parent.left
+        anchors.verticalCenter: parent.verticalCenter
+        text: "RAREST UNLOCKS"
+        foreground: root.foreground
+      }
+      Chips {
+        id: rarestChips
+        anchors.right: parent.right
+        options: [
+          { value: "ever", label: "Ever" },
+          { value: "month", label: "This month" },
+          { value: "platinum", label: "Platinums" }
+        ]
+        value: root.rarestRange
+        onPicked: value => root.remember("rarest", "rarestRange", value)
+      }
+    }
+
+    Column {
+      visible: rarestHeader.visible
+      width: root.width
+      spacing: Commons.Style.space(6)
+      Repeater {
+        model: rarestHeader[root.rarestRange]
+        delegate: Item {
+          id: rareRow
+          required property var modelData
+          required property int index
+          property real rise: 0
+          opacity: 0
+          transform: Translate { y: rareRow.rise }
+          FadeIn { item: rareRow; order: rareRow.index }
+          width: parent.width
+          height: Math.max(32, rareText.height)
+          Accessible.role: Accessible.Button
+          Accessible.name: modelData.name + ", " + modelData.game + ", " + modelData.percent.toFixed(1) + " percent"
+          AchIcon { id: rareIcon; anchors.verticalCenter: parent.verticalCenter; source: rareRow.modelData.icon; width: 32; height: 32 }
+          Column {
+            id: rareText
+            anchors.left: rareIcon.right
+            anchors.leftMargin: Commons.Style.space(10)
+            anchors.right: rarePct.left
+            anchors.rightMargin: Commons.Style.space(10)
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: Commons.Style.space(2)
+            Text {
+              textFormat: Text.PlainText
+              width: parent.width
+              text: rareRow.modelData.name
+              color: root.foreground
+              font.family: Commons.Style.font.family
+              font.pixelSize: Commons.Style.font.bodySmall
+              elide: Text.ElideRight
+            }
+            Caption {
+              width: parent.width
+              elide: Text.ElideRight
+              text: rareRow.modelData.game + " · " + root.day(rareRow.modelData.time)
+            }
+          }
+          Text {
+            textFormat: Text.PlainText
+            id: rarePct
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            text: rareRow.modelData.percent.toFixed(1) + "%"
+            color: root.metalColors[rareRow.modelData.tier]
+            font.family: Commons.Style.font.family
+            font.pixelSize: Commons.Style.font.bodySmall
+            font.bold: true
+          }
+          Hit { game: rareRow.modelData }
+        }
+      }
+      Caption {
+        visible: rarestHeader[root.rarestRange].length === 0
+        width: parent.width
+        opacity: 0.5
+        text: root.rarestRange === "platinum" ? "No platinum yet." : "Nothing unlocked yet this month."
       }
     }
 
@@ -1065,7 +1510,7 @@ Column {
 
     PanelSectionHeader {
       readonly property int hiddenPlatinums: root.cabinet ? root.cabinet.shelf.length - shelf.count : 0
-      visible: shelf.count > 0 || hiddenPlatinums > 0
+      visible: root.nowShows.shelf && (shelf.count > 0 || hiddenPlatinums > 0 || almost.count > 0)
       text: "PLATINUM SHELF · " + shelf.count + (hiddenPlatinums > 0 ? " · " + hiddenPlatinums + " HIDDEN" : "")
       foreground: root.foreground
     }
@@ -1073,7 +1518,7 @@ Column {
     // Every platinum, in a grid whose tiles fit the width exactly.
     Grid {
       id: shelfGrid
-      visible: shelf.count > 0
+      visible: root.nowShows.shelf && (shelf.count > 0 || almost.count > 0)
       columns: 4
       spacing: Commons.Style.space(6)
       readonly property real tileWidth: (root.width - spacing * (columns - 1)) / columns
@@ -1156,6 +1601,76 @@ Column {
           }
         }
       }
+      // The shelf's empty slots, or a fresh row when it is full, go to
+      // the games nearest platinum: dimmed art, how many are left, and a
+      // bar, so the shelf shows what's next to finish.
+      Repeater {
+        id: almost
+        readonly property int slots: (shelfGrid.columns - shelf.count % shelfGrid.columns) % shelfGrid.columns || shelfGrid.columns
+        model: root.cabinet && root.cabinet.nearest ? root.unhidden(root.cabinet.nearest).slice(0, slots) : []
+        delegate: Rectangle {
+          id: almostCard
+          required property var modelData
+          required property int index
+          readonly property int toGo: modelData.total - modelData.unlocked
+          width: shelfGrid.tileWidth
+          height: Math.round(width * 215 / 460)
+          radius: Commons.Style.cornerRadius
+          color: "transparent"
+          border.width: 1
+          border.color: Qt.alpha(root.foreground, almostHit.containsMouse ? 0.45 : 0.14)
+          property real rise: 0
+          opacity: 0
+          transform: Translate { y: almostCard.rise }
+          FadeIn { item: almostCard; order: shelf.count + almostCard.index }
+          Accessible.role: Accessible.Button
+          Accessible.name: modelData.game + ", " + toGo + " to platinum"
+
+          Art {
+            anchors.fill: parent
+            anchors.margins: 1
+            source: almostCard.modelData.header || ""
+            label: almostCard.modelData.game
+            zoom: almostHit.containsMouse ? 1.08 : 1
+            opacity: almostHit.containsMouse ? 0.75 : 0.4
+            Behavior on opacity { NumberAnimation { duration: 160 } }
+          }
+          Rectangle {
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.margins: 3
+            width: leftText.implicitWidth + 8
+            height: leftText.implicitHeight + 2
+            radius: height / 2
+            color: Qt.alpha(Commons.Color.popups.background, 0.85)
+            Text {
+              textFormat: Text.PlainText
+              id: leftText
+              anchors.centerIn: parent
+              text: almostCard.toGo + " left"
+              color: root.foreground
+              font.family: Commons.Style.font.family
+              font.pixelSize: 9
+              font.bold: true
+            }
+          }
+          Bar {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            // Flush with the frame, under the art's name label.
+            anchors.margins: 1
+            height: 2
+            radius: 0
+            fraction: almostCard.modelData.unlocked / almostCard.modelData.total
+          }
+          Hit { id: almostHit; game: almostCard.modelData }
+          PanelToolTip {
+            visible: almostHit.containsMouse
+            text: almostCard.modelData.game + " · " + almostCard.modelData.unlocked + " / " + almostCard.modelData.total + " · " + almostCard.toGo + " to platinum"
+          }
+        }
+      }
     }
 
     // Placeholders in the shape of what's coming while `now` reads the stores.
@@ -1185,13 +1700,678 @@ Column {
     }
   }
 
-  // ---------------------------------------------------------------- Games
+  // ---------------------------------------------------------------- Profile
+
+  // The library at a glance, in tiles taken from Steam's profile
+  // showcases: your favorite game, trophies and finished games you pick,
+  // and how long you've played. Every number is local data.
+  TabPage {
+    id: profileTab
+    visible: root.tab === "profile"
+    width: root.width
+    spacing: root.spacing
+
+    // ------------------------------------------------ favorite game
+
+    // The game you set with ♥ in the tracker, like Steam's favorite game:
+    // its art, hours and trophies, then your rarest unlocks from it.
+    Item {
+      visible: root.cabinet !== null
+      width: root.width
+      height: favoriteButtonRow.height
+      PanelSectionHeader {
+        anchors.verticalCenter: parent.verticalCenter
+        text: "FAVORITE GAME"
+        foreground: root.foreground
+      }
+      Rectangle {
+        id: favoriteButtonRow
+        anchors.right: parent.right
+        width: chooseText.implicitWidth + Commons.Style.space(16)
+        height: chooseText.implicitHeight + Commons.Style.space(8)
+        radius: height / 2
+        color: chooseHit.containsMouse || root.pickingFavorite ? Qt.alpha(Commons.Color.accent, 0.18) : "transparent"
+        Accessible.role: Accessible.Button
+        Accessible.name: root.pickingFavorite ? "Cancel" : "Choose a favorite game"
+        Text {
+          textFormat: Text.PlainText
+          id: chooseText
+          anchors.centerIn: parent
+          text: root.pickingFavorite ? "Cancel" : (favorite.game ? "Change" : "+ Choose game")
+          color: Commons.Color.accent
+          font.family: Commons.Style.font.family
+          font.pixelSize: Commons.Style.font.caption
+          font.bold: true
+        }
+        MouseArea {
+          id: chooseHit
+          anchors.fill: parent
+          hoverEnabled: true
+          cursorShape: Qt.PointingHandCursor
+          onClicked: root.pickingFavorite ? root.pickingFavorite = false : root.chooseFavorite()
+        }
+      }
+    }
+
+    // The picker: type to narrow your games, click one (or Enter for the
+    // first) to make it the favorite. It covers the tile while open.
+    Rectangle {
+      visible: root.pickingFavorite
+      width: root.width
+      height: pickerBody.height + Commons.Style.space(20)
+      radius: Commons.Style.cornerRadius
+      color: Qt.alpha(root.foreground, 0.04)
+      border.width: 1
+      border.color: Commons.Color.accent
+      Column {
+        id: pickerBody
+        x: Commons.Style.space(10)
+        y: Commons.Style.space(10)
+        width: parent.width - Commons.Style.space(20)
+        spacing: Commons.Style.space(6)
+        TextField {
+          id: favoriteField
+          width: parent.width
+          placeholderText: "Search your games"
+          foreground: root.foreground
+          font.pixelSize: Commons.Style.font.bodySmall
+          verticalPadding: Commons.Style.space(4)
+          text: root.favoriteSearch
+          onTextChanged: root.favoriteSearch = text
+          Keys.onReturnPressed: if (root.favoriteMatches.length) root.pickFavorite(root.favoriteMatches[0])
+          Keys.onEnterPressed: if (root.favoriteMatches.length) root.pickFavorite(root.favoriteMatches[0])
+          Keys.onEscapePressed: {
+            if (text) text = ""
+            else root.pickingFavorite = false
+          }
+        }
+        Repeater {
+          model: root.favoriteMatches
+          delegate: Rectangle {
+            id: pickRow
+            required property var modelData
+            width: pickerBody.width
+            height: Commons.Style.space(40)
+            radius: Commons.Style.cornerRadius
+            color: pickHit.containsMouse ? Commons.Style.hoverFill : "transparent"
+            Accessible.role: Accessible.Button
+            Accessible.name: "Make " + modelData.game + " your favorite"
+            Art {
+              id: pickArt
+              x: Commons.Style.space(4)
+              anchors.verticalCenter: parent.verticalCenter
+              height: parent.height - Commons.Style.space(8)
+              width: Math.round(height * 460 / 215)
+              source: pickRow.modelData.header || ""
+              label: ""
+            }
+            Text {
+              textFormat: Text.PlainText
+              anchors.left: pickArt.right
+              anchors.leftMargin: Commons.Style.space(10)
+              anchors.right: pickCount.left
+              anchors.rightMargin: Commons.Style.space(8)
+              anchors.verticalCenter: parent.verticalCenter
+              text: pickRow.modelData.game
+              color: root.foreground
+              font.family: Commons.Style.font.family
+              font.pixelSize: Commons.Style.font.bodySmall
+              elide: Text.ElideRight
+            }
+            Caption {
+              id: pickCount
+              anchors.right: parent.right
+              anchors.rightMargin: Commons.Style.space(6)
+              anchors.verticalCenter: parent.verticalCenter
+              text: pickRow.modelData.unlocked + " / " + pickRow.modelData.total
+              color: pickRow.modelData.platinum ? root.metalColors.platinum : root.foreground
+            }
+            MouseArea {
+              id: pickHit
+              anchors.fill: parent
+              hoverEnabled: true
+              cursorShape: Qt.PointingHandCursor
+              onClicked: root.pickFavorite(pickRow.modelData)
+            }
+          }
+        }
+        Caption {
+          visible: root.games === null
+          text: "Reading your games…"
+          opacity: 0.5
+        }
+        Caption {
+          visible: root.games !== null && root.favoriteMatches.length === 0
+          text: "No game matches “" + root.favoriteSearch + "”"
+          opacity: 0.5
+        }
+      }
+    }
+
+    Rectangle {
+      id: favorite
+      readonly property var game: root.cabinet && root.cabinet.favorite ? root.cabinet.favorite : null
+      visible: game !== null && !root.pickingFavorite
+      width: root.width
+      height: favoriteBody.height + Commons.Style.space(20)
+      radius: Commons.Style.cornerRadius
+      color: Qt.alpha(root.foreground, 0.04)
+      border.width: 1
+      border.color: Qt.alpha(root.foreground, 0.12)
+      Column {
+        id: favoriteBody
+        x: Commons.Style.space(10)
+        y: Commons.Style.space(10)
+        width: parent.width - Commons.Style.space(20)
+        spacing: Commons.Style.space(10)
+        Item {
+          width: parent.width
+          height: favoriteArt.height
+          Art {
+            id: favoriteArt
+            width: Math.round(favoriteBody.width * 0.45)
+            height: Math.round(width * 215 / 460)
+            source: favorite.game ? favorite.game.header || "" : ""
+            label: favorite.game ? favorite.game.game : ""
+            zoom: favoriteHit.containsMouse ? 1.05 : 1
+            Hit { id: favoriteHit; game: favorite.game }
+          }
+          Column {
+            anchors.left: favoriteArt.right
+            anchors.leftMargin: Commons.Style.space(12)
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: Commons.Style.space(6)
+            Text {
+              textFormat: Text.PlainText
+              width: parent.width
+              text: favorite.game ? favorite.game.game : ""
+              color: root.foreground
+              font.family: Commons.Style.font.family
+              font.pixelSize: Commons.Style.font.body
+              font.bold: true
+              elide: Text.ElideRight
+            }
+            Row {
+              spacing: Commons.Style.space(16)
+              Stat {
+                visible: favorite.game !== null && favorite.game.minutes > 0
+                value: favorite.game ? Math.round(favorite.game.minutes / 60) : -1
+                label: "HOURS"
+              }
+              Stat { value: favorite.game ? favorite.game.unlocked : -1; label: "TROPHIES" }
+              Stat { value: favorite.game ? favorite.game.rare : -1; label: "RARE"; tint: root.metalColors.gold }
+            }
+          }
+        }
+        // Its rarest unlocks, each framed in its metal; a click opens it.
+        Row {
+          id: favoriteRare
+          visible: favorite.game !== null && favorite.game.rarest.length > 0
+          spacing: Commons.Style.space(6)
+          readonly property real tile: (favoriteBody.width - spacing * 5) / 6
+          Repeater {
+            model: favorite.game ? favorite.game.rarest : []
+            delegate: Rectangle {
+              id: favTile
+              required property var modelData
+              width: favoriteRare.tile
+              height: width
+              radius: Commons.Style.cornerRadius
+              color: Qt.alpha(root.metalColors[modelData.tier], favHit.containsMouse ? 0.22 : 0.1)
+              border.width: 1
+              border.color: Qt.alpha(root.metalColors[modelData.tier], favHit.containsMouse ? 1 : 0.55)
+              AchIcon { anchors.fill: parent; anchors.margins: 4; source: favTile.modelData.icon }
+              Hit { id: favHit; game: favTile.modelData }
+              PanelToolTip {
+                visible: favHit.containsMouse
+                text: favTile.modelData.name + " · " + favTile.modelData.percent.toFixed(1) + "%"
+              }
+            }
+          }
+        }
+        Item {
+          width: parent.width
+          height: favoriteCount.height
+          Caption {
+            id: favoriteCount
+            text: favorite.game ? favorite.game.unlocked + " / " + favorite.game.total + " trophies" : ""
+          }
+          Caption {
+            anchors.right: parent.right
+            visible: favorite.game !== null && favorite.game.platinum > 0
+            text: "Platinum"
+            color: root.metalColors.platinum
+          }
+        }
+        Bar {
+          width: parent.width
+          fraction: favorite.game ? favorite.game.unlocked / favorite.game.total : 0
+          fill: favorite.game && favorite.game.platinum > 0 ? root.metalColors.platinum : Commons.Color.accent
+        }
+      }
+    }
+
+    // No favorite yet: where to set one.
+    Rectangle {
+      visible: root.cabinet !== null && favorite.game === null && !root.pickingFavorite
+      width: root.width
+      height: favoriteHint.height + Commons.Style.space(24)
+      radius: Commons.Style.cornerRadius
+      color: "transparent"
+      border.width: 1
+      border.color: Qt.alpha(root.foreground, 0.12)
+      Caption {
+        id: favoriteHint
+        anchors.centerIn: parent
+        width: parent.width - Commons.Style.space(24)
+        horizontalAlignment: Text.AlignHCenter
+        wrapMode: Text.WordWrap
+        elide: Text.ElideNone
+        opacity: 0.5
+        text: "No favorite yet · + Choose game picks one."
+      }
+    }
+
+    // ------------------------------------------------ showcase
+
+    // Up to six trophies you pin with ☆ in the tracker (a game's platinum
+    // too), like Steam's achievement showcase. Until you pin one, your
+    // rarest ever stand in, so the tile is never empty.
+    Item {
+      id: showcaseHeader
+      readonly property var picks: root.cabinet && root.cabinet.showcase
+        ? root.ordered(root.cabinet.showcase.filter(function(p) { return !root.unpinned["showcase/" + p.key] }),
+                       root.showcaseOrder) : []
+      readonly property bool picked: picks.length > 0
+      readonly property var tiles: picked ? picks
+        : (root.cabinet && root.cabinet.rarest ? root.unhidden(root.cabinet.rarest.ever).slice(0, 6) : [])
+      visible: tiles.length > 0
+      width: root.width
+      height: showcaseTitle.height
+      PanelSectionHeader {
+        id: showcaseTitle
+        text: showcaseHeader.picked ? "SHOWCASE · " + showcaseHeader.picks.length + " / 6" : "SHOWCASE · RAREST EVER"
+        foreground: root.foreground
+      }
+      Caption {
+        anchors.right: parent.right
+        anchors.verticalCenter: parent.verticalCenter
+        opacity: 0.45
+        text: showcaseHeader.picked ? "drag to reorder · ☆ in the tracker adds" : "☆ a trophy in the tracker to pin it"
+      }
+    }
+
+    // Each pick framed in its metal; a click opens it in the tracker, a
+    // drag sideways moves it (the others slide aside, the order is saved
+    // on release), and the × takes it off. Empty slots say how to fill
+    // them. The rarest that stand in before any pick don't move.
+    ListModel { id: showcaseModel }
+
+    Item {
+      id: showcaseBox
+      visible: showcaseHeader.visible
+      width: root.width
+      height: showcaseRow.tile
+      // The key being dragged, and the tile's centre under the pointer.
+      property string dragKey: ""
+      property real dragX: 0
+      readonly property var byKey: {
+        var map = {}
+        showcaseHeader.tiles.forEach(function(t) { map[t.key || (t.store + ":" + t.app + ":" + t.api)] = t })
+        return map
+      }
+
+      function sync() {
+        if (dragKey !== "") return
+        showcaseModel.clear()
+        showcaseHeader.tiles.forEach(function(t) { showcaseModel.append({ key: t.key || (t.store + ":" + t.app + ":" + t.api) }) })
+      }
+      Connections {
+        target: showcaseHeader
+        function onTilesChanged() { showcaseBox.sync() }
+      }
+      Component.onCompleted: sync()
+
+      // The slot index under a point along the row.
+      function slotAt(x) {
+        var step = showcaseRow.tile + showcaseRow.spacing
+        return Math.max(0, Math.min(showcaseModel.count - 1, Math.floor(x / step)))
+      }
+
+      function indexOf(key) {
+        for (var i = 0; i < showcaseModel.count; i++) if (showcaseModel.get(i).key === key) return i
+        return -1
+      }
+
+      function finishDrag() {
+        if (dragKey === "") return
+        dragKey = ""
+        var order = []
+        for (var i = 0; i < showcaseModel.count; i++) order.push(showcaseModel.get(i).key)
+        root.showcaseOrder = order
+        runner.exec(["python3", helperPath, "showcase", "order"].concat(order))
+      }
+
+      Row {
+        id: showcaseRow
+        spacing: Commons.Style.space(6)
+        readonly property real tile: (root.width - spacing * 5) / 6
+        move: Transition { NumberAnimation { properties: "x"; duration: 160; easing.type: Easing.OutCubic } }
+        Repeater {
+          id: showcase
+          model: showcaseModel
+          delegate: Rectangle {
+            id: showTile
+            required property string key
+            required property int index
+            readonly property var pick: showcaseBox.byKey[key] || ({ tier: "bronze", name: "", game: "", icon: "", store: "", app: "", api: "" })
+            readonly property bool platinum: pick.tier === "platinum"
+            readonly property bool lifted: showcaseBox.dragKey === key
+            width: showcaseRow.tile
+            height: width
+            radius: Commons.Style.cornerRadius
+            color: Qt.alpha(root.metalColors[pick.tier], tileHit.containsMouse ? 0.22 : 0.1)
+            border.width: 1
+            border.color: Qt.alpha(root.metalColors[pick.tier], tileHit.containsMouse ? 1 : 0.55)
+            // The lifted tile leaves a faint gap where it will land.
+            opacity: lifted ? 0.25 : 1
+            clip: true
+            Accessible.role: Accessible.Button
+            Accessible.name: pick.name + ", " + pick.game
+            AchIcon {
+              visible: !showTile.platinum
+              anchors.fill: parent
+              anchors.margins: 4
+              source: showTile.pick.icon
+              scale: tileHit.containsMouse && !showTile.lifted ? 1.06 : 1
+              Behavior on scale { NumberAnimation { duration: 140 } }
+            }
+            // A platinum: the game's art, dimmed, under the platinum trophy.
+            Art {
+              visible: showTile.platinum
+              anchors.fill: parent
+              anchors.margins: 1
+              source: showTile.platinum ? showTile.pick.icon || "" : ""
+              label: ""
+              opacity: 0.45
+            }
+            Thumb {
+              visible: showTile.platinum
+              anchors.centerIn: parent
+              style: root.iconSet
+              metal: "platinum"
+              width: parent.width * 0.55
+              height: width
+            }
+            MouseArea {
+              id: tileHit
+              anchors.fill: parent
+              hoverEnabled: true
+              cursorShape: showcaseHeader.picked ? (pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor) : Qt.PointingHandCursor
+              property real pressX: 0
+              function boxX(mouse) { return mapToItem(showcaseBox, mouse.x, mouse.y).x }
+              onPressed: mouse => pressX = boxX(mouse)
+              onPositionChanged: mouse => {
+                if (!pressed || !showcaseHeader.picked) return
+                var x = boxX(mouse)
+                if (showcaseBox.dragKey === "" && Math.abs(x - pressX) < 6) return
+                showcaseBox.dragKey = showTile.key
+                showcaseBox.dragX = x
+                var from = showcaseBox.indexOf(showTile.key)
+                var to = showcaseBox.slotAt(x)
+                if (from >= 0 && to !== from) showcaseModel.move(from, to, 1)
+              }
+              onReleased: {
+                if (showcaseBox.dragKey !== "") showcaseBox.finishDrag()
+                else root.track(showTile.pick.store, showTile.pick.app, showTile.pick.api || "")
+              }
+              onCanceled: showcaseBox.finishDrag()
+            }
+            PanelToolTip {
+              visible: tileHit.containsMouse && !unpinHit.containsMouse && showcaseBox.dragKey === ""
+              text: showTile.pick.name + " · " + showTile.pick.game
+                    + (showTile.pick.percent !== null && showTile.pick.percent !== undefined ? " · " + showTile.pick.percent.toFixed(1) + "%" : "")
+                    + (showcaseHeader.picked ? " · drag to move" : "")
+            }
+            Rectangle {
+              visible: showcaseHeader.picked && showcaseBox.dragKey === "" && (tileHit.containsMouse || unpinHit.containsMouse)
+              anchors.left: parent.left
+              anchors.top: parent.top
+              anchors.margins: 2
+              width: 16
+              height: 16
+              radius: 8
+              color: unpinHit.containsMouse ? Commons.Color.accent : Qt.alpha(Commons.Color.popups.background, 0.85)
+              Accessible.role: Accessible.Button
+              Accessible.name: "Take " + showTile.pick.name + " off the showcase"
+              Text {
+                textFormat: Text.PlainText
+                anchors.centerIn: parent
+                text: "×"
+                color: unpinHit.containsMouse ? Commons.Color.popups.background : root.foreground
+                font.pixelSize: 12
+                font.bold: true
+              }
+              MouseArea {
+                id: unpinHit
+                anchors.fill: parent
+                anchors.margins: -2
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.unpin(showTile.pick, "showcase")
+              }
+            }
+          }
+        }
+        // The slots still open once you've pinned something.
+        Repeater {
+          model: showcaseHeader.picked ? 6 - showcaseHeader.picks.length : 0
+          delegate: Rectangle {
+            width: showcaseRow.tile
+            height: width
+            radius: Commons.Style.cornerRadius
+            color: "transparent"
+            border.width: 1
+            border.color: Qt.alpha(root.foreground, 0.12)
+            Text {
+              textFormat: Text.PlainText
+              anchors.centerIn: parent
+              text: "+"
+              color: root.foreground
+              opacity: 0.3
+              font.pixelSize: Commons.Style.font.title
+            }
+          }
+        }
+      }
+
+      // The lifted tile, following the pointer above the row.
+      Rectangle {
+        readonly property var pick: showcaseBox.byKey[showcaseBox.dragKey] || null
+        visible: pick !== null
+        x: Math.max(0, Math.min(showcaseBox.width - width, showcaseBox.dragX - width / 2))
+        width: showcaseRow.tile
+        height: width
+        z: 2
+        scale: 1.1
+        radius: Commons.Style.cornerRadius
+        color: pick ? Qt.alpha(root.metalColors[pick.tier], 0.3) : "transparent"
+        border.width: 1
+        border.color: pick ? root.metalColors[pick.tier] : "transparent"
+        AchIcon {
+          anchors.fill: parent
+          anchors.margins: 4
+          source: parent.pick && parent.pick.tier !== "platinum" ? parent.pick.icon : ""
+        }
+        Thumb {
+          visible: parent.pick !== null && parent.pick.tier === "platinum"
+          anchors.centerIn: parent
+          style: root.iconSet
+          metal: "platinum"
+          width: parent.width * 0.55
+          height: width
+        }
+      }
+    }
+
+    Row {
+      visible: root.cabinet !== null
+      spacing: Commons.Style.space(16)
+      Stat { value: root.cabinet ? root.cabinet.trophies : -1; label: "TROPHIES" }
+      Stat { value: root.cabinet && root.cabinet.metals ? root.cabinet.metals.gold : -1; label: "RARE"; tint: root.metalColors.gold }
+    }
+
+    // ------------------------------------------------ completionist
+
+    PanelSectionHeader {
+      visible: root.cabinet !== null
+      text: "COMPLETIONIST"
+      foreground: root.foreground
+    }
+
+    // Up to four finished games you pin with "☆ Completionist" in the
+    // tracker, like Steam's completionist showcase; until you pin one,
+    // your two newest platinums stand in.
+    Grid {
+      id: newestPlatinums
+      readonly property var picks: root.cabinet && root.cabinet.completionist
+        ? root.cabinet.completionist.filter(function(p) { return !root.unpinned["completionist/" + p.key] }) : []
+      readonly property bool picked: picks.length > 0
+      readonly property var games: picked ? picks : (root.cabinet ? root.unhidden(root.cabinet.shelf).slice(0, 2) : [])
+      visible: games.length > 0
+      columns: 2
+      spacing: Commons.Style.space(6)
+      Repeater {
+        model: newestPlatinums.games
+        delegate: Rectangle {
+          id: newestCard
+          required property var modelData
+          width: (root.width - Commons.Style.space(6)) / 2
+          height: Math.round(width * 215 / 460)
+          radius: Commons.Style.cornerRadius
+          color: "transparent"
+          border.width: 1
+          border.color: Qt.alpha(root.metalColors.platinum, newestHit.containsMouse ? 1 : 0.45)
+          Art {
+            anchors.fill: parent
+            anchors.margins: 1
+            source: newestCard.modelData.header || ""
+            label: newestCard.modelData.game
+            zoom: newestHit.containsMouse ? 1.06 : 1
+          }
+          Rectangle {
+            // Top corner: the art's own name label sits along the bottom.
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.margins: 4
+            width: newestRow.width + 10
+            height: newestRow.height + 4
+            radius: height / 2
+            color: Qt.alpha(Commons.Color.popups.background, 0.85)
+            Row {
+              id: newestRow
+              anchors.centerIn: parent
+              spacing: 4
+              Thumb { style: root.iconSet; metal: "platinum"; width: 14; height: 14; anchors.verticalCenter: parent.verticalCenter }
+              Text {
+                textFormat: Text.PlainText
+                anchors.verticalCenter: parent.verticalCenter
+                text: newestCard.modelData.total + " trophies"
+                color: root.foreground
+                font.family: Commons.Style.font.family
+                font.pixelSize: 10
+                font.bold: true
+              }
+            }
+          }
+          Hit { id: newestHit; game: newestCard.modelData }
+          PanelToolTip {
+            visible: newestHit.containsMouse && !unpinGameHit.containsMouse
+            text: newestCard.modelData.game + " · platinum " + root.day(newestCard.modelData.platinum)
+          }
+          Rectangle {
+            visible: newestPlatinums.picked && (newestHit.containsMouse || unpinGameHit.containsMouse)
+            anchors.left: parent.left
+            anchors.top: parent.top
+            anchors.margins: 4
+            width: 16
+            height: 16
+            radius: 8
+            color: unpinGameHit.containsMouse ? Commons.Color.accent : Qt.alpha(Commons.Color.popups.background, 0.85)
+            Accessible.role: Accessible.Button
+            Accessible.name: "Take " + newestCard.modelData.game + " off the completionist tile"
+            Text {
+              textFormat: Text.PlainText
+              anchors.centerIn: parent
+              text: "×"
+              color: unpinGameHit.containsMouse ? Commons.Color.popups.background : root.foreground
+              font.pixelSize: 12
+              font.bold: true
+            }
+            MouseArea {
+              id: unpinGameHit
+              anchors.fill: parent
+              anchors.margins: -2
+              hoverEnabled: true
+              cursorShape: Qt.PointingHandCursor
+              onClicked: root.unpin(newestCard.modelData, "completionist")
+            }
+          }
+        }
+      }
+    }
+
+    Caption {
+      visible: newestPlatinums.visible && !newestPlatinums.picked
+      opacity: 0.45
+      text: "Your newest platinums · ☆ Completionist in the tracker picks your own"
+    }
+
+    Row {
+      visible: root.cabinet !== null
+      spacing: Commons.Style.space(16)
+      Stat { value: root.cabinet ? root.cabinet.platinums : -1; label: "COMPLETED"; tint: root.metalColors.platinum }
+      Stat { value: root.cabinet && root.cabinet.started !== undefined ? root.cabinet.started : -1; label: "STARTED" }
+      Stat { value: root.cabinet && root.cabinet.completion !== undefined ? root.cabinet.completion : -1; label: "AVG COMPLETION"; suffix: "%" }
+    }
+
+    // ------------------------------------------------ playtime
+
+    PanelSectionHeader {
+      visible: playtimeRow.visible
+      text: "PLAYTIME"
+      foreground: root.foreground
+    }
+
+    Row {
+      id: playtimeRow
+      readonly property var minutes: root.cabinet && root.cabinet.playtime ? root.cabinet.playtime : null
+      visible: minutes !== null && minutes.total > 0
+      spacing: Commons.Style.space(16)
+      Stat { value: playtimeRow.minutes ? Math.round(playtimeRow.minutes.recent / 60) : -1; label: "HOURS · 2 WEEKS" }
+      Stat { value: playtimeRow.minutes ? Math.round(playtimeRow.minutes.total / 60) : -1; label: "HOURS IN ALL" }
+    }
+
+    Caption {
+      visible: root.cabinet !== null && !favorite.visible && !playtimeRow.visible && showcase.count === 0
+      width: root.width
+      wrapMode: Text.WordWrap
+      elide: Text.ElideNone
+      opacity: 0.5
+      text: "Play a game with achievements and your profile fills in here."
+    }
+  }
+
+  // ------------------------------------------------------------------ Games
 
   TabPage {
     id: gamesTab
     visible: root.tab === "games"
     width: root.width
     spacing: Commons.Style.space(6)
+
+    // ------------------------------------------------ sort and filter
 
     Item {
       width: root.width
@@ -1211,7 +2391,7 @@ Column {
           { value: "name", label: "Name" }
         ]
         value: root.sort
-        onPicked: value => root.sort = value
+        onPicked: value => root.remember("games-sort", "sort", value)
       }
     }
 
@@ -1234,6 +2414,8 @@ Column {
       }
       Keys.onTabPressed: focus = false
     }
+
+    // ------------------------------------------------ game list
 
     Repeater {
       model: root.shownGames
@@ -1377,6 +2559,8 @@ Column {
       }
     }
 
+    // ------------------------------------------------ pager
+
     // Previous, the page numbers and next, with which games these are.
     Item {
       width: root.width
@@ -1438,6 +2622,8 @@ Column {
       }
     }
 
+    // ------------------------------------------------ empty and loading
+
     Caption {
       width: root.width
       horizontalAlignment: Text.AlignHCenter
@@ -1470,7 +2656,7 @@ Column {
     }
   }
 
-  // ---------------------------------------------------------- Settings
+  // --------------------------------------------------------------- Settings
 
   TabPage {
     id: settingsTab
@@ -1478,7 +2664,9 @@ Column {
     width: root.width
     spacing: root.spacing
 
-    PanelSectionHeader { text: "TROPHY STYLE"; foreground: root.foreground }
+    // ------------------------------------------------ toasts
+
+    PanelSectionHeader { text: "TOASTS"; foreground: root.foreground }
 
     Row {
       id: styleCards
@@ -1563,10 +2751,52 @@ Column {
       }
     }
 
-    Item { width: 1; height: Commons.Style.space(2) }
+    // Every toast setting is the same kind of control, a row of chips,
+    // so the tab reads at a glance. (A screen drawing for position and a
+    // slider for glass looked nice but each needed learning.)
+    SettingRow {
+      label: "POSITION"
+      Chips {
+        options: [
+          { value: "top-left", label: "Left" },
+          { value: "top-center", label: "Center" },
+          { value: "top-right", label: "Right" }
+        ]
+        value: root.position
+        onPicked: value => root.set("position", value)
+      }
+    }
+
+    // From see-through to the solid card.
+    SettingRow {
+      label: "GLASS"
+      Chips {
+        options: [
+          { value: "clear", label: "Clear" },
+          { value: "frosted", label: "Frosted" },
+          { value: "solid", label: "Solid" }
+        ]
+        value: root.glass
+        onPicked: value => root.set("glass", value)
+      }
+    }
 
     SettingRow {
-      label: "PREVIEW"
+      label: "SOUND"
+      Chips {
+        options: [
+          { value: "omatrophy", label: "OmaTrophy" },
+          { value: "classic", label: "Classic" },
+          { value: "off", label: "Silent" }
+        ]
+        value: root.sound ? root.chimes : "off"
+        onPicked: value => root.set("sound", value)
+      }
+    }
+
+    // Last in the section, so a choice is made before it is tried.
+    SettingRow {
+      label: "TRY IT"
       Row {
         spacing: Commons.Style.space(6)
         Repeater {
@@ -1620,250 +2850,150 @@ Column {
       }
     }
 
-    // Where toasts show, picked on a small drawing of the screen: a slot
-    // along its top edge for each place, the chosen one lit.
-    SettingRow {
-      label: "POSITION"
-      Rectangle {
-        id: screen
-        readonly property var places: [
-          { value: "top-left", label: "Left" },
-          { value: "top-center", label: "Center" },
-          { value: "top-right", label: "Right" }
-        ]
-        width: Commons.Style.space(150)
-        height: Math.round(width * 9 / 16)
-        radius: Math.max(2, Commons.Style.cornerRadius)
-        color: Qt.alpha(root.foreground, 0.04)
-        border.width: 1
-        border.color: Qt.alpha(root.foreground, 0.18)
-        Row {
-          anchors.top: parent.top
-          anchors.topMargin: Commons.Style.space(7)
-          anchors.horizontalCenter: parent.horizontalCenter
-          spacing: Commons.Style.space(6)
-          Repeater {
-            model: screen.places
-            delegate: Rectangle {
-              id: slot
-              required property var modelData
-              readonly property bool chosen: root.position === modelData.value
-              width: (screen.width - Commons.Style.space(14) - Commons.Style.space(12)) / 3
-              height: Commons.Style.space(16)
-              radius: 2
-              color: chosen ? Qt.alpha(Commons.Color.accent, 0.85)
-                     : (slotHit.containsMouse ? Qt.alpha(root.foreground, 0.16) : Qt.alpha(root.foreground, 0.06))
-              border.width: chosen ? 0 : 1
-              border.color: Qt.alpha(root.foreground, 0.14)
-              Accessible.role: Accessible.RadioButton
-              Accessible.name: "Toasts at the top " + modelData.label.toLowerCase()
-              Accessible.checked: chosen
-              Behavior on color { ColorAnimation { duration: 120 } }
-              MouseArea {
-                id: slotHit
-                anchors.fill: parent
-                anchors.margins: -3
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root.set("position", slot.modelData.value)
-              }
-            }
-          }
-        }
-        Caption {
-          anchors.bottom: parent.bottom
-          anchors.bottomMargin: Commons.Style.space(5)
-          anchors.horizontalCenter: parent.horizontalCenter
-          opacity: 0.45
-          text: (screen.places.find(function(p) { return p.value === root.position }) || screen.places[1]).label
-        }
-      }
+    // Said under the toast rows only: the Steam rows below don't touch
+    // toasts.
+    Caption {
+      width: root.width
+      wrapMode: Text.WordWrap
+      elide: Text.ElideNone
+      opacity: 0.4
+      text: "Changes apply to the next toast. A tile shows one now, with your settings."
     }
 
-    // Three stops on a track, from see-through to the solid card. Dragging
-    // moves the knob between stops and writes the setting on release, so
-    // one drag is one `set`.
+    // ------------------------------------------------ now tab
+
+    Item { width: 1; height: Commons.Style.space(8) }
+
+    PanelSectionHeader { text: "NOW TAB"; foreground: root.foreground }
+
+    // Each section a chip of its own, lit while shown; the game you're
+    // playing always shows.
     SettingRow {
-      label: "GLASS"
-      Item {
-        id: glassSlider
-        readonly property var stops: [
-          { value: "clear", label: "Clear" },
-          { value: "frosted", label: "Frosted" },
-          { value: "solid", label: "Solid" }
-        ]
-        readonly property int current: Math.max(0, stops.findIndex(function(s) { return s.value === root.glass }))
-        property int dragged: -1
-        readonly property int shown: dragged >= 0 ? dragged : current
-        readonly property real step: glassTrack.width / (stops.length - 1)
-        width: Commons.Style.space(150)
-        height: glassTrack.y + Commons.Style.space(22)
-        Accessible.role: Accessible.Slider
-        Accessible.name: "Toast glass: " + stops[shown].label
-
-        function nearest(x) {
-          return Math.max(0, Math.min(stops.length - 1, Math.round((x - glassTrack.x) / step)))
-        }
-
-        Rectangle {
-          id: glassTrack
-          x: Commons.Style.space(14)
-          y: Commons.Style.space(7)
-          width: parent.width - 2 * x
-          height: 2
-          radius: 1
-          color: Qt.alpha(root.foreground, 0.15)
-          // Filled up to the knob: more fill, more solid.
-          Rectangle {
-            width: glassSlider.shown * glassSlider.step
-            height: parent.height
-            radius: 1
-            color: Qt.alpha(Commons.Color.accent, 0.7)
-            Behavior on width { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
-          }
-        }
+      label: "SHOW"
+      Row {
+        spacing: Commons.Style.space(2)
         Repeater {
-          model: glassSlider.stops
-          delegate: Item {
-            id: glassStop
+          model: root.nowSections
+          delegate: Rectangle {
+            id: showChip
             required property var modelData
-            required property int index
-            x: glassTrack.x + index * glassSlider.step
-            Rectangle {
-              x: -width / 2
-              y: glassTrack.y - height / 2 + 1
-              width: 6
-              height: 6
-              radius: 3
-              color: glassStop.index <= glassSlider.shown ? Commons.Color.accent : Qt.alpha(root.foreground, 0.3)
-            }
-            Caption {
+            readonly property bool shown: root.nowShows[modelData.value] !== false
+            width: showText.implicitWidth + Commons.Style.space(16)
+            height: showText.implicitHeight + Commons.Style.space(8)
+            radius: height / 2
+            color: shown ? Qt.alpha(Commons.Color.accent, 0.18) : (showHit.containsMouse ? Commons.Style.hoverFill : "transparent")
+            Accessible.role: Accessible.CheckBox
+            Accessible.name: "Show " + modelData.label + " on the Now tab"
+            Accessible.checked: shown
+            Behavior on color { ColorAnimation { duration: 120 } }
+            Text {
               textFormat: Text.PlainText
-              x: -width / 2
-              y: glassTrack.y + Commons.Style.space(8)
-              text: glassStop.modelData.label
-              color: glassStop.index === glassSlider.shown ? Commons.Color.accent : root.foreground
-              opacity: glassStop.index === glassSlider.shown ? 1 : 0.5
-              font.bold: glassStop.index === glassSlider.shown
+              id: showText
+              anchors.centerIn: parent
+              // The tick tells these apart from the one-of-many chips above.
+              text: (showChip.shown ? "✓ " : "") + showChip.modelData.label
+              color: showChip.shown ? Commons.Color.accent : root.foreground
+              opacity: showChip.shown ? 1 : 0.6
+              font.family: Commons.Style.font.family
+              font.pixelSize: Commons.Style.font.caption
+              font.bold: showChip.shown
+            }
+            MouseArea {
+              id: showHit
+              anchors.fill: parent
+              hoverEnabled: true
+              cursorShape: Qt.PointingHandCursor
+              onClicked: root.set("now-" + showChip.modelData.value, showChip.shown ? "off" : "on")
             }
           }
         }
+      }
+    }
+
+    // ------------------------------------------------ stores
+
+    Item { width: 1; height: Commons.Style.space(8) }
+
+    PanelSectionHeader { text: "STORES"; foreground: root.foreground }
+
+    // Every store OmaTrophy knows, found or not, so "is GOG working?" has
+    // an answer here; a store's own settings sit inside its card.
+    StoreCard {
+      storeId: "steam"
+      missing: "Install Steam and play a game with achievements once. Steam somewhere else? Set STEAM_DIR."
+
+      // The opt-in profile backfill (ADR 11). The switch goes through
+      // `set community`, like every other setting.
+      SettingRow {
+        label: "PROFILE"
+        Chips {
+          options: [
+            { value: "off", label: "Off" },
+            { value: "on", label: "Fill in" }
+          ]
+          value: root.community ? "on" : "off"
+          onPicked: value => root.set("community", value)
+        }
+      }
+
+      Caption {
+        textFormat: Text.PlainText
+        width: parent.width
+        wrapMode: Text.WordWrap
+        opacity: 0.4
+        text: root.backfillText()
+      }
+
+      // Steam shows its own popup for the same unlock. OmaTrophy only reads
+      // Steam's files (ADR 1), and Steam rewrites its config while it runs,
+      // so this opens Steam's Notifications page for the owner to switch it
+      // off there. Page id and labels from Steam's own client UI (steamui).
+      SettingRow {
+        label: "POPUPS"
         Rectangle {
-          x: glassTrack.x + glassSlider.shown * glassSlider.step - width / 2
-          y: glassTrack.y - height / 2 + 1
-          width: 12
-          height: 12
-          radius: 6
-          color: Commons.Color.accent
-          border.width: 2
-          border.color: Commons.Color.popups.background
-          scale: glassHit.pressed ? 1.2 : (glassHit.containsMouse ? 1.1 : 1)
-          Behavior on x { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
-          Behavior on scale { NumberAnimation { duration: 120 } }
-        }
-        MouseArea {
-          id: glassHit
-          anchors.fill: parent
-          hoverEnabled: true
-          cursorShape: Qt.PointingHandCursor
-          onPressed: mouse => glassSlider.dragged = glassSlider.nearest(mouse.x)
-          onPositionChanged: mouse => { if (pressed) glassSlider.dragged = glassSlider.nearest(mouse.x) }
-          onReleased: {
-            var pick = glassSlider.stops[glassSlider.dragged].value
-            glassSlider.dragged = -1
-            if (pick !== root.glass) root.set("glass", pick)
+          id: steamButton
+          width: steamText.implicitWidth + Commons.Style.space(20)
+          height: steamText.implicitHeight + Commons.Style.space(10)
+          radius: height / 2
+          color: steamHit.containsMouse ? Commons.Style.hoverFill : "transparent"
+          border.width: 1
+          border.color: Qt.alpha(root.foreground, steamHit.containsMouse ? 0.35 : 0.18)
+          Accessible.role: Accessible.Button
+          Accessible.name: "Open Steam's settings to turn off its achievement popups"
+          Behavior on color { ColorAnimation { duration: 120 } }
+          Text {
+            textFormat: Text.PlainText
+            id: steamText
+            anchors.centerIn: parent
+            text: "Turn off in Steam ↗"
+            color: root.foreground
+            opacity: 0.8
+            font.family: Commons.Style.font.family
+            font.pixelSize: Commons.Style.font.caption
           }
-          onCanceled: glassSlider.dragged = -1
+          MouseArea {
+            id: steamHit
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: Qt.openUrlExternally("steam://open/settings/notifications")
+          }
         }
       }
-    }
 
-    SettingRow {
-      label: "SOUND"
-      Chips {
-        options: [
-          { value: "omatrophy", label: "OmaTrophy" },
-          { value: "classic", label: "Classic" },
-          { value: "off", label: "Silent" }
-        ]
-        value: root.sound ? root.chimes : "off"
-        onPicked: value => root.set("sound", value)
+      Caption {
+        textFormat: Text.PlainText
+        width: parent.width
+        wrapMode: Text.WordWrap
+        opacity: 0.4
+        text: "Steam shows its own popup too. On the page this opens, find \"When I unlock an achievement\" and untick Show Toast (and Play Sound)."
       }
     }
 
-    // The opt-in profile backfill (ADR 11). The switch goes through
-    // `set community`, like every other setting.
-    SettingRow {
-      label: "STEAM PROFILE"
-      Chips {
-        options: [
-          { value: "off", label: "Off" },
-          { value: "on", label: "Fill in" }
-        ]
-        value: root.community ? "on" : "off"
-        onPicked: value => root.set("community", value)
-      }
-    }
-
-    Caption {
-      textFormat: Text.PlainText
-      width: root.width
-      wrapMode: Text.WordWrap
-      opacity: 0.4
-      text: root.backfillText()
-    }
-
-    // Steam shows its own popup for the same unlock. OmaTrophy only reads
-    // Steam's files (ADR 1), and Steam rewrites its config while it runs,
-    // so this opens Steam's Notifications page for the owner to switch it
-    // off there. Page id and labels from Steam's own client UI (steamui).
-    SettingRow {
-      label: "STEAM POPUPS"
-      Rectangle {
-        id: steamButton
-        width: steamText.implicitWidth + Commons.Style.space(20)
-        height: steamText.implicitHeight + Commons.Style.space(10)
-        radius: height / 2
-        color: steamHit.containsMouse ? Commons.Style.hoverFill : "transparent"
-        border.width: 1
-        border.color: Qt.alpha(root.foreground, steamHit.containsMouse ? 0.35 : 0.18)
-        Accessible.role: Accessible.Button
-        Accessible.name: "Open Steam's settings to turn off its achievement popups"
-        Behavior on color { ColorAnimation { duration: 120 } }
-        Text {
-          textFormat: Text.PlainText
-          id: steamText
-          anchors.centerIn: parent
-          text: "Turn off in Steam ↗"
-          color: root.foreground
-          opacity: 0.8
-          font.family: Commons.Style.font.family
-          font.pixelSize: Commons.Style.font.caption
-        }
-        MouseArea {
-          id: steamHit
-          anchors.fill: parent
-          hoverEnabled: true
-          cursorShape: Qt.PointingHandCursor
-          onClicked: Qt.openUrlExternally("steam://open/settings/notifications")
-        }
-      }
-    }
-
-    Caption {
-      textFormat: Text.PlainText
-      width: root.width
-      wrapMode: Text.WordWrap
-      opacity: 0.4
-      text: "Steam shows its own popup too. On the page this opens, find \"When I unlock an achievement\" and untick Show Toast (and Play Sound)."
-    }
-
-    Caption {
-      width: root.width
-      topPadding: Commons.Style.space(6)
-      horizontalAlignment: Text.AlignHCenter
-      opacity: 0.4
-      text: "Changes apply to the next toast · try one with a preview tile"
+    StoreCard {
+      storeId: "gog"
+      missing: "Play a GOG game once through Heroic Games Launcher, signed in to GOG."
+      note: "Through Heroic Games Launcher. Toasts come live while you play; nothing to set."
     }
   }
 }

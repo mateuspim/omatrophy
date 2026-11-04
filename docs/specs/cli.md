@@ -18,8 +18,14 @@ installed.
 | `set icons omarchy\|vector\|painted` | Trophy art set. |
 | `set glass clear\|frosted\|solid` | How see-through toasts are. |
 | `set tracker-sort recent\|rarity\|name\|game` | The tracker's sort; the tracker writes it when you change it. |
+| `set games-sort recent\|closest\|name`, `set rarest ever\|month\|platinum` | The panel's last Games sort and rarest list; the panel writes them when you pick one, so the next open shows the same view. |
+| `set now-metals\|now-recent\|now-rarest\|now-shelf on\|off` | Shows or hides that section of the panel's Now tab. |
 | `set community on\|off` | The opt-in backfill of games that never ran on this machine from your public Steam profile ([ADR 11](../adr/0011-backfill-from-the-community-profile.md)). With it on, the watcher fetches in the background after `ready`. |
 | `sync` | Runs that backfill now, one line per game (`steam: 3/444 1903340: 55 achievements`), at most the run's page budget (15 to start; halved after a 429, five more after a run that used it all, between 5 and 30), ending `paused: N fetched, M left for later runs` when more are due, then `fetched N`; "stopped early" after any error (a 429 rate limit, offline, private profile), and the next run picks up where it stopped. The watcher runs the same backfill every hour. Exits non-zero while `community` is off. |
+| `favorite <store> <game>`, `favorite clear` | Sets or clears the Profile tab's favorite game (config.json's `favorite`). Exits non-zero for an unknown store. |
+| `completionist add\|remove <store> <game>` | Pins or unpins a finished game on the Profile's completionist tile (config.json's `completionist`). Exits non-zero for an unknown store, or when adding to a full tile (four). |
+| `showcase order <key>...`, `completionist order <key>...` | Saves a new order for those pins; every pinned key exactly once, or it exits non-zero naming the current ones. The Profile tab's drag-to-reorder writes it. |
+| `showcase add\|remove <store> <game> [api]` | Pins or unpins one achievement (with no `api`, the game's platinum) on the Profile showcase, in config.json's `showcase`. Exits non-zero for an unknown store, or when adding to a full showcase (six). |
 | `hide <store> <game>` | Adds `"store:game"` to `hidden` in config.json: the game leaves `cabinet`'s `nearest`, the Games tab's Closest sort and the panel's platinum shelf (`now` still lists it in `shelf`; the panel filters). Exits non-zero for an unknown store. |
 | `unhide <store> <game>` | Takes it back out. |
 | `demo [kind...]` | Prints sample events straight to stdout, then idles. For `dev/preview.sh`. |
@@ -38,7 +44,13 @@ the next read names them locally. The command itself exits at once.
 ```json
 {"games": 126, "trophies": 1779, "platinums": 12,
  "playing": {...card, "hero": "...", "since": 1793065549, "session": [...], "next": [...]} | null,
- "recent": [card, ...], "shelf": [card, ...]}
+ "recent": [card, ...], "shelf": [card, ...],
+ "metals": {"bronze", "silver", "gold"}, "completion": 40, "started": 80,
+ "playtime": {"total": 752100, "recent": 2343}, "favorite": {...card, "minutes", "rare", "rarest": [unlock, ...]} | null,
+ "completionist": [card + {"key"}, ...],
+ "showcase": [{"key", "store", "app", "api", "name", "icon", "time", "percent", "tier", "game"}, ...],
+ "nearest": [card, ...], "stores": [{"id", "name", "found", "games"}, ...],
+ "rarest": {"ever": [unlock, ...], "month": [unlock, ...], "platinum": [unlock, ...]}}
 ```
 
 - A **card** is a `status` row plus `game`, `header`, `played` (last
@@ -52,6 +64,37 @@ the next read names them locally. The command itself exits at once.
   hidden achievements and `progress` is as in [game](#game).
 - `recent`: the three games played last, minus the running one.
 - `shelf`: every complete game, newest platinum first, with `latest` empty.
+- `metals`: every unlock counted by the metal its toast would have, from
+  cached rarity (an unknown rarity counts as bronze, as its toast would);
+  `completion`: the average share unlocked, in whole percent, over games
+  with at least one unlock.
+- `started`: games with at least one unlock. `playtime`: minutes played
+  over every game a store keeps playtime for (achievements or not), in
+  all and in the past two weeks (stores without a two-week figure add
+  nothing to `recent`). `favorite`: the game set with `favorite`, with
+  its `minutes`, `rare` (its gold-tier unlocks) and `rarest`, its six
+  rarest unlocks, rarest first; `null` when none is set or it is gone.
+  `completionist`: the pinned games still at 100%, in pin order. Cards in
+  `recent` carry `minutes` too (`0` when unknown).
+- `showcase`: the pinned trophies still earned, in pin order; a
+  platinum pick has `api` `""`, `name` `"Platinum"`, tier `platinum` and
+  the game's art as `icon`. Picks whose game or unlock is gone are left
+  out.
+- `stores`: every store OmaTrophy knows (`stores.STORES` order), whether
+  it was found on this machine, and how many of its games have
+  achievements; Settings shows one card per store.
+- `nearest`: the six started, unfinished games closest to 100%, ties to
+  the one with fewer left, with `latest` empty; the panel fills the
+  platinum shelf's empty slots with them. Hidden games are left out.
+- `rarest`: the eight unlocks fewest players have across the library,
+  ever, since the first of this month (local time) and from finished
+  games only (`platinum`), rarest first, ties to the newest; hidden
+  games are left out. The Now tab shows three
+  and the Profile showcase six; the spares let it drop a game hidden
+  since the read. An **unlock** is
+  `{name, icon, time, api, percent, tier, store, app, game}`. Rarity is read from the cache only, so `now` makes
+  no request for it; unlocks of games with no cached rarity are left out.
+  The watcher fetches the missing ones once after `ready`.
 
 ## games
 
@@ -89,6 +132,11 @@ with the same JSON:
 omarchy-shell shell summon pym.omatrophy '{"store":"steam","app":"1774580"}'
 omarchy-shell shell summon pym.omatrophy '{}'   # the running or last game
 ```
+
+An `api` key (an achievement's id from [game](#game)) opens the game with
+that achievement highlighted in the middle of the list, revealed if it is
+hidden, clearing a filter or search that would leave it out. The panel's
+rarest unlocks open this way.
 
 ## Environment
 

@@ -7,7 +7,9 @@ import qs.Commons as Commons
 
 // The tracker's card: one game's every achievement, with rarity, the date
 // you got it, and filters (all, locked, unlocked, rare) plus type-to-search.
-// Read-only. Built from its text by Tracker.qml (FreshObject.qml), so it must not use
+// It changes nothing in a game; the only things it writes are your own
+// settings through omatrophy.py (its sort; trophies pinned to the Profile
+// showcase with ☆, finished games to its completionist tile). Built from its text by Tracker.qml (FreshObject.qml), so it must not use
 // other QML types from this folder. Tracker.qml calls load(); dev/render.sh
 // sets `game` to sample data instead.
 Item {
@@ -48,6 +50,15 @@ Item {
   property bool cascading: false
   // Hidden achievements revealed with Enter, by api name; hover reveals too.
   property var revealed: ({})
+  // The Profile showcase's picks from config.json, so a ★ shows lit;
+  // "store:game:api", or "store:game" for a game's platinum.
+  property var showcaseKeys: []
+  readonly property int showcaseMax: 6
+  // Finished games pinned to the Profile's completionist tile, "store:game".
+  property var completionistKeys: []
+  readonly property int completionistMax: 4
+  // An achievement to highlight once the game loads, from the request.
+  property string focusApi: ""
 
   readonly property color foreground: Commons.Color.menu.text
   readonly property color background: Commons.Color.menu.background
@@ -63,6 +74,7 @@ Item {
   // Called by Tracker.qml with the summon payload: {store, app}, or empty
   // for the game running now (or played last).
   function load(request) {
+    focusApi = request && request.api ? String(request.api) : ""
     var args = ["python3", helperPath, "game"]
     if (request && request.store && request.app) args = args.concat([String(request.store), String(request.app)])
     loader.command = args
@@ -78,6 +90,7 @@ Item {
     cascading = true
     rebuild()
     cascadeEnd.restart()
+    if (focusApi) Qt.callLater(focusRequested)
   }
   onFilterChanged: rebuild()
   onSearchChanged: {
@@ -167,6 +180,59 @@ Item {
     shownApis = order
   }
 
+  // Opened on one achievement (a rarest unlock in the panel): clear what
+  // could hide it, then highlight it in the middle of the list, revealed
+  // if it is a hidden one.
+  function focusRequested() {
+    var api = focusApi
+    focusApi = ""
+    if (!byApi[api]) return
+    if (!keep(byApi[api])) {
+      filter = "all"
+      search = ""
+      appliedSearch = ""
+      rebuild()
+    }
+    var index = rows.findIndex(function(a) { return a.api === api })
+    if (index < 0) return
+    list.currentIndex = index
+    list.positionViewAtIndex(index, ListView.Center)
+    if (byApi[api].hidden) {
+      var next = Object.assign({}, revealed)
+      next[api] = true
+      revealed = next
+    }
+  }
+
+  function showcaseKey(api) {
+    return game ? game.store + ":" + game.app + (api ? ":" + api : "") : ""
+  }
+
+  function pinned(api) {
+    return showcaseKeys.indexOf(showcaseKey(api)) >= 0
+  }
+
+  // Pins or unpins one trophy (no api: the game's platinum) on the Profile
+  // showcase. Shown at once; omatrophy.py writes config.json, which the
+  // panel reads on its next open. A full showcase takes no more.
+  function togglePin(api) {
+    var key = showcaseKey(api)
+    var add = showcaseKeys.indexOf(key) < 0
+    if (add && showcaseKeys.length >= showcaseMax) return
+    showcaseKeys = add ? showcaseKeys.concat([key]) : showcaseKeys.filter(function(k) { return k !== key })
+    var args = ["python3", helperPath, "showcase", add ? "add" : "remove", String(game.store), String(game.app)]
+    saver.exec(api ? args.concat([api]) : args)
+  }
+
+  // Pins or unpins this finished game on the completionist tile.
+  function toggleCompletionist() {
+    var key = showcaseKey("")
+    var add = completionistKeys.indexOf(key) < 0
+    if (add && completionistKeys.length >= completionistMax) return
+    completionistKeys = add ? completionistKeys.concat([key]) : completionistKeys.filter(function(k) { return k !== key })
+    saver.exec(["python3", helperPath, "completionist", add ? "add" : "remove", String(game.store), String(game.app)])
+  }
+
   // Move the highlighted row; the first key press lands on the first row.
   function moveTo(index) {
     if (list.count === 0) return
@@ -229,6 +295,8 @@ Item {
       try { c = JSON.parse(text()) } catch (e) { return }
       if (c.icons) root.iconSet = c.icons
       if (c["tracker-sort"]) root.sortBy = c["tracker-sort"]
+      if (Array.isArray(c.showcase)) root.showcaseKeys = c.showcase
+      if (Array.isArray(c.completionist)) root.completionistKeys = c.completionist
     }
   }
 
@@ -263,6 +331,44 @@ Item {
 
   // One trophy, drawn the way the cards draw it (the omarchy set's inlay
   // painted in the theme accent).
+  // A ★ that pins a trophy to the Profile showcase: lit while pinned,
+  // dim on offer, and "full" when six are already pinned.
+  component PinStar: Rectangle {
+    id: pin
+    property bool on: false
+    readonly property bool full: !on && root.showcaseKeys.length >= root.showcaseMax
+    readonly property bool hovered: pinHit.containsMouse
+    signal toggled()
+    width: Commons.Style.space(26)
+    height: width
+    radius: width / 2
+    color: pinHit.containsMouse && !full ? Commons.Style.hoverFill : "transparent"
+    Accessible.role: Accessible.CheckBox
+    Accessible.name: on ? "Pinned to the showcase" : "Pin to the showcase"
+    Accessible.checked: on
+    Text {
+      textFormat: Text.PlainText
+      anchors.centerIn: parent
+      text: pin.on ? "★" : "☆"
+      color: pin.on ? Commons.Color.accent : root.foreground
+      opacity: pin.on ? 1 : (pin.full ? 0.2 : (pinHit.containsMouse ? 0.9 : 0.5))
+      font.pixelSize: Commons.Style.font.title
+    }
+    MouseArea {
+      id: pinHit
+      anchors.fill: parent
+      hoverEnabled: true
+      cursorShape: pin.full ? Qt.ArrowCursor : Qt.PointingHandCursor
+      onClicked: if (!pin.full) pin.toggled()
+    }
+    PanelToolTip {
+      visible: pinHit.containsMouse
+      text: pin.on ? "On your showcase · click to take it off"
+            : pin.full ? "Your showcase is full (6) · unpin one first"
+            : "Pin to your Profile's showcase"
+    }
+  }
+
   component Trophy: Item {
     id: trophy
     property string style: "omarchy"
@@ -521,7 +627,7 @@ Item {
 
         Row {
           spacing: Commons.Style.space(8)
-          visible: root.game !== null && (root.game.playing || root.game.platinum > 0)
+          visible: root.game !== null
           Rectangle {
             visible: root.game !== null && root.game.playing
             width: playingText.width + Commons.Style.space(12)
@@ -554,6 +660,47 @@ Item {
               font.family: Commons.Style.font.family
               font.pixelSize: Commons.Style.font.bodySmall
               font.bold: true
+            }
+            // A finished game can go on the Profile's completionist tile;
+            // labelled, so it doesn't read as one more star or favorite.
+            Rectangle {
+              id: completionistButton
+              readonly property bool on: root.game !== null && root.completionistKeys.indexOf(root.showcaseKey("")) >= 0
+              readonly property bool full: !on && root.completionistKeys.length >= root.completionistMax
+              anchors.verticalCenter: parent.verticalCenter
+              width: completionistText.implicitWidth + Commons.Style.space(14)
+              height: completionistText.implicitHeight + Commons.Style.space(6)
+              radius: height / 2
+              color: on ? Qt.alpha(Commons.Color.accent, 0.25) : (completionistHit.containsMouse && !full ? Commons.Style.hoverFill : Qt.alpha(root.background, 0.5))
+              border.width: 1
+              border.color: on ? Commons.Color.accent : Qt.alpha(root.foreground, 0.25)
+              opacity: full ? 0.5 : 1
+              Accessible.role: Accessible.CheckBox
+              Accessible.name: "On the Profile's completionist tile"
+              Accessible.checked: on
+              Text {
+                textFormat: Text.PlainText
+                id: completionistText
+                anchors.centerIn: parent
+                text: (completionistButton.on ? "★" : "☆") + " Completionist"
+                color: completionistButton.on ? Commons.Color.accent : root.foreground
+                font.family: Commons.Style.font.family
+                font.pixelSize: Commons.Style.font.caption
+                font.bold: completionistButton.on
+              }
+              MouseArea {
+                id: completionistHit
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: completionistButton.full ? Qt.ArrowCursor : Qt.PointingHandCursor
+                onClicked: if (!completionistButton.full) root.toggleCompletionist()
+              }
+              PanelToolTip {
+                visible: completionistHit.containsMouse
+                text: completionistButton.on ? "On your Profile's completionist tile · click to take it off"
+                      : completionistButton.full ? "The completionist tile is full (4) · unpin one first"
+                      : "Show this platinum on your Profile's completionist tile"
+              }
             }
           }
         }
@@ -802,7 +949,9 @@ Item {
         Component.onCompleted: if (root.cascading) { opacity = 0; entry.start() }
         SequentialAnimation {
           id: entry
-          PauseAnimation { duration: Math.min(row.index, 12) * 22 }
+          // A row leaving the ListModel reports index -1, and a negative
+          // pause floods the shell log with warnings.
+          PauseAnimation { duration: Math.max(0, Math.min(row.index, 12)) * 22 }
           NumberAnimation { target: row; property: "opacity"; to: 1; duration: 180; easing.type: Easing.OutCubic }
         }
 
@@ -849,8 +998,8 @@ Item {
         Column {
           anchors.left: iconFrame.right
           anchors.leftMargin: Commons.Style.space(12)
-          anchors.right: side.left
-          anchors.rightMargin: Commons.Style.space(12)
+          anchors.right: rowPin.left
+          anchors.rightMargin: Commons.Style.space(8)
           anchors.verticalCenter: parent.verticalCenter
           spacing: Commons.Style.space(3)
           Text {
@@ -870,6 +1019,19 @@ Item {
             text: row.secret ? "Hover or press Enter to reveal" : row.ach.desc
             visible: text !== ""
           }
+        }
+
+        // Only an earned trophy can go on the showcase; the star shows on
+        // hover, or always once pinned.
+        PinStar {
+          id: rowPin
+          anchors.right: side.left
+          anchors.rightMargin: Commons.Style.space(6)
+          anchors.verticalCenter: parent.verticalCenter
+          visible: row.ach.unlocked
+          on: root.pinned(row.ach.api)
+          opacity: on || rowHover.containsMouse || hovered ? 1 : 0
+          onToggled: root.togglePin(row.ach.api)
         }
 
         Column {

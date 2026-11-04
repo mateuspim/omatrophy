@@ -369,6 +369,11 @@ class Played(unittest.TestCase):
     def test_last_played_newest_first_without_never_played(self):
         self.assertEqual(steam.last_played(LOCALCONFIG), [(1800000000, '20'), (1700000000, '10')])
 
+    def test_playtimes_in_minutes_with_no_two_week_figure_as_zero(self):
+        text = ('"apps" { "10" { "LastPlayed" "1" "Playtime" "120" "Playtime2wks" "30" }'
+                ' "20" { "Playtime" "45" } "30" { "LastPlayed" "1" } "../x" { "Playtime" "9" } }')
+        self.assertEqual(steam.playtimes(text), {'10': {'total': 120, 'recent': 30}, '20': {'total': 45, 'recent': 0}})
+
     def test_store_reads_its_accounts_localconfig(self):
         sd = SteamDir(['First'])
         self.addCleanup(sd.close)
@@ -405,6 +410,17 @@ class Played(unittest.TestCase):
 
 
 class Rarity(unittest.TestCase):
+    def test_known_percents_reads_the_cache_at_any_age_and_never_the_network(self):
+        with tempfile.TemporaryDirectory() as cache, mock.patch.object(steam, 'CACHE', cache), \
+                mock.patch.object(steam, 'http_json', side_effect=AssertionError('network')):
+            store = steam.Steam.__new__(steam.Steam)
+            self.assertEqual(store.known_percents(APP), {})
+            os.makedirs(f'{cache}/rarity')
+            with open(f'{cache}/rarity/{APP}.json', 'w') as f:
+                json.dump({'time': 0, 'percents': {'ACH_0': 12.5}}, f)
+            self.assertEqual(store.known_percents(APP), {'ACH_0': 12.5})
+            self.assertEqual(store.known_percents('../x'), {})
+
     def test_cached_a_day_and_kept_when_offline(self):
         body = {'achievementpercentages': {'achievements': [{'name': 'ACH_0', 'percent': '12.5'}]}}
         with tempfile.TemporaryDirectory() as cache, mock.patch.object(steam, 'CACHE', cache):
@@ -493,6 +509,73 @@ class NowTab(unittest.TestCase):
         d = omatrophy.detail(ach('a', hidden=True, icon_locked='g.jpg'), {'a': 4.0})
         self.assertEqual((d['percent'], d['tier'], d['hidden'], d['icon_locked']), (4.0, 'gold', True, 'g.jpg'))
         self.assertEqual(omatrophy.detail(ach('b'), {})['tier'], 'bronze')
+
+    def test_store_rows_count_games_and_keep_found_stores_with_none(self):
+        class Steamish:
+            id, name = 'steam', 'Steam'
+
+        class Gogish:
+            id, name = 'gog', 'GOG'
+
+        steam_store, gog_store = Steamish(), Gogish()
+        lib = [(steam_store, '1', []), (steam_store, '2', [])]
+        self.assertEqual(omatrophy.store_rows([Steamish, Gogish], [steam_store, gog_store], lib),
+                         [{'id': 'steam', 'name': 'Steam', 'found': True, 'games': 2},
+                          {'id': 'gog', 'name': 'GOG', 'found': True, 'games': 0}])
+
+    def test_average_completion_counts_started_games_only(self):
+        rows = [{'unlocked': 1, 'total': 4}, {'unlocked': 4, 'total': 4}, {'unlocked': 0, 'total': 9}]
+        self.assertEqual(omatrophy.average_completion(rows), 63)
+        self.assertEqual(omatrophy.average_completion([]), 0)
+
+    def test_metal_tally_counts_unlocks_by_tier_unknown_as_bronze(self):
+        class Fake:
+            id = 'steam'
+            def known_percents(self, game):
+                return {'a': 5.0, 'b': 20.0, 'c': 80.0}
+        achs = [ach('a', True, 1), ach('b', True, 0), ach('c', True, 2), ach('d', True, 3), ach('e')]
+        self.assertEqual(omatrophy.metal_tally([(Fake(), '1', achs)]), {'bronze': 2, 'silver': 1, 'gold': 1})
+
+    def test_playtime_totals_skip_unknown_two_week_figures(self):
+        playtime = {('steam', '1'): {'total': 120, 'recent': 30}, ('gog', '2'): {'total': 60, 'recent': None}}
+        self.assertEqual(omatrophy.playtime_totals(playtime), {'total': 180, 'recent': 30})
+        self.assertEqual(omatrophy.playtime_totals({}), {'total': 0, 'recent': 0})
+
+    def test_favorite_card_lists_its_rarest_unlocks(self):
+        class Fake:
+            id = 'steam'
+            def known_percents(self, game):
+                return {'a': 40.0, 'b': 3.0, 'c': 9.0, 'd': 1.0}
+            def game_name(self, game):
+                return 'Fav'
+            def art(self, game):
+                return {'header': 'h.jpg', 'hero': ''}
+        achs = [ach('a', True, 1), ach('b', True, 2), ach('c', True, 3), ach('d'), ach('e', True, 4)]
+        card = omatrophy.favorite_card(Fake(), '7', achs, 90, n=2)
+        self.assertEqual([u['api'] for u in card['rarest']], ['b', 'c'])
+        self.assertEqual((card['game'], card['minutes'], card['rare'], card['unlocked']), ('Fav', 90, 2, 4))
+
+    def test_rarest_unlocks_rarest_first_ties_to_the_newest(self):
+        unlocks = [{'name': 'a', 'percent': 30.0, 'time': 5}, {'name': 'b', 'percent': 2.0, 'time': 6},
+                   {'name': 'c', 'percent': 2.0, 'time': 9}, {'name': 'd', 'percent': None, 'time': 9}]
+        self.assertEqual([u['name'] for u in omatrophy.rarest_unlocks(unlocks, 2)], ['c', 'b'])
+        self.assertEqual([u['name'] for u in omatrophy.rarest_unlocks(unlocks, 5, since=7)], ['c'])
+        self.assertEqual(omatrophy.rarest_unlocks([], 3), [])
+
+    def test_month_start_is_the_first_local_midnight_of_the_month(self):
+        mid_march = time.mktime((2026, 3, 17, 15, 30, 0, 0, 0, -1))
+        start = time.localtime(omatrophy.month_start(mid_march))
+        self.assertEqual((start.tm_year, start.tm_mon, start.tm_mday, start.tm_hour, start.tm_min), (2026, 3, 1, 0, 0))
+
+    def test_library_unlocks_skip_locked_and_undated(self):
+        class Fake:
+            id = 'steam'
+            def known_percents(self, game):
+                return {'a': 4.0}
+        achs = [ach('a', True, 5), ach('b', True, 0), ach('c'), ach('d', True, 7)]
+        out = omatrophy.library_unlocks([(Fake(), '1', achs)])
+        self.assertEqual([(u['name'], u['percent'], u['store'], u['app']) for u in out],
+                         [('A', 4.0, 'steam', '1'), ('D', None, 'steam', '1')])
 
 
 class FakeLibrary:
@@ -587,6 +670,72 @@ class PanelJson(unittest.TestCase):
             now = omatrophy.now()
         self.assertIsNone(now['playing'])
         self.assertEqual([c['app'] for c in now['recent']], ['20', '10'])
+
+    def test_now_lists_the_rarest_unlocks_with_their_games(self):
+        with FakeLibrary():
+            rarest = omatrophy.now()['rarest']
+        self.assertEqual([(u['name'], u['percent'], u['tier'], u['game']) for u in rarest['ever'][:3]],
+                         [('Half Game 1', 5.0, 'gold', 'Half Game'), ('Done Game 1', 5.0, 'gold', 'Done Game'),
+                          ('Half Game 0', 50.0, 'bronze', 'Half Game')])
+        # The fake unlocks are from 1970, long before this month.
+        self.assertEqual(rarest['month'], [])
+        # Only Done Game is finished.
+        self.assertEqual([u['name'] for u in rarest['platinum']], ['Done Game 1', 'Done Game 0'])
+
+    def test_hidden_games_leave_the_rarest_unlocks_and_the_nearest(self):
+        with FakeLibrary(hidden=['steam:20']):
+            now = omatrophy.now()
+        self.assertEqual({u['app'] for u in now['rarest']['ever']}, {'10'})
+        self.assertEqual(now['nearest'], [])
+
+    def test_now_lists_the_games_nearest_platinum(self):
+        with FakeLibrary():
+            nearest = omatrophy.now()['nearest']
+        self.assertEqual([(c['app'], c['game'], c['unlocked'], c['total']) for c in nearest],
+                         [('20', 'Half Game', 2, 4)])
+        self.assertEqual(nearest[0]['latest'], [])
+
+    def test_now_lists_every_known_store_found_or_not(self):
+        with FakeLibrary():
+            rows = omatrophy.now()['stores']
+        self.assertEqual(rows, [{'id': 'steam', 'name': 'Steam', 'found': True, 'games': 3},
+                                {'id': 'gog', 'name': 'GOG', 'found': False, 'games': 0}])
+
+    def test_now_counts_metals_and_average_completion(self):
+        with FakeLibrary():
+            now = omatrophy.now()
+        # ACH_0 is 50% (bronze) and ACH_1 5% (gold) in both started games.
+        self.assertEqual(now['metals'], {'bronze': 2, 'silver': 0, 'gold': 2})
+        self.assertEqual(now['completion'], 75)
+
+    def test_now_has_no_favorite_until_one_is_set(self):
+        with FakeLibrary():
+            now = omatrophy.now()
+            with redirect_stdout(io.StringIO()):
+                omatrophy.set_favorite('steam', '20')
+            favorite = omatrophy.now()['favorite']
+        self.assertIsNone(now['favorite'])
+        self.assertEqual((favorite['app'], [u['name'] for u in favorite['rarest']]), ('20', ['Half Game 1', 'Half Game 0']))
+        self.assertEqual(now['playtime'], {'total': 0, 'recent': 0})
+        self.assertEqual(now['started'], 2)
+        self.assertEqual([c['minutes'] for c in now['recent']], [0, 0])
+
+    def test_showcase_shows_earned_picks_and_skips_the_rest(self):
+        with FakeLibrary():
+            store = steam.Steam()
+            by_key = {('steam', g): (store, store.achievements(g)) for g in ('10', '20', '30')}
+            items = omatrophy.showcase_items(['steam:20:ACH_1', 'steam:10', 'steam:20', 'steam:20:ACH_3',
+                                              'steam:99:ACH_0', 'gog:1:A'], by_key)
+        self.assertEqual([(i['key'], i['name'], i['tier']) for i in items],
+                         [('steam:20:ACH_1', 'Half Game 1', 'gold'), ('steam:10', 'Platinum', 'platinum')])
+        self.assertEqual(items[1]['game'], 'Done Game')
+
+    def test_completionist_shows_pinned_games_still_finished(self):
+        with FakeLibrary():
+            store = steam.Steam()
+            by_key = {('steam', g): (store, store.achievements(g)) for g in ('10', '20')}
+            cards = omatrophy.completionist_cards(['steam:20', 'steam:10', 'steam:99'], by_key)
+        self.assertEqual([(c['key'], c['game']) for c in cards], [('steam:10', 'Done Game')])
 
     def test_game_detail_for_the_tracker(self):
         with FakeLibrary(running={'game': '20', 'since': 0}):
@@ -951,6 +1100,80 @@ class Settings(unittest.TestCase):
                 omatrophy.set_option('tracker-sort', 'random')
 
 
+    def test_now_sections_switch_on_and_off_as_booleans(self):
+        with tempfile.TemporaryDirectory() as home, mock.patch.dict(os.environ, {'HOME': home}):
+            with redirect_stdout(io.StringIO()):
+                omatrophy.set_option('now-rarest', 'off')
+                omatrophy.set_option('now-shelf', 'on')
+            with open(f'{home}/.config/omatrophy/config.json') as f:
+                self.assertEqual(json.load(f), {'now-rarest': False, 'now-shelf': True})
+            with self.assertRaises(SystemExit):
+                omatrophy.set_option('now-rarest', 'maybe')
+            with self.assertRaises(SystemExit):
+                omatrophy.set_option('now-playing', 'off')
+
+    def test_panel_view_picks_are_kept(self):
+        with tempfile.TemporaryDirectory() as home, mock.patch.dict(os.environ, {'HOME': home}):
+            with redirect_stdout(io.StringIO()):
+                omatrophy.set_option('games-sort', 'closest')
+                omatrophy.set_option('rarest', 'platinum')
+            with open(f'{home}/.config/omatrophy/config.json') as f:
+                self.assertEqual(json.load(f), {'games-sort': 'closest', 'rarest': 'platinum'})
+            with self.assertRaises(SystemExit):
+                omatrophy.set_option('rarest', 'yesterday')
+
+    def test_showcase_pins_in_order_up_to_six(self):
+        self.assertEqual(omatrophy.with_showcase(['a', 'b'], 'c', True), ['a', 'b', 'c'])
+        self.assertEqual(omatrophy.with_showcase(['a', 'b'], 'a', True), ['b', 'a'])
+        self.assertEqual(omatrophy.with_showcase(['a', 'b'], 'a', False), ['b'])
+        self.assertIsNone(omatrophy.with_showcase(list('abcdef'), 'g', True))
+        self.assertEqual(omatrophy.with_showcase('broken', 'a', True), ['a'])
+
+    def test_showcase_command_writes_config(self):
+        with tempfile.TemporaryDirectory() as home, mock.patch.dict(os.environ, {'HOME': home}):
+            with redirect_stdout(io.StringIO()):
+                omatrophy.set_showcase('steam', '35140', 'ACH_BATMAN', True)
+                omatrophy.set_showcase('gog', '1413291984', '', True)
+            with open(f'{home}/.config/omatrophy/config.json') as f:
+                self.assertEqual(json.load(f)['showcase'], ['steam:35140:ACH_BATMAN', 'gog:1413291984'])
+            with self.assertRaises(SystemExit):
+                omatrophy.set_showcase('epic', '1', 'A', True)
+
+    def test_favorite_command_sets_and_clears(self):
+        with tempfile.TemporaryDirectory() as home, mock.patch.dict(os.environ, {'HOME': home}):
+            with redirect_stdout(io.StringIO()):
+                omatrophy.set_favorite('steam', '35140')
+                self.assertEqual(omatrophy.favorite_key(), 'steam:35140')
+                omatrophy.set_favorite('clear', '')
+            self.assertEqual(omatrophy.favorite_key(), '')
+            with self.assertRaises(SystemExit):
+                omatrophy.set_favorite('epic', '1')
+
+    def test_completionist_command_pins_up_to_four(self):
+        with tempfile.TemporaryDirectory() as home, mock.patch.dict(os.environ, {'HOME': home}):
+            with redirect_stdout(io.StringIO()):
+                for game in ('1', '2', '3', '4'):
+                    omatrophy.set_completionist('steam', game, True)
+            with self.assertRaises(SystemExit):
+                omatrophy.set_completionist('steam', '5', True)
+            with redirect_stdout(io.StringIO()):
+                omatrophy.set_completionist('steam', '2', False)
+            self.assertEqual(omatrophy.completionist_keys(), ['steam:1', 'steam:3', 'steam:4'])
+
+    def test_pins_reorder_only_as_a_permutation(self):
+        self.assertEqual(omatrophy.reordered(['a', 'b', 'c'], ['c', 'a', 'b']), ['c', 'a', 'b'])
+        self.assertIsNone(omatrophy.reordered(['a', 'b'], ['a']))
+        self.assertIsNone(omatrophy.reordered(['a', 'b'], ['a', 'b', 'x']))
+        self.assertIsNone(omatrophy.reordered(['a', 'b'], ['a', 'a']))
+        with tempfile.TemporaryDirectory() as home, mock.patch.dict(os.environ, {'HOME': home}):
+            with redirect_stdout(io.StringIO()):
+                omatrophy.set_showcase('steam', '1', 'A', True)
+                omatrophy.set_showcase('steam', '2', 'B', True)
+                omatrophy.set_pin_order('showcase', ['steam:2:B', 'steam:1:A'])
+            self.assertEqual(omatrophy.showcase_keys(), ['steam:2:B', 'steam:1:A'])
+            with self.assertRaises(SystemExit):
+                omatrophy.set_pin_order('showcase', ['steam:2:B'])
+
 class BackfillLoop(unittest.TestCase):
     def test_wait_doubles_after_failures_up_to_a_cap(self):
         wait = omatrophy.BACKFILL_WAIT
@@ -978,7 +1201,8 @@ class BackfillLoop(unittest.TestCase):
             if len(waits) == 3:
                 raise Stop
 
-        with mock.patch.object(omatrophy, 'warm_names'), self.assertRaises(Stop):
+        with mock.patch.object(omatrophy, 'warm_names'), mock.patch.object(omatrophy, 'warm_rarity'), \
+                self.assertRaises(Stop):
             omatrophy.background([Store()], [], sleep=sleep)
         self.assertEqual(waits, [4, 8, 1])
 
@@ -1007,6 +1231,25 @@ class WarmNames(unittest.TestCase):
         fake = Fake()
         omatrophy.warm_names([(fake, '1'), (fake, 'bad'), (fake, '2')], threads=2)
         self.assertEqual(sorted(asked), ['1', '2', 'bad'])
+
+
+class WarmRarity(unittest.TestCase):
+    def test_fetches_only_games_with_nothing_cached_and_survives_failures(self):
+        fetched = []
+
+        class Fake:
+            def known_percents(self, game):
+                return {'a': 1.0} if game == 'cached' else {}
+
+            def percents(self, game):
+                fetched.append(game)
+                if game == 'bad':
+                    raise OSError('offline')
+                return {}
+
+        fake = Fake()
+        omatrophy.warm_rarity([(fake, 'cached'), (fake, 'bad'), (fake, 'new')], threads=2)
+        self.assertEqual(sorted(fetched), ['bad', 'new'])
 
 
 class PanelAnswer(unittest.TestCase):
