@@ -1183,28 +1183,61 @@ class BackfillLoop(unittest.TestCase):
             waits.append(wait // 3600)
         self.assertEqual(waits, [4, 8, 8, 8, 8, 1])
 
-    def test_watcher_runs_the_backfill_again_and_backs_off(self):
+    def run_loop(self, results, sleeps, start=1_000_000):
+        """Run background() over a store answering `results` until it has
+        slept `sleeps` times; returns the sleeps in seconds."""
         class Store:
             id, name = 'fake', 'Fake'
-            results = iter([(1, True), (0, True), (3, False)])
+            answers = iter(results)
 
             def backfill(self, say=None):
-                return next(self.results)
+                return next(self.answers)
 
         class Stop(Exception):
             pass
 
+        now = [start]
         waits = []
 
         def sleep(seconds):
-            waits.append(seconds // 3600)
-            if len(waits) == 3:
+            waits.append(seconds)
+            now[0] += seconds
+            if len(waits) == sleeps:
                 raise Stop
 
         with mock.patch.object(omatrophy, 'warm_names'), mock.patch.object(omatrophy, 'warm_rarity'), \
                 self.assertRaises(Stop):
-            omatrophy.background([Store()], [], sleep=sleep)
-        self.assertEqual(waits, [4, 8, 1])
+            omatrophy.background([Store()], [], sleep=sleep, clock=lambda: now[0])
+        return waits
+
+    def test_watcher_runs_the_backfill_again_and_backs_off(self):
+        with tempfile.TemporaryDirectory() as home, mock.patch.dict(os.environ, {'HOME': home}):
+            waits = self.run_loop([(1, True), (0, True), (3, False)], 3)
+        self.assertEqual([w // 3600 for w in waits], [4, 8, 1])
+
+    def test_a_restart_waits_out_the_saved_backoff(self):
+        # Regression: every shell restart started a fresh watcher that
+        # asked Steam at once and met the same 429 again.
+        with tempfile.TemporaryDirectory() as home, mock.patch.dict(os.environ, {'HOME': home}):
+            self.run_loop([(0, True)], 1, start=1_000_000)
+            self.assertEqual(omatrophy.saved_backfill_schedule(), {'next': 1_000_000 + 4 * 3600, 'wait': 4 * 3600})
+            # Restarted an hour later: three hours left, then the doubled wait.
+            waits = self.run_loop([(0, True)], 2, start=1_000_000 + 3600)
+        self.assertEqual([w // 3600 for w in waits], [3, 8])
+
+    def test_a_saved_time_far_ahead_is_capped(self):
+        with tempfile.TemporaryDirectory() as home, mock.patch.dict(os.environ, {'HOME': home}):
+            omatrophy.write_json(omatrophy.backfill_schedule_path(), {'next': 10 ** 12, 'wait': 'x'})
+            self.assertEqual(omatrophy.pending_backfill_wait(0), omatrophy.BACKFILL_MAX_WAIT)
+            self.assertEqual(omatrophy.save_backfill_schedule(False, 0), omatrophy.BACKFILL_WAIT)
+            omatrophy.write_json(omatrophy.backfill_schedule_path(), ['not', 'a', 'dict'])
+            self.assertEqual(omatrophy.pending_backfill_wait(0), 0)
+
+    def test_a_pass_with_every_backfill_off_saves_nothing(self):
+        with tempfile.TemporaryDirectory() as home, mock.patch.dict(os.environ, {'HOME': home}):
+            waits = self.run_loop([None, None], 2)
+            self.assertEqual(waits, [omatrophy.BACKFILL_WAIT] * 2)
+            self.assertEqual(omatrophy.saved_backfill_schedule(), {})
 
     def test_a_store_that_raises_counts_as_failed(self):
         class Broken:

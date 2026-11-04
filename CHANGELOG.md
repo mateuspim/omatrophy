@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- The Steam profile backfill keeps the time of its next run on disk
+  (`~/.local/state/omatrophy/backfill.json`). Before, every shell restart
+  started the watcher's backfill at once, often straight into the same
+  429 it had just been told to wait out. A `sync` that meets a 429 now
+  pushes the watcher's next run back too. Needs one `omarchy restart
+  shell` for the running watcher to pick it up.
+
 ## 0.5.0 - 2026-11-04
 
 No shell restart needed: the panel picks the new parts up on its next

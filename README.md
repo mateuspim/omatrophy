@@ -207,7 +207,8 @@ omatrophy.py sync               # optional: fetch now with progress (the watcher
 
 Steam limits how fast a profile can be read, so the watcher fetches a few
 pages an hour (15 to start, fewer after Steam says to slow down, more while
-it doesn't) and a large library fills in over a day or two. Settings has
+it doesn't) and a large library fills in over a day or two. After a rate
+limit it waits a few hours, shell restarts included. Settings has
 the same switch, and shows how the latest run went. Toasts still
 come only from this machine's own data.
 
