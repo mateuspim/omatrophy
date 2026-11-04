@@ -207,8 +207,8 @@ but rank lower in excerpts.
 
 ### Agent adapters
 
-One table row per agent `omarchy-default-agent` offers (13 on
-2026-11-04). Each runs in a fresh, empty temporary folder, with the prompt
+One table row per agent `omarchy-default-agent` offers, except
+openclaw, which only runs through its own gateway and terminal app. Each runs in a fresh, empty temporary folder, with the prompt
 on stdin or as an argument and a 25 min ceiling per stage. A row is
 **supported** once slice c has checked, on a real run, that its lock keeps
 shell and file tools off. Until then `guide agents` shows it as "not
@@ -230,7 +230,6 @@ show it or timed out.
 | cursor-agent | unverified | unverified | unverified | unverified | none |
 | omp | unverified | unverified | unverified | unverified | none |
 | muse | unverified | unverified | unverified | unverified | none |
-| openclaw | unverified (runs through a gateway) | unverified | unverified | unverified | none |
 
 A missing agent fails with `omatrophy: guide: <agent> not found; install
 it or pick another in Settings > Guides`. An unsupported one fails with

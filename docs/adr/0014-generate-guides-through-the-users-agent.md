@@ -24,12 +24,14 @@ Omarchy installs or uses", with a choice of model in each one.
 
 What we found on 2026-11-04:
 
-- `omarchy-default-agent` offers 13 agents (pi, omp, opencode, claude,
-  codex, grok, gemini, openclaw, hermes, copilot, crush, cursor-agent,
-  muse) and records the user's pick in
+- `omarchy-default-agent` offers pi, omp, opencode, claude, codex, grok,
+  gemini, openclaw, hermes, copilot, crush, cursor-agent and muse, and
+  records the user's pick in
   `~/.config/omarchy/defaults/agent`. Its `omarchy-agent` launcher only
   opens an interactive session with every permission approved. That's
   wrong for an unattended job that should only read the web.
+  OpenClaw only runs through its own gateway and terminal app, with no
+  one-shot mode.
 - Each agent has its own headless mode, its own way to turn tools off,
   and its own list of models: a built-in set (claude's `opus`, `sonnet`,
   `fable` and any others its account offers), a local cache (codex's
@@ -56,7 +58,9 @@ What we found on 2026-11-04:
   timeouts.
 - **The agent and its model are the user's.** `guide-agent` in config.json
   picks the agent; empty means follow `omarchy-default-agent`. Every
-  agent that `omarchy-default-agent` offers gets an adapter: a table row
+  agent that `omarchy-default-agent` offers, except OpenClaw (it has no
+  one-shot mode, so a default of `openclaw` asks the user to pick
+  another), gets an adapter: a table row
   with its headless command, how to turn its tools off, how to allow web
   search, its model and effort flags, and where its models are listed.
   `guide agents` lists the installed agents with the models each one
