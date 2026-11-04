@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 - 2026-11-04
+
+No shell restart needed: the panel picks the new parts up on its next
+open.
 
 - Load from Steam: `omatrophy.py steam-load` opens the library page of
   every game you played that OmaTrophy can't see yet, and the Steam
