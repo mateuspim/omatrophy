@@ -36,7 +36,7 @@ Usage:
 Each store (stores/) reads its launcher's own files; this file diffs them and
 turns new unlocks into events. Steam and GOG (through Heroic) so far.
 """
-import hashlib, json, os, sys, threading, time, urllib.parse
+import hashlib, json, os, signal, sys, threading, time, urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 
 import stores
@@ -240,8 +240,8 @@ def sync():
 STEAM_LOAD_STALE = 60
 
 
-def steam_store():
-    steam = next((s for s in stores.available() if s.id == 'steam'), None)
+def steam_store(found=None):
+    steam = next((s for s in (found or stores.available()) if s.id == 'steam'), None)
     if not steam:
         raise SystemExit('Steam was not found. Install it and sign in, or set STEAM_DIR=/path/to/Steam')
     return steam
@@ -257,18 +257,24 @@ def steam_load_status():
     stats here, those no load has tried yet, and the latest run."""
     from stores import steam_loader
     steam = steam_store()
-    print(json.dumps({'missing': len(steam.missing(everything=True)), 'unchecked': len(steam.missing()),
+    played = steam.missing(everything=True)
+    tried = steam_loader.checked()
+    print(json.dumps({'missing': len(played), 'unchecked': len([a for a in played if a not in tried]),
                       'status': steam_loader.status()}))
 
 
 def steam_load(everything=False):
     """Load missing games' stats through the Steam client, printing progress."""
     from stores import steam_loader
-    steam = steam_store()
+    others = stores.available()
+    steam = steam_store(others)
     if steam_load_busy(steam_loader.status(), time.time()):
         raise SystemExit('A load from Steam is already running. Stop it with: omatrophy.py steam-load stop')
+    # A kill (or a closed terminal) must still run the loader's cleanup,
+    # or Steam's window stays on the hidden workspace.
+    for sig in (signal.SIGTERM, signal.SIGHUP):
+        signal.signal(sig, lambda *_: sys.exit(1))
     # Steam's window must not jump over a game from any store.
-    others = stores.available()
     busy = lambda: any(s.running() for s in others)
     result = steam.load_from_steam(busy, say=lambda line: print(f'steam: {line}', flush=True), everything=everything)
     if result['state'] == 'failed':

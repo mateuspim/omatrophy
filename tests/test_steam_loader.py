@@ -161,6 +161,14 @@ class Load(LoaderCache):
         self.run_load(['1'], busy=lambda: True)
         self.assertEqual(self.window.calls[-1], 'restore')
 
+    def test_a_killed_run_says_so_and_restores_the_window(self):
+        def killed(app):
+            raise SystemExit(1)
+        with self.assertRaises(SystemExit):
+            self.run_load(['1'], after=killed)
+        self.assertEqual(self.window.calls[-1], 'restore')
+        self.assertEqual(steam_loader.status()['state'], 'failed')
+
     def test_a_stopped_run_resumes_at_the_next_game(self):
         self.run_load(['1', '2', '3'], ready={'1', '2', '3'},
                       after=lambda app: app == '2' and steam_loader.request_stop())
@@ -252,6 +260,20 @@ class SteamWindowOnHyprland(unittest.TestCase):
         w.hide()
         w.restore()
         self.assertIn('hl.dsp.window.close({ window = "address:0x9" })', ctl.dispatched[-1])
+
+    def test_a_silent_hyprctl_does_not_make_the_users_window_the_loads(self):
+        ctl = FakeHyprctl([client('0x1', '4')])
+        answer = ctl.__call__
+        ctl_silent = lambda *args: None if args[0] == 'clients' and not ctl.clients_ok else answer(*args)
+        ctl.clients_ok = False
+        w = steam_loader.SteamWindow(ctl_silent)
+        w.hide()
+        self.assertIsNone(w.before)
+        ctl.clients_ok = True
+        w.hide()
+        w.restore()
+        self.assertNotIn('window.close', ''.join(ctl.dispatched))
+        self.assertIn('workspace = "4"', ctl.dispatched[-1])
 
     def test_nothing_without_hyprland(self):
         ctl = FakeHyprctl([client('0x1', '4')])

@@ -329,7 +329,8 @@ Column {
   // Detached: the panel's content is rebuilt on every open, and a child
   // process would end with it. `all` tries games a load already tried.
   function startSteamLoad(all) {
-    steamLoad = { state: "running", time: Date.now() / 1000, done: 0, total: all ? steamMissing : steamUnchecked,
+    clock = Date.now() / 1000
+    steamLoad = { state: "running", time: clock, done: 0, total: all ? steamMissing : steamUnchecked,
                   loaded: 0, none: 0, app: "" }
     Quickshell.execDetached(["python3", helperPath, "steam-load"].concat(all ? ["all"] : []))
   }
@@ -436,15 +437,15 @@ Column {
     path: root.live ? Quickshell.env("HOME") + "/.cache/omatrophy/steam-load/status.json" : ""
     watchChanges: true
     printErrors: false
-    onFileChanged: {
-      reload()
-      // Each loaded game joins the Games tab as it lands.
-      if (root.games !== null && !gamesReader.running) gamesReader.running = true
-    }
+    onFileChanged: reload()
     onLoaded: {
-      var was = root.steamLoad.state
+      var was = root.steamLoad
       try { root.steamLoad = JSON.parse(text()) } catch (e) {}
-      if (was === "running" && root.steamLoad.state !== "running") steamLoadReader.running = true
+      // Each loaded game joins the Games tab as it lands; the status is
+      // written twice a game, so only a new find or a new state re-reads it.
+      var changed = root.steamLoad.loaded !== was.loaded || root.steamLoad.state !== was.state
+      if (changed && root.games !== null && !gamesReader.running) gamesReader.running = true
+      if (was.state === "running" && root.steamLoad.state !== "running") steamLoadReader.running = true
     }
   }
 

@@ -147,10 +147,18 @@ class SteamWindow:
         self.moved = {}      # address -> workspace it came from
 
     def windows(self):
+        """Steam's windows, or None when hyprctl didn't answer: no answer
+        is not "no windows", or the user's own window would count as one
+        the load opened and be closed at the end."""
+        answer = self.ctl('clients', '-j')
+        if answer is None:
+            return None
         try:
-            clients = json.loads(self.ctl('clients', '-j') or '[]')
+            clients = json.loads(answer)
         except ValueError:
-            return []
+            return None
+        if not isinstance(clients, list):
+            return None
         return [c for c in clients if isinstance(c, dict) and c.get('class') == 'steam' and c.get('address')]
 
     def dispatch(self, lua):
@@ -169,6 +177,8 @@ class SteamWindow:
         if not self.enabled:
             return
         found = self.windows()
+        if found is None:
+            return
         if self.before is None:
             self.before = {c['address'] for c in found}
         for c in found:
@@ -260,6 +270,11 @@ def load(todo, has_stats, busy, opener=open_page, running=steam_running, say=Non
     try:
         return run(todo, has_stats, busy, opener, running, wait, poll, clock, sleep, window, tried, counts, report, end,
                    prepare or (lambda app: None))
+    except BaseException:
+        # A kill or a bug: the panel would show a live run until the status
+        # went stale; say it ended.
+        end('stopped: the load was interrupted; load again', 'failed', sum(counts.values()))
+        raise
     finally:
         window.restore()
 
