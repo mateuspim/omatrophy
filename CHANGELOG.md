@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.1 - 2026-11-04
 
 - The Steam profile backfill keeps the time of its next run on disk
   (`~/.local/state/omatrophy/backfill.json`). Before, every shell restart
