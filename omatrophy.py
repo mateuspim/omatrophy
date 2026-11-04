@@ -95,14 +95,19 @@ def unlocked_set(store, game):
 def check_game(store, game, seen):
     """Emit what is newly unlocked in one game, and the platinum when it completes it."""
     key = (store.id, game)
+    # A game with no baseline only just appeared (first played, or cached
+    # by Load from Steam): all its unlocks look new.
+    known = key in seen
     achs, now = unlocked_set(store, game)
     new = now - seen.get(key, set())
     seen[key] = now
     cutoff = time.time() - FRESH_SECONDS
     # A remote unlock came through an online backfill: it happened on
-    # another machine, so it isn't news here (ADR 11).
+    # another machine, so it isn't news here (ADR 11). An unlock with no
+    # time (Steam set the bit but stored none) is news only against a
+    # baseline; in a game just appeared it is as old as any other.
     fresh = [a for a in achs if a['api'] in new and not a.get('remote')
-             and (not a['time'] or a['time'] >= cutoff)]
+             and (a['time'] >= cutoff if a['time'] else known)]
     for a in sorted(fresh, key=lambda a: a['time']):
         emit(unlock_event(store, game, a, achs))
     if fresh and achs and len(now) == len(achs):
