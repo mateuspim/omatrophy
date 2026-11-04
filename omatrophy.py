@@ -196,30 +196,74 @@ def next_backfill_wait(failed, previous):
     return min(max(previous * 2, BACKFILL_LIMITED_WAIT), BACKFILL_MAX_WAIT)
 
 
-def backfill_once(found):
-    """One backfill run of every store; True when any of them failed."""
-    failed = False
+def backfill_schedule_path():
+    # Read at call time, not import time, so tests can move HOME.
+    return os.path.expanduser('~/.local/state/omatrophy/backfill.json')
+
+
+def saved_backfill_schedule():
+    """{next: unix seconds, wait: seconds} from the last run; {} if none."""
+    found = read_json(backfill_schedule_path(), {})
+    return found if isinstance(found, dict) else {}
+
+
+def save_backfill_schedule(failed, now):
+    """Work out the wait after a run and keep it on disk, so a watcher
+    restart (every shell restart) waits it out instead of asking Steam
+    again inside a rate limit. Returns the wait in seconds."""
+    previous = saved_backfill_schedule().get('wait')
+    if not isinstance(previous, int) or previous <= 0:
+        previous = BACKFILL_WAIT
+    wait = next_backfill_wait(failed, previous)
+    write_json(backfill_schedule_path(), {'next': int(now) + wait, 'wait': wait})
+    return wait
+
+
+def pending_backfill_wait(now):
+    """Seconds the watcher still waits before its next run: what is left
+    of the saved wait. Capped at BACKFILL_MAX_WAIT, so a clock jump or a
+    hand-edited file can't stop the backfill for good."""
+    due = saved_backfill_schedule().get('next')
+    if not isinstance(due, (int, float)):
+        return 0
+    return int(min(max(due - now, 0), BACKFILL_MAX_WAIT))
+
+
+def backfill_once(found, say=None):
+    """One backfill run of every store: True when any of them failed,
+    False when they all ran cleanly, None when none ran (all off)."""
+    if say is None:
+        # Progress goes to the shell log; stdout is for events only.
+        say = lambda s, line: print(f'omatrophy: {s.id} backfill: {line}', file=sys.stderr, flush=True)
+    failed = None
     for s in found:
         try:
-            # Progress goes to the shell log; stdout is for events only.
-            result = s.backfill(say=lambda line, s=s: print(f'omatrophy: {s.id} backfill: {line}', file=sys.stderr, flush=True))
+            result = s.backfill(say=lambda line, s=s: say(s, line))
         except Exception as e:
             print(f'omatrophy: {s.name} backfill failed: {e}', file=sys.stderr, flush=True)
             result = (0, True)
-        failed = failed or bool(result and result[1])
+        if result is not None:
+            failed = bool(failed) or bool(result[1])
     return failed
 
 
-def background(found, pairs, sleep=time.sleep):
+def background(found, pairs, sleep=time.sleep, clock=time.time):
     """The watcher's slow chores, after `ready`: warm the name and rarity caches, then
     let each store backfill games it has no local data for, again and
     again for as long as the watcher runs."""
     warm_names(pairs)
     warm_rarity(pairs)
-    wait = BACKFILL_WAIT
     while True:
-        wait = next_backfill_wait(backfill_once(found), wait)
-        sleep(wait)
+        # Checked before every run, not only at start: the saved time may
+        # have moved since (a restart, or a `sync` that met a 429).
+        pending = pending_backfill_wait(clock())
+        if pending:
+            sleep(pending)
+            continue
+        failed = backfill_once(found)
+        # A pass where every backfill is off says nothing about the limit,
+        # and saving it would delay the first run after one is turned on.
+        sleep(BACKFILL_WAIT if failed is None else save_backfill_schedule(failed, clock()))
 
 
 def sync():
@@ -228,11 +272,17 @@ def sync():
     if not read_json(config_path(), {}).get('community'):
         raise SystemExit('The community backfill is off. Turn it on with: omatrophy.py set community on\n'
                          '(it needs a public Steam profile with public game details; see ADR 11)')
-    for s in found:
-        result = s.backfill(say=lambda line, s=s: print(f'{s.id}: {line}', flush=True))
-        if result:
-            fetched, failed = result
-            print(f'{s.id}: fetched {fetched}' + (' (stopped early; run again later)' if failed else ''))
+
+    def say(s, line):
+        print(f'{s.id}: {line}', flush=True)
+
+    failed = backfill_once(found, say=say)
+    if failed is None:
+        return
+    # A manual run counts like the watcher's: after a 429 here the
+    # watcher waits too.
+    wait = save_backfill_schedule(failed, time.time())
+    print(('stopped early; ' if failed else '') + f'next automatic run in {wait // 60} min')
 
 
 # A running load rewrites its status at least every WAIT_SECONDS; one quiet

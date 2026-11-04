@@ -30,7 +30,10 @@ profile page.
   the first test run after about 20 pages and kept answering 429 for close
   to three hours, so waiting inside a run doesn't help: any error, a 429
   included, ends the run, the next one resumes, and after a failed run the
-  next waits 4 h, then 8 h. Pages
+  next waits 4 h, then 8 h. The time of the next run is kept on disk
+  (`~/.local/state/omatrophy/backfill.json`), so a watcher restart, which
+  every shell restart is, waits it out instead of asking again inside the
+  limit. Pages
   are cached in `~/.cache/omatrophy/community/games/<app>.json`, refetched
   when the game was played since, else after a week for games played in
   the last 60 days and after 60 days for the rest (180 days with nothing
