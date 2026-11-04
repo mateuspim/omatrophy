@@ -21,7 +21,7 @@ Usage:
   omatrophy.py unhide <store> <game>  bring it back
 
 Each store (stores/) reads its launcher's own files; this file diffs them and
-turns new unlocks into events. Steam is the only store so far.
+turns new unlocks into events. Steam and GOG (through Heroic) so far.
 """
 import hashlib, json, os, sys, threading, time, urllib.parse
 from concurrent.futures import ThreadPoolExecutor
@@ -137,7 +137,8 @@ def inbox_event(line):
 def found_stores():
     found = stores.available()
     if not found:
-        raise SystemExit('No game store with achievement data found. For Steam, set STEAM_DIR=/path/to/Steam')
+        raise SystemExit('No game store with achievement data found. For Steam, set STEAM_DIR=/path/to/Steam; '
+                         'for GOG, play a game once through Heroic (or set COMET_DIR)')
     return found
 
 

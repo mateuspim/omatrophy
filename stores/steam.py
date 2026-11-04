@@ -9,7 +9,7 @@ what was played last from userdata/<account>/config/localconfig.vdf.
 import os, re, struct, threading, time
 
 from . import steam_community
-from .base import CACHE, STATE, Store, cached, config, http_json, read_json, write_json
+from .base import CACHE, STATE, Store, boot_time, cached, config, http_json, read_json, started_at, write_json
 from .steam_community import app_id
 
 ICON_BASE = 'https://cdn.fastly.steamstatic.com/steamcommunity/public/images/apps'
@@ -121,21 +121,6 @@ def launched_app(cmdline):
         if a.startswith(b'AppId=') and a[6:].isdigit():
             return a[6:].decode()
     return None
-
-
-def started_at(stat, boot, ticks):
-    """Unix start time of a process from its /proc/<pid>/stat line."""
-    # The command name (field 2) may hold spaces and parentheses; count from the last ')'.
-    fields = stat[stat.rindex(')') + 2:].split()
-    return boot + int(fields[19]) / ticks
-
-
-def boot_time(proc='/proc'):
-    with open(f'{proc}/stat') as f:
-        for line in f:
-            if line.startswith('btime '):
-                return int(line.split()[1])
-    return 0
 
 
 def running_game(proc='/proc'):

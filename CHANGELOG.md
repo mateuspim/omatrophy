@@ -1,6 +1,21 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 - 2026-11-03
+
+- GOG support: games played through Heroic Games Launcher toast, show
+  in the panel and open in the tracker like Steam's, with GOG's own
+  rarity picking the metal. OmaTrophy reads the database Heroic's Comet
+  service keeps for each game; no GOG login or API (ADR 12).
+- Settings has a Steam profile row: the community backfill's switch,
+  what it sends, and how its latest run went, including when Steam has
+  asked for a pause.
+- The backfill's page budget adapts: halved after Steam's rate limit,
+  five more after a run that used all of it (5 to 30 pages). Only a 429
+  counts; being offline doesn't shrink it. Each run is kept in
+  `~/.cache/omatrophy/community/runs.json`, so the limit can be measured
+  from real runs.
+
+## 0.2.1 - 2026-11-03
 
 - Fixed duplicate `pym.omatrophy` IPC registrations on multiple monitors.
   Direct panel IPC belongs to the first screen; every bar button still

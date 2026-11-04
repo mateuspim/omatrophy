@@ -90,16 +90,26 @@ says how the parts fit, `docs/adr/` why, `docs/specs/` what the contracts are
 - No `/home/...` paths, account ids, real desktop screenshots or LAN
   addresses in tracked files. Design-agent logs and in-game captures in
   `design/` stay gitignored.
+- `tests/test_hygiene.py` enforces it: home paths, LAN addresses and email
+  addresses fail everywhere, and the owner's real ids (Steam, GOG, mount
+  points) go one per line in the gitignored `.private-strings`, which
+  local runs check. Add a new private id there the moment you meet one;
+  tests use made-up ids only.
 - Never modify user config on load; settings change only through the panel
   or `omatrophy.py set`.
 - `HANDOFF.md` is local-only and stays gitignored.
 
 ## Commits and releases
 
-- Branch `master`. Commit subjects are plain imperative sentences with a body
-  that says why. Ask the owner before pushing commits or tags, and before
-  publishing a GitHub release.
+- `master` is protected: changes land through a pull request whose `test`
+  check is green; nobody pushes to it directly. Work on a branch, open the
+  PR with `gh pr create`, merge with a merge commit (`gh pr merge --merge`)
+  so commit and tag ids stay the same. Commit subjects are plain
+  imperative sentences with a body that says why. Ask the owner before
+  pushing commits or tags, opening or merging a PR, and before publishing
+  a GitHub release.
 - Release: bump `version` in `manifest.json`, add the `CHANGELOG.md` entry,
   check the README covers the change, run the tests,
-  `omarchy plugin validate .`, commit `Release X.Y.Z`, annotated tag `vX.Y.Z`
-  ("OmaTrophy X.Y.Z").
+  `omarchy plugin validate .`, commit `Release X.Y.Z` on the PR branch;
+  after the PR merges, annotated tag `vX.Y.Z` ("OmaTrophy X.Y.Z") on that
+  commit, push the tag, publish the release.

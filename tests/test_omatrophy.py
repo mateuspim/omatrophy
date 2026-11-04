@@ -540,7 +540,10 @@ class FakeLibrary:
         names = os.path.join(self.tmp.name, 'names.json')
         with open(names, 'w') as f:
             json.dump({a: g[0] for a, g in self.GAMES.items()}, f)
-        self.patches = [mock.patch.dict(os.environ, {'STEAM_DIR': root, 'STEAM_ACCOUNT': UID, 'HOME': home}),
+        # COMET_DIR and HEROIC_DIR point nowhere so a real GOG install on
+        # the test machine never joins the fake library.
+        self.patches = [mock.patch.dict(os.environ, {'STEAM_DIR': root, 'STEAM_ACCOUNT': UID, 'HOME': home,
+                                                     'COMET_DIR': f'{home}/none', 'HEROIC_DIR': f'{home}/none'}),
                         mock.patch.object(steam, 'NAMES', names), mock.patch.object(steam, 'CACHE', cache),
                         mock.patch.object(steam, 'running_game', return_value=self.running),
                         mock.patch('urllib.request.urlopen', side_effect=AssertionError('network in a test'))]
@@ -716,6 +719,46 @@ class CommunityBackfill(unittest.TestCase):
         self.assertEqual(steam_community.status()['line'], 'paused: 2 fetched, 3 left for later runs')
         steam_community.backfill('42', played, set(), fetch_page=self.fetch({}), sleep=lambda s: None, budget=2)
         self.assertEqual(self.asked, ['0', '1', '2', '3'])
+
+    def test_budget_halves_after_a_rate_limit_and_grows_after_full_runs(self):
+        nb = steam_community.next_budget
+        self.assertEqual(nb([]), steam_community.PAGES_PER_RUN)
+        self.assertEqual(nb([{'budget': 15, 'fetched': 3, 'limited': True}]), 7)
+        self.assertEqual(nb([{'budget': 6, 'fetched': 0, 'limited': True}]), steam_community.MIN_PAGES)
+        self.assertEqual(nb([{'budget': 15, 'fetched': 15, 'limited': False}]), 20)
+        self.assertEqual(nb([{'budget': 30, 'fetched': 30, 'limited': False}]), steam_community.MAX_PAGES)
+        # Fewer games due than the budget: no news about the limit.
+        self.assertEqual(nb([{'budget': 15, 'fetched': 4, 'limited': False}]), 15)
+
+    def test_only_a_429_counts_as_a_rate_limit(self):
+        import urllib.error
+        self.assertTrue(steam_community.rate_limited(urllib.error.HTTPError('u', 429, 'Too Many', {}, None)))
+        self.assertFalse(steam_community.rate_limited(urllib.error.HTTPError('u', 403, 'Forbidden', {}, None)))
+        self.assertFalse(steam_community.rate_limited(urllib.error.URLError('offline')))
+
+    def test_runs_are_recorded_and_set_the_next_budget(self):
+        import urllib.error
+        limit = urllib.error.HTTPError('u', 429, 'Too Many Requests', {}, None)
+        played = [(100 - i, str(i)) for i in range(40)]
+        steam_community.backfill('42', played, set(), fetch_page=self.fetch({}), sleep=lambda s: None)
+        self.assertEqual(len(self.asked), 15)
+        steam_community.backfill('42', played, set(), fetch_page=self.fetch({'19': limit}), sleep=lambda s: None)
+        self.assertEqual([(r['budget'], r['fetched'], r['limited']) for r in steam_community.runs()],
+                         [(15, 15, False), (20, 4, True)])
+        self.assertTrue(steam_community.status()['limited'])
+        self.assertEqual(steam_community.next_budget(steam_community.runs()), 10)
+
+    def test_an_offline_run_is_not_a_rate_limit(self):
+        import urllib.error
+        steam_community.backfill('42', [(1, '9')], set(),
+                                 fetch_page=self.fetch({'9': urllib.error.URLError('offline')}), sleep=lambda s: None)
+        self.assertFalse(steam_community.runs()[-1]['limited'])
+        self.assertFalse(steam_community.status()['limited'])
+
+    def test_a_run_with_nothing_due_is_not_recorded(self):
+        steam_community.backfill('42', [], set(), fetch_page=self.fetch({}), sleep=lambda s: None)
+        self.assertEqual(steam_community.runs(), [])
+        self.assertEqual(steam_community.status()['line'], 'up to date')
 
     def write_page(self, app, fetched, unlocked, total=2):
         steam_community.write_atomic(f'{steam_community.cache_dir()}/games/{app}.json', {
@@ -1004,7 +1047,7 @@ class Hidden(unittest.TestCase):
                 self.assertEqual(json.load(f), {'icons': 'vector', 'hidden': ['steam:10']})
             self.assertEqual(omatrophy.hidden_games(), {'steam:10'})
             with self.assertRaises(SystemExit):
-                omatrophy.set_hidden('gog', '10', True)
+                omatrophy.set_hidden('epic', '10', True)
 
     def test_hidden_games_leave_nearest_platinum(self):
         rows = [{'store': 'steam', 'app': '1', 'unlocked': 9, 'total': 10},

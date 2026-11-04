@@ -12,8 +12,10 @@ CACHE = os.path.expanduser('~/.cache/omatrophy')
 # hostile or broken server from filling memory.
 MAX_RESPONSE = 8 * 1024 * 1024
 # Every network call goes to the store's own HTTPS hosts; a redirect
-# elsewhere (or down to http) is refused.
-TRUSTED_HOSTS = ('steamcommunity.com', 'steampowered.com', 'steamstatic.com')
+# elsewhere (or down to http) is refused. GOG's achievement icons and
+# Heroic's cached store art live on images.gog.com and images.gog-statics.com.
+TRUSTED_HOSTS = ('steamcommunity.com', 'steampowered.com', 'steamstatic.com',
+                 'gog.com', 'gog-statics.com')
 
 
 def config():
@@ -75,6 +77,22 @@ class Store:
     def art(self, game):
         """{'hero': wide art URL or '', 'header': banner URL or ''} for the platinum card."""
         return {'hero': '', 'header': ''}
+
+
+def started_at(stat, boot, ticks):
+    """Unix start time of a process from its /proc/<pid>/stat line."""
+    # The command name (field 2) may hold spaces and parentheses; count from the last ')'.
+    fields = stat[stat.rindex(')') + 2:].split()
+    return boot + int(fields[19]) / ticks
+
+
+def boot_time(proc='/proc'):
+    """Unix time the machine booted, from /proc/stat; 0 when it doesn't say."""
+    with open(f'{proc}/stat') as f:
+        for line in f:
+            if line.startswith('btime '):
+                return int(line.split()[1])
+    return 0
 
 
 def read_json(path, default):

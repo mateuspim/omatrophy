@@ -19,7 +19,7 @@ installed.
 | `set glass clear\|frosted\|solid` | How see-through toasts are. |
 | `set tracker-sort recent\|rarity\|name\|game` | The tracker's sort; the tracker writes it when you change it. |
 | `set community on\|off` | The opt-in backfill of games that never ran on this machine from your public Steam profile ([ADR 11](../adr/0011-backfill-from-the-community-profile.md)). With it on, the watcher fetches in the background after `ready`. |
-| `sync` | Runs that backfill now, one line per game (`steam: 3/444 1903340: 55 achievements`), at most 15 pages a run, ending `paused: N fetched, M left for later runs` when more are due, then `fetched N`; "stopped early" after any error (a 429 rate limit, offline, private profile), and the next run picks up where it stopped. The watcher runs the same backfill every hour. Exits non-zero while `community` is off. |
+| `sync` | Runs that backfill now, one line per game (`steam: 3/444 1903340: 55 achievements`), at most the run's page budget (15 to start; halved after a 429, five more after a run that used it all, between 5 and 30), ending `paused: N fetched, M left for later runs` when more are due, then `fetched N`; "stopped early" after any error (a 429 rate limit, offline, private profile), and the next run picks up where it stopped. The watcher runs the same backfill every hour. Exits non-zero while `community` is off. |
 | `hide <store> <game>` | Adds `"store:game"` to `hidden` in config.json: the game leaves `cabinet`'s `nearest`, the Games tab's Closest sort and the panel's platinum shelf (`now` still lists it in `shelf`; the panel filters). Exits non-zero for an unknown store. |
 | `unhide <store> <game>` | Takes it back out. |
 | `demo [kind...]` | Prints sample events straight to stdout, then idles. For `dev/preview.sh`. |
@@ -96,3 +96,5 @@ omarchy-shell shell summon pym.omatrophy '{}'   # the running or last game
 | --- | --- |
 | `STEAM_DIR` | Steam folder, when it isn't in `~/.local/share/Steam`, `~/.steam/steam` or the Flatpak path. |
 | `STEAM_ACCOUNT` | Steam account id (the number in `UserGameStats_<id>_<app>.bin`), when several accounts share the machine. Default: the one with the most games. |
+| `HEROIC_DIR` | Heroic's config folder, when it isn't in `$XDG_CONFIG_HOME/heroic` (`~/.config/heroic`) or the Flatpak path. |
+| `COMET_DIR` | Comet's gameplay folder (the one holding `<client id>/<user id>/gameplay.db`), when it isn't in `$XDG_DATA_HOME/comet/gameplay` or the Flatpak path. |

@@ -25,20 +25,30 @@ what OmaTrophy does with that access:
   the panel or tracker opens, Steam's last-played times
   (`<Steam>/userdata/<account>/config/localconfig.vdf`) and the command lines
   of running processes (`/proc/*/cmdline`, to find `SteamLaunch AppId=N`);
-  its own settings file.
+  its own settings file. For GOG: Comet's per-game databases
+  (`$XDG_DATA_HOME/comet/gameplay/*/*/gameplay.db`, opened read-only), once
+  a second for changed files; Heroic's `gog_store/installed.json`, each
+  install folder's `goggame-<product>.info`, `store_cache/gog_library.json`
+  and `store/timestamp.json`; and process command lines, matched against
+  GOG install folders only. Heroic's GOG login (`gog_store/auth.json`) is
+  never read.
 - Writes: `~/.config/omatrophy/config.json` (settings and hidden games,
   only when you change them),
-  `~/.local/state/omatrophy/` (game-name cache, test inbox),
+  `~/.local/state/omatrophy/` (game-name cache, GOG client-to-product
+  pairs, test inbox),
   `~/.cache/omatrophy/` (achievement icons, art, global rarity per game,
   refreshed daily, and with the backfill on, profile pages per game in
   `community/`).
 - Root: never.
-- Network: HTTPS to Steam's public, keyless endpoints only, when an unlock is
+- Network: HTTPS to the stores' public, keyless hosts only, when an unlock is
   shown or the bar panel or tracker opens, plus one name lookup per uncached
   game when the watcher starts: the store's app details
   (`store.steampowered.com`, game name, cached), global achievement
   percentages (`api.steampowered.com`), and Steam's CDN
-  (`*.steamstatic.com`) for icons and art. The watcher refuses any other
+  (`*.steamstatic.com`) for icons and art; for GOG, only icons and art from
+  `images.gog.com` and `images.gog-statics.com`, whose URLs Heroic and
+  Comet already hold (GOG rarity is in Comet's database, so no lookup). The
+  watcher refuses any other
   host, plain HTTP, and redirects off those hosts, and reads at most 8 MB
   per response with a 4 s socket timeout. The panel and tracker load
   header art and achievement icons straight from the CDN as images. Your account id is not
@@ -56,7 +66,10 @@ Steam's files, its web pages and the shell's IPC are treated as untrusted:
 - Binary stats files are read up to 64 MB and parsed with bounded nesting;
   a truncated or malformed file means no achievements for that game, never
   a hang.
-- App and account ids must be ASCII digits before they reach a file path,
+- Comet's databases are opened read-only and never written; a file that
+  isn't Comet's layout means no achievements for that game.
+- App, account and GOG product and client ids must be ASCII digits before
+  they reach a file path,
   a URL or a command; anything else is ignored.
 - Every piece of text the views show (game names, achievement names and
   descriptions) is drawn as plain text, never rich text.

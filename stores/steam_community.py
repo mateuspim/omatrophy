@@ -7,7 +7,7 @@ page has the rest without a key: it embeds its data as JSON in
 react-query cache (schema, the user's unlocks, the store item). Only that
 JSON is read, never the markup (ADR 11). Opt-in with `set community on`.
 """
-import json, os, re, time
+import json, os, re, time, urllib.error
 
 from .base import CACHE, fetch_bytes, read_json, trusted_url, write_json
 
@@ -32,6 +32,15 @@ NONE_SECONDS = 30 * 86400
 # (omatrophy.py's background loop) instead of waiting minutes in a run.
 PAUSE_SECONDS = 3
 PAGES_PER_RUN = 15
+# The budget adapts, since nobody knows Steam's real limit (a 429 once
+# came on the first request after hours idle, so it may be shared with
+# the Steam client's own traffic): halved after a 429, five more after a
+# clean run that used it all. Each run is kept in runs.json, so the limit
+# can be read off real runs instead of guessed.
+MIN_PAGES = 5
+MAX_PAGES = 30
+PAGES_STEP = 5
+RUNS_KEPT = 50
 
 def cache_dir():
     return f'{CACHE}/community'
@@ -175,28 +184,63 @@ def write_atomic(path, value):
 
 
 def status():
-    """The backfill's latest line, {time, line, done, total}; {} before the first run."""
+    """The backfill's latest line, {time, line, done, total, budget, limited};
+    {} before the first run."""
     return read_json(f'{cache_dir()}/status.json', {})
 
 
+def runs():
+    """The latest runs, oldest first: [{time, budget, fetched, limited}]."""
+    found = read_json(f'{cache_dir()}/runs.json', [])
+    return found if isinstance(found, list) else []
+
+
+def next_budget(history):
+    """Pages the next run may fetch, from the runs before it."""
+    if not history:
+        return PAGES_PER_RUN
+    last = history[-1]
+    budget = last.get('budget', PAGES_PER_RUN)
+    if last.get('limited'):
+        return max(MIN_PAGES, budget // 2)
+    if last.get('fetched', 0) >= budget:
+        return min(MAX_PAGES, budget + PAGES_STEP)
+    return budget
+
+
+def rate_limited(error):
+    """True for Steam's 429; offline or a private profile is no reason to
+    ask for fewer pages."""
+    return isinstance(error, urllib.error.HTTPError) and error.code == 429
+
+
+def record_run(budget, fetched, limited):
+    write_atomic(f'{cache_dir()}/runs.json', (runs() + [{
+        'time': int(time.time()), 'budget': budget, 'fetched': fetched, 'limited': limited}])[-RUNS_KEPT:])
+
+
 def backfill(account, played, local, fetch_page=fetch, pause=PAUSE_SECONDS, say=None, sleep=time.sleep,
-             budget=PAGES_PER_RUN):
+             budget=None):
     """Fetch the pages of played games with no local stats file, most recent
-    first, at most `budget` of them. Any error (a rate limit, offline, a
-    private profile) ends the run, and the next one resumes where it stopped.
+    first, at most `budget` of them (by default next_budget() of the runs
+    so far). Any error (a rate limit, offline, a private profile) ends the
+    run, and the next one resumes where it stopped.
     `played` is [(unix seconds, app)], `local` the apps with local stats.
     Returns (fetched, failed: bool)."""
+    if budget is None:
+        budget = next_budget(runs())
     now = time.time()
     nones = none_index()
     todo = [(t, app) for t, app in played if app_id(app) and app not in local and due(app, t, now, nones)]
     fetched = 0
     shout = say
 
-    def say(line):
+    def say(line, limited=False):
         # Also kept in status.json, so progress is visible without the
         # shell log (and the panel can show it).
         write_atomic(f'{cache_dir()}/status.json',
-                     {'time': int(time.time()), 'line': line, 'done': fetched, 'total': len(todo)})
+                     {'time': int(time.time()), 'line': line, 'done': fetched, 'total': len(todo),
+                      'budget': budget, 'limited': limited})
         if shout:
             shout(line)
 
@@ -206,7 +250,9 @@ def backfill(account, played, local, fetch_page=fetch, pause=PAUSE_SECONDS, say=
         try:
             page = fetch_page(account, app)
         except Exception as e:
-            say(f'stopped at {app}: {e}')
+            limited = rate_limited(e)
+            say(f'stopped at {app}: {e}', limited)
+            record_run(budget, fetched, limited)
             return fetched, True
         if page:
             write_atomic(f'{cache_dir()}/games/{app}.json', dict(page, time=int(time.time())))
@@ -215,6 +261,9 @@ def backfill(account, played, local, fetch_page=fetch, pause=PAUSE_SECONDS, say=
             write_atomic(f'{cache_dir()}/none.json', nones)
         fetched += 1
         say(f'{i + 1}/{len(todo)} {app}: ' + (f"{len(page['achievements'])} achievements" if page else 'none'))
+    if todo:
+        # A run with nothing to do says nothing about the limit.
+        record_run(budget, fetched, False)
     if not todo:
         say('up to date')
     elif len(todo) > budget:

@@ -123,5 +123,10 @@ colours and layout; `design/hero/` holds the brief it was drawn from.
 2. Move the `CHANGELOG.md` Unreleased entries under `## X.Y.Z - YYYY-MM-DD`.
 3. Check the README covers the change.
 4. Run the tests and `omarchy plugin validate .`.
-5. Commit `Release X.Y.Z`, tag `git tag -a vX.Y.Z -m "OmaTrophy X.Y.Z"`.
-6. Ask the owner before pushing the commit, the tag or a GitHub release.
+5. Commit `Release X.Y.Z` on a branch (`release-X.Y.Z`) and open a pull
+   request; `master` only takes merges whose `test` check is green.
+6. Merge with a merge commit (`gh pr merge --merge`), so the release
+   commit keeps its id, then tag it:
+   `git tag -a vX.Y.Z -m "OmaTrophy X.Y.Z" <release commit>`, push the tag
+   and publish the GitHub release from the changelog entry.
+7. Ask the owner before pushing, merging, tagging or publishing.
