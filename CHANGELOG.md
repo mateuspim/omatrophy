@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.2 - 2026-11-04
 
 Fixes left open from the Load from Steam review (PR #5). Toasts and the
 loader run in the watcher and CLI: one `omarchy restart shell` for the
