@@ -100,6 +100,7 @@ class Job(unittest.TestCase):
         self.assertIn('file:notes.txt', sources)
         answer = guides.guide_answer('steam', '1', ACHS, self.guides)
         self.assertEqual(answer['next'][0], 'L')
+        self.assertEqual(answer['agent']['name'], 'fake')
 
     def test_bad_answer_is_asked_again_once(self):
         write(self.agent_dir, 'items', 'no tags at all')

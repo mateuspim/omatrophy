@@ -1,0 +1,83 @@
+[
+ {
+  "agent": "claude",
+  "name": "Claude Code",
+  "installed": true,
+  "supported": true,
+  "default": true,
+  "web": true,
+  "models": [
+   {
+    "id": "opus",
+    "name": "Opus",
+    "efforts": [
+     "low",
+     "medium",
+     "high",
+     "xhigh",
+     "max"
+    ]
+   },
+   {
+    "id": "sonnet",
+    "name": "Sonnet",
+    "efforts": [
+     "low",
+     "medium",
+     "high",
+     "xhigh",
+     "max"
+    ]
+   },
+   {
+    "id": "haiku",
+    "name": "Haiku",
+    "efforts": [
+     "low",
+     "medium",
+     "high",
+     "xhigh",
+     "max"
+    ]
+   },
+   {
+    "id": "fable",
+    "name": "Fable",
+    "efforts": [
+     "low",
+     "medium",
+     "high",
+     "xhigh",
+     "max"
+    ]
+   }
+  ],
+  "model": "sonnet",
+  "effort": "medium",
+  "source": "built-in aliases"
+ },
+ {
+  "agent": "codex",
+  "name": "Codex",
+  "installed": true,
+  "supported": false,
+  "default": false,
+  "web": true,
+  "models": [],
+  "model": "",
+  "effort": "",
+  "source": ""
+ },
+ {
+  "agent": "opencode",
+  "name": "OpenCode",
+  "installed": false,
+  "supported": false,
+  "default": false,
+  "web": true,
+  "models": [],
+  "model": "",
+  "effort": "",
+  "source": ""
+ }
+]

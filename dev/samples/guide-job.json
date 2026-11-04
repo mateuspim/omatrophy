@@ -1,0 +1,15 @@
+{
+ "state": "running",
+ "store": "steam",
+ "app": "1",
+ "game": "Starfall Odyssey",
+ "stage": "classify",
+ "done": 3,
+ "total": 6,
+ "line": "classify: 15/40 achievements",
+ "started": 1793059000,
+ "time": 1793059100,
+ "agent": "claude",
+ "model": "sonnet",
+ "pid": 1
+}

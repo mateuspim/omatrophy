@@ -6,7 +6,9 @@ import qs.Ui
 import qs.Commons as Commons
 
 // The tracker's card: one game's every achievement, with rarity, the date
-// you got it, and filters (all, locked, unlocked, rare) plus type-to-search.
+// you got it, and filters (all, locked, unlocked, rare) plus type-to-search;
+// and the game's 100% guide (the Guide filter), with a Make guide button
+// that starts `omatrophy.py guide make` through the user's agent (ADR 14).
 // It changes nothing in a game; the only things it writes are your own
 // settings through omatrophy.py (its sort; trophies pinned to the Profile
 // showcase with ☆, finished games to its completionist tile). Built from its text by Tracker.qml (FreshObject.qml), so it must not use
@@ -60,6 +62,31 @@ Item {
   // An achievement to highlight once the game loads, from the request.
   property string focusApi: ""
 
+  // The 100% guide view (filter "guide"; docs/specs/guides.md). `live`
+  // is set by load(): dev/render.sh fills these from samples instead.
+  property bool live: false
+  // `guide <store> <app>`: null until read, {} when there is none.
+  property var guide: null
+  // `guide agents`: every agent, with its models and the saved picks.
+  property var agents: []
+  // `guide status`: the latest make job, of any game.
+  property var job: ({})
+  // The agent, model and effort the next make uses; saved as they change.
+  property string pickAgent: ""
+  property string pickModel: ""
+  property string pickEffort: ""
+  property string configAgent: ""
+  // The agent and model picker; folded away under a made guide.
+  property bool makerOpen: false
+  readonly property bool hasGuide: !!guide && !!guide.items && (Object.keys(guide.items).length > 0 || !!guide.notes)
+  readonly property bool making: job.state === "running"
+  readonly property bool jobHere: !!game && job.store === game.store && String(job.app) === String(game.app)
+  readonly property var runnable: agents.filter(function(a) { return a.installed && a.supported })
+  readonly property var pickedRow: agents.find(function(a) { return a.agent === pickAgent }) || null
+  readonly property var phases: ["missable", "story", "quick", "challenge", "grind", "collect", "online"]
+  readonly property var phaseNames: ({ missable: "Missable", story: "Story", quick: "Quick", challenge: "Challenge",
+                                       grind: "Grind", collect: "Collectibles", online: "Online", other: "Other" })
+
   readonly property color foreground: Commons.Color.menu.text
   readonly property color background: Commons.Color.menu.background
   readonly property var metalColors: ({ bronze: "#e9a46b", silver: "#dfe6ee", gold: "#f3cf4a", platinum: "#e2eaff" })
@@ -74,7 +101,9 @@ Item {
   // Called by Tracker.qml with the summon payload: {store, app}, or empty
   // for the game running now (or played last).
   function load(request) {
+    live = true
     focusApi = request && request.api ? String(request.api) : ""
+    if (request && request.view === "guide") filter = "guide"
     var args = ["python3", helperPath, "game"]
     if (request && request.store && request.app) args = args.concat([String(request.store), String(request.app)])
     loader.command = args
@@ -91,6 +120,7 @@ Item {
     rebuild()
     cascadeEnd.restart()
     if (focusApi) Qt.callLater(focusRequested)
+    if (live && game) readGuide()
   }
   onFilterChanged: rebuild()
   onSearchChanged: {
@@ -256,6 +286,7 @@ Item {
 
   // A filter's label with its count, once there is one to count.
   function label(name, kind) {
+    if (kind === "guide") return hasGuide ? "✦ " + name : name
     return game ? name + " " + count(kind) : name
   }
 
@@ -281,8 +312,119 @@ Item {
   }
 
   function cycleFilter(step) {
-    var all = ["all", "locked", "unlocked", "rare"]
+    var all = ["all", "locked", "unlocked", "rare", "guide"]
     filter = all[(all.indexOf(filter) + step + all.length) % all.length]
+  }
+
+  // ------------------------------------------------------------ guide
+
+  function readGuide() {
+    guideReader.command = ["python3", helperPath, "guide", String(game.store), String(game.app)]
+    guideReader.running = true
+    if (!agentsReader.running && agents.length === 0) agentsReader.running = true
+    jobReader.running = true
+  }
+
+  // The saved pick, else Omarchy's default agent, else the first that runs.
+  function choosePick() {
+    var row = agents.find(function(a) { return a.agent === configAgent && a.installed && a.supported })
+           || agents.find(function(a) { return a.default && a.installed && a.supported })
+           || runnable[0] || null
+    pickAgent = row ? row.agent : ""
+    pickModel = row ? row.model : ""
+    pickEffort = row ? row.effort : ""
+  }
+
+  function pickAgentNamed(id) {
+    var row = agents.find(function(a) { return a.agent === id })
+    if (!row) return
+    pickAgent = id
+    pickModel = row.model
+    pickEffort = row.effort
+    Quickshell.execDetached(["python3", helperPath, "set", "guide-agent", id])
+  }
+
+  // "" is the agent's own default; written per agent (`guide-models`).
+  function pickModelNamed(model, effort) {
+    pickModel = model
+    pickEffort = model ? effort : ""
+    var args = ["python3", helperPath, "guide", "model", pickAgent, model || "default"]
+    Quickshell.execDetached(model && effort ? args.concat([effort]) : args)
+  }
+
+  function modelEfforts() {
+    if (!pickedRow) return []
+    var m = pickedRow.models.find(function(m) { return m.id === pickModel })
+    return m ? m.efforts : (pickedRow.models.length ? pickedRow.models[0].efforts : [])
+  }
+
+  // Runs detached: the job outlives this card, which only shows it.
+  function makeGuide() {
+    if (!game || !pickAgent || making) return
+    var args = ["python3", helperPath, "guide", "make", String(game.store), String(game.app), "--agent", pickAgent]
+    if (pickModel) args = args.concat(["--model", pickModel])
+    if (pickEffort) args = args.concat(["--effort", pickEffort])
+    Quickshell.execDetached(args)
+    job = { state: "running", store: game.store, app: String(game.app), game: game.game, stage: "gather",
+            done: 0, total: 1, line: "starting " + pickAgent, agent: pickAgent, model: pickModel }
+    makerOpen = false
+    jobPoll.restart()
+  }
+
+  function stopGuide() {
+    Quickshell.execDetached(["python3", helperPath, "guide", "stop"])
+    job = Object.assign({}, job, { line: "stopping…" })
+  }
+
+  function guideDone(api) {
+    var a = byApi[api]
+    return (a && a.unlocked) || (!!guide && (guide.ticks || []).indexOf(api) >= 0)
+  }
+
+  // The guide's open items by phase, in the route's order, missables first.
+  function phaseGroups() {
+    if (!guide || !guide.items) return []
+    var groups = {}
+    var order = (guide.order || []).concat(Object.keys(guide.items).filter(function(a) { return (guide.order || []).indexOf(a) < 0 }))
+    order.forEach(function(api) {
+      var item = guide.items[api]
+      if (!item || !byApi[api] || guideDone(api)) return
+      if (appliedSearch && !guideMatches(api)) return
+      var phase = phases.indexOf(item.phase) >= 0 ? item.phase : "other"
+      if (!groups[phase]) groups[phase] = []
+      groups[phase].push(api)
+    })
+    return phases.concat(["other"]).filter(function(p) { return !!groups[p] })
+                 .map(function(p) { return { phase: p, apis: groups[p] } })
+  }
+
+  function guideMatches(api) {
+    var q = appliedSearch.toLowerCase()
+    var a = byApi[api], item = guide.items[api] || {}
+    var secret = a.hidden && !a.unlocked
+    return a.name.toLowerCase().indexOf(q) >= 0 || (!secret && (item.tips || "").toLowerCase().indexOf(q) >= 0)
+  }
+
+  function doneCount() {
+    if (!guide || !guide.items) return 0
+    return Object.keys(guide.items).filter(function(api) { return byApi[api] && guideDone(api) }).length
+  }
+
+  function dots(n) {
+    var out = ""
+    for (var i = 1; i <= 5; i++) out += i <= n ? "●" : "○"
+    return out
+  }
+
+  function madeLine() {
+    if (!guide || !guide.generated) return "Imported guide"
+    var a = guide.agent || {}
+    var who = a.name ? " with " + a.name + (a.model ? " · " + a.model : "") : ""
+    return "Made " + day(guide.generated) + who + (guide.cost_usd ? " · $" + guide.cost_usd.toFixed(2) : "")
+  }
+
+  function forceKeys() {
+    keys.forceActiveFocus()
   }
 
   Component.onCompleted: Qt.callLater(function() { keys.forceActiveFocus() })
@@ -297,7 +439,51 @@ Item {
       if (c["tracker-sort"]) root.sortBy = c["tracker-sort"]
       if (Array.isArray(c.showcase)) root.showcaseKeys = c.showcase
       if (Array.isArray(c.completionist)) root.completionistKeys = c.completionist
+      if (typeof c["guide-agent"] === "string") root.configAgent = c["guide-agent"]
     }
+  }
+
+  Process {
+    id: guideReader
+    stdout: StdioCollector {
+      onStreamFinished: {
+        try { root.guide = JSON.parse(text) || {} } catch (e) { root.guide = {} }
+        root.makerOpen = !root.hasGuide
+      }
+    }
+  }
+
+  Process {
+    id: agentsReader
+    command: ["python3", root.helperPath, "guide", "agents"]
+    stdout: StdioCollector {
+      onStreamFinished: {
+        try { root.agents = JSON.parse(text) || [] } catch (e) { root.agents = [] }
+        root.choosePick()
+      }
+    }
+  }
+
+  Process {
+    id: jobReader
+    command: ["python3", root.helperPath, "guide", "status"]
+    stdout: StdioCollector {
+      onStreamFinished: {
+        var was = root.job
+        try { root.job = JSON.parse(text) || {} } catch (e) { return }
+        // A make of this game just ended: show what it wrote.
+        if (was.state === "running" && root.job.state === "done" && root.jobHere) root.readGuide()
+      }
+    }
+  }
+
+  // The job writes status.json as it goes; a light poll while it runs.
+  Timer {
+    id: jobPoll
+    interval: 1500
+    repeat: true
+    running: root.live && root.making
+    onTriggered: if (!jobReader.running) jobReader.running = true
   }
 
   Timer {
@@ -530,6 +716,167 @@ Item {
     font.family: Commons.Style.font.family
     font.pixelSize: Commons.Style.font.caption
     elide: Text.ElideRight
+  }
+
+  // A small caps label over a guide section.
+  component SectionLabel: Text {
+    textFormat: Text.PlainText
+    color: root.foreground
+    opacity: 0.55
+    font.family: Commons.Style.font.family
+    font.pixelSize: Commons.Style.font.caption
+    font.letterSpacing: 1.5
+    font.bold: true
+  }
+
+  // A filled button for the one action that starts something (Make guide).
+  component ActionButton: Rectangle {
+    id: action
+    property string text: ""
+    property bool accent: true
+    signal clicked()
+    width: actionText.implicitWidth + Commons.Style.space(24)
+    height: actionText.implicitHeight + Commons.Style.space(12)
+    radius: height / 2
+    color: accent ? (actionHit.containsMouse ? Qt.lighter(Commons.Color.accent, 1.15) : Commons.Color.accent)
+                  : (actionHit.containsMouse ? Commons.Style.hoverFill : "transparent")
+    border.width: accent ? 0 : 1
+    border.color: Qt.alpha(root.foreground, 0.25)
+    Accessible.role: Accessible.Button
+    Accessible.name: text
+    Text {
+      textFormat: Text.PlainText
+      id: actionText
+      anchors.centerIn: parent
+      text: action.text
+      color: action.accent ? root.background : root.foreground
+      font.family: Commons.Style.font.family
+      font.pixelSize: Commons.Style.font.bodySmall
+      font.bold: true
+    }
+    MouseArea {
+      id: actionHit
+      anchors.fill: parent
+      hoverEnabled: true
+      cursorShape: Qt.PointingHandCursor
+      onClicked: action.clicked()
+    }
+  }
+
+  // Guide prose (Markdown from the agent or an imported guide). Links open
+  // in the browser only when they are https.
+  component Prose: Text {
+    textFormat: Text.MarkdownText
+    wrapMode: Text.Wrap
+    color: root.foreground
+    opacity: 0.85
+    linkColor: Commons.Color.accent
+    font.family: Commons.Style.font.family
+    font.pixelSize: Commons.Style.font.bodySmall
+    onLinkActivated: function(link) { if (/^https:\/\//.test(link)) Qt.openUrlExternally(link) }
+    HoverHandler { cursorShape: parent.hoveredLink ? Qt.PointingHandCursor : Qt.ArrowCursor }
+  }
+
+  // One achievement as the guide describes it: time, difficulty, counter,
+  // missable point, tip, combos, and what no source backs. A hidden one
+  // keeps its name and tip secret until hovered or revealed with Enter.
+  component GuideRow: Rectangle {
+    id: grow
+    property string api: ""
+    readonly property var ach: root.byApi[api] || ({ name: "", desc: "", icon: "", hidden: false, unlocked: false })
+    readonly property var item: root.guide && root.guide.items ? root.guide.items[api] || ({}) : ({})
+    readonly property bool done: root.guideDone(api)
+    readonly property bool secret: ach.hidden && !ach.unlocked && !growHover.hovered && !root.revealed[api]
+    readonly property string meta: {
+      var parts = []
+      if (item.missable && !done) parts.push("⚠ Missable" + (item.missable_note ? ": " + item.missable_note : ""))
+      if (item.time) parts.push(item.time)
+      if (item.difficulty) parts.push(root.dots(item.difficulty))
+      if (item.counter && item.counter.target) {
+        var at = ach.progress ? ach.progress.value + " / " : ""
+        parts.push(at + item.counter.target + (item.counter.label ? " " + item.counter.label : ""))
+      }
+      if (item.dlc) parts.push("DLC: " + item.dlc)
+      return parts.join("  ·  ")
+    }
+    width: parent ? parent.width : 0
+    height: growBody.height + Commons.Style.space(14)
+    radius: Commons.Style.cornerRadius
+    color: growHover.hovered ? Commons.Style.hoverFill : "transparent"
+    opacity: done ? 0.5 : 1
+    HoverHandler { id: growHover }
+
+    Rectangle {
+      id: growIcon
+      x: Commons.Style.space(10)
+      y: Commons.Style.space(7)
+      width: Commons.Style.space(36)
+      height: width
+      radius: 4
+      color: Qt.alpha(root.foreground, 0.08)
+      clip: true
+      Image {
+        anchors.fill: parent
+        source: grow.ach.unlocked ? grow.ach.icon : (grow.ach.icon_locked || grow.ach.icon || "")
+        asynchronous: true
+        sourceSize: Qt.size(96, 96)
+        opacity: status === Image.Ready ? (grow.ach.unlocked ? 1 : 0.6) : 0
+      }
+    }
+    Column {
+      id: growBody
+      anchors.left: growIcon.right
+      anchors.leftMargin: Commons.Style.space(12)
+      anchors.right: parent.right
+      anchors.rightMargin: Commons.Style.space(10)
+      y: Commons.Style.space(7)
+      spacing: Commons.Style.space(3)
+      Text {
+        textFormat: Text.PlainText
+        width: parent.width
+        text: (grow.done ? "✓ " : "") + (grow.secret ? "Hidden achievement" : grow.ach.name)
+        color: root.foreground
+        font.family: Commons.Style.font.family
+        font.pixelSize: Commons.Style.font.body
+        font.bold: !grow.done
+        font.italic: grow.secret
+        elide: Text.ElideRight
+      }
+      Caption {
+        width: parent.width
+        visible: text !== ""
+        text: grow.meta
+        color: grow.item.missable && !grow.done ? Commons.Color.accent : root.foreground
+        opacity: grow.item.missable && !grow.done ? 0.95 : 0.6
+      }
+      Text {
+        textFormat: Text.PlainText
+        width: parent.width
+        visible: text !== ""
+        text: grow.secret ? (grow.item.tips ? "Hover or press Enter to reveal the tip" : "")
+                          : (grow.item.tips || (grow.ach.hidden ? "" : grow.ach.desc))
+        color: root.foreground
+        opacity: grow.secret ? 0.4 : 0.8
+        wrapMode: Text.Wrap
+        font.family: Commons.Style.font.family
+        font.pixelSize: Commons.Style.font.bodySmall
+        font.italic: grow.secret
+      }
+      Caption {
+        width: parent.width
+        visible: text !== "" && !grow.secret
+        text: (grow.item.combine_with || []).length ? "Do with " + grow.item.combine_with.join(", ") : ""
+        opacity: 0.5
+      }
+      // A claim no quote backs is shown, but says so (ADR 14).
+      Caption {
+        width: parent.width
+        visible: (grow.item.unverified || []).length > 0 && !grow.secret
+        text: "(unverified: " + (grow.item.unverified || []).join(", ") + ")"
+        opacity: 0.4
+        font.italic: true
+      }
+    }
   }
 
   BorderSurface {
@@ -802,7 +1149,8 @@ Item {
             { value: "all", label: "All", kind: "all" },
             { value: "locked", label: "Locked", kind: "locked" },
             { value: "unlocked", label: "Unlocked", kind: "unlocked" },
-            { value: "rare", label: "Rare", kind: "rare" }
+            { value: "rare", label: "Rare", kind: "rare" },
+            { value: "guide", label: "Guide", kind: "guide" }
           ]
           delegate: Chip {
             required property var modelData
@@ -820,6 +1168,9 @@ Item {
         anchors.leftMargin: Commons.Style.space(14)
         anchors.verticalCenter: parent.verticalCenter
         text: "⇅ " + root.sortLabel()
+        // The guide keeps its route's order; the sort is the list's.
+        opacity: root.filter === "guide" ? 0 : 1
+        enabled: root.filter !== "guide"
         onClicked: function(mouse) { root.cycleSort(mouse.button === Qt.RightButton ? -1 : 1) }
       }
 
@@ -888,6 +1239,7 @@ Item {
       x: toolbar.x
       width: toolbar.width
       clip: true
+      visible: root.filter !== "guide"
       model: rowModel
       spacing: Commons.Style.space(2)
       boundsBehavior: Flickable.StopAtBounds
@@ -1094,6 +1446,365 @@ Item {
         visible: root.game !== null && list.count === 0
         text: root.appliedSearch ? "Nothing matches “" + root.appliedSearch + "”" : "Nothing here"
         font.pixelSize: Commons.Style.font.title
+      }
+    }
+
+    // ------------------------------------------------------------ guide
+
+    Flickable {
+      id: guidePane
+      anchors.top: toolbar.bottom
+      anchors.topMargin: Commons.Style.space(10)
+      anchors.bottom: footer.top
+      anchors.bottomMargin: Commons.Style.space(6)
+      x: toolbar.x
+      width: toolbar.width
+      visible: root.filter === "guide" && root.game !== null
+      clip: true
+      contentWidth: width
+      contentHeight: guideColumn.height
+      boundsBehavior: Flickable.StopAtBounds
+
+      WheelHandler {
+        target: null
+        acceptedDevices: PointerDevice.Mouse
+        onWheel: function(event) {
+          var notch = Math.max(-120, Math.min(120, event.angleDelta.y)) / 120
+          var bottom = Math.max(0, guidePane.contentHeight - guidePane.height)
+          guidePane.contentY = Math.max(0, Math.min(bottom, guidePane.contentY - notch * Commons.Style.space(120)))
+        }
+      }
+
+      Column {
+        id: guideColumn
+        width: guidePane.width
+        spacing: Commons.Style.space(12)
+
+        // The make job, this game's or another's, while it runs.
+        Rectangle {
+          width: parent.width
+          visible: root.making
+          height: jobBody.height + Commons.Style.space(24)
+          radius: Commons.Style.cornerRadius
+          color: Qt.alpha(Commons.Color.accent, 0.08)
+          border.width: 1
+          border.color: Qt.alpha(Commons.Color.accent, 0.4)
+          Column {
+            id: jobBody
+            x: Commons.Style.space(14)
+            y: Commons.Style.space(12)
+            width: parent.width - Commons.Style.space(28)
+            spacing: Commons.Style.space(6)
+            Item {
+              width: parent.width
+              height: stopButton.height
+              SectionLabel {
+                anchors.verticalCenter: parent.verticalCenter
+                text: root.jobHere ? "MAKING THIS GAME'S GUIDE" : "MAKING A GUIDE · " + (root.job.game || root.job.app || "")
+                color: Commons.Color.accent
+                opacity: 1
+              }
+              ActionButton {
+                id: stopButton
+                anchors.right: parent.right
+                accent: false
+                text: "Stop"
+                onClicked: root.stopGuide()
+              }
+            }
+            Text {
+              textFormat: Text.PlainText
+              width: parent.width
+              text: root.job.line || ""
+              color: root.foreground
+              elide: Text.ElideRight
+              font.family: Commons.Style.font.family
+              font.pixelSize: Commons.Style.font.body
+            }
+            Rectangle {
+              width: parent.width
+              height: 4
+              radius: 2
+              color: Qt.alpha(root.foreground, 0.12)
+              Rectangle {
+                width: root.job.total ? parent.width * Math.min(1, (root.job.done + 0.5) / root.job.total) : 0
+                height: parent.height
+                radius: parent.radius
+                color: Commons.Color.accent
+                Behavior on width { NumberAnimation { duration: 400; easing.type: Easing.OutCubic } }
+              }
+            }
+            Caption {
+              width: parent.width
+              text: "With " + (root.job.agent || "your agent") + (root.job.model ? " · " + root.job.model : "")
+                    + ". It keeps going if you close this; the old guide stays until it finishes."
+              wrapMode: Text.Wrap
+              elide: Text.ElideNone
+              opacity: 0.5
+            }
+          }
+        }
+
+        // What made the guide, and Make again; or the picker itself.
+        Item {
+          width: parent.width
+          visible: root.hasGuide && !root.makerOpen && !root.making
+          height: madeText.implicitHeight + Commons.Style.space(4)
+          Caption {
+            id: madeText
+            anchors.left: parent.left
+            anchors.right: againButton.left
+            anchors.verticalCenter: parent.verticalCenter
+            text: root.madeLine()
+          }
+          Chip {
+            id: againButton
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            text: "↻ Make again"
+            onClicked: root.makerOpen = true
+          }
+        }
+
+        Rectangle {
+          id: maker
+          width: parent.width
+          visible: root.makerOpen && !root.making && root.guide !== null
+          height: makerBody.height + Commons.Style.space(24)
+          radius: Commons.Style.cornerRadius
+          color: Qt.alpha(root.foreground, 0.04)
+          border.width: 1
+          border.color: Qt.alpha(root.foreground, 0.1)
+          Column {
+            id: makerBody
+            x: Commons.Style.space(14)
+            y: Commons.Style.space(12)
+            width: parent.width - Commons.Style.space(28)
+            spacing: Commons.Style.space(10)
+
+            Text {
+              textFormat: Text.PlainText
+              width: parent.width
+              visible: !root.hasGuide
+              text: "No guide for this game yet"
+              color: root.foreground
+              font.family: Commons.Style.font.family
+              font.pixelSize: Commons.Style.font.title
+              font.bold: true
+            }
+            Caption {
+              width: parent.width
+              wrapMode: Text.Wrap
+              elide: Text.ElideNone
+              text: root.runnable.length
+                    ? "Your coding agent reads achievement guides (and searches the web if it can), then OmaTrophy checks every quote it gives. It takes a few minutes; a cloud agent bills your account."
+                    : root.agents.length
+                      ? "No agent that can make guides is installed. Install Claude Code (omarchy default agent claude), then open this again."
+                      : "Looking for your coding agents…"
+            }
+
+            Row {
+              visible: root.runnable.length > 0
+              spacing: Commons.Style.space(10)
+              SectionLabel { width: Commons.Style.space(56); anchors.verticalCenter: parent.verticalCenter; text: "AGENT" }
+              Flow {
+                width: makerBody.width - Commons.Style.space(66)
+                spacing: Commons.Style.space(6)
+                Repeater {
+                  model: root.runnable
+                  delegate: Chip {
+                    required property var modelData
+                    text: modelData.name + (modelData.default ? " · default" : "")
+                    chosen: root.pickAgent === modelData.agent
+                    onClicked: root.pickAgentNamed(modelData.agent)
+                  }
+                }
+              }
+            }
+
+            Row {
+              visible: root.pickedRow !== null
+              spacing: Commons.Style.space(10)
+              SectionLabel { width: Commons.Style.space(56); anchors.verticalCenter: parent.verticalCenter; text: "MODEL" }
+              Flow {
+                width: makerBody.width - Commons.Style.space(66)
+                spacing: Commons.Style.space(6)
+                Chip {
+                  text: "Default"
+                  chosen: root.pickModel === ""
+                  onClicked: root.pickModelNamed("", "")
+                }
+                Repeater {
+                  model: root.pickedRow ? root.pickedRow.models.slice(0, 8) : []
+                  delegate: Chip {
+                    required property var modelData
+                    text: modelData.name
+                    chosen: root.pickModel === modelData.id
+                    onClicked: root.pickModelNamed(modelData.id, root.pickEffort)
+                  }
+                }
+                // Any model the list doesn't name: a full id, an alias, a
+                // provider/model for a local endpoint.
+                Rectangle {
+                  readonly property bool custom: root.pickModel !== "" && root.pickedRow !== null
+                                                 && !root.pickedRow.models.some(function(m) { return m.id === root.pickModel })
+                  width: Commons.Style.space(150)
+                  height: Commons.Style.space(28)
+                  radius: height / 2
+                  color: Qt.alpha(root.foreground, 0.04)
+                  border.width: 1
+                  border.color: modelField.activeFocus || custom ? Qt.alpha(Commons.Color.accent, 0.6) : Qt.alpha(root.foreground, 0.1)
+                  TextInput {
+                    id: modelField
+                    anchors.fill: parent
+                    anchors.leftMargin: Commons.Style.space(12)
+                    anchors.rightMargin: Commons.Style.space(12)
+                    verticalAlignment: TextInput.AlignVCenter
+                    clip: true
+                    color: root.foreground
+                    selectionColor: Qt.alpha(Commons.Color.accent, 0.4)
+                    font.family: Commons.Style.font.family
+                    font.pixelSize: Commons.Style.font.bodySmall
+                    text: parent.custom ? root.pickModel : ""
+                    onAccepted: { root.pickModelNamed(text.trim(), root.pickEffort); root.forceKeys() }
+                    Keys.onEscapePressed: root.forceKeys()
+                    Text {
+                      textFormat: Text.PlainText
+                      anchors.verticalCenter: parent.verticalCenter
+                      visible: !modelField.text && !modelField.activeFocus
+                      text: "Other model…"
+                      color: root.foreground
+                      opacity: 0.4
+                      font: modelField.font
+                    }
+                  }
+                }
+              }
+            }
+
+            Row {
+              visible: root.pickedRow !== null && root.modelEfforts().length > 0
+              spacing: Commons.Style.space(10)
+              SectionLabel { width: Commons.Style.space(56); anchors.verticalCenter: parent.verticalCenter; text: "EFFORT" }
+              Flow {
+                width: makerBody.width - Commons.Style.space(66)
+                spacing: Commons.Style.space(6)
+                Chip {
+                  text: "Default"
+                  chosen: root.pickEffort === ""
+                  onClicked: root.pickModelNamed(root.pickModel, "")
+                }
+                Repeater {
+                  model: root.modelEfforts()
+                  delegate: Chip {
+                    required property string modelData
+                    text: modelData
+                    chosen: root.pickEffort === modelData
+                    onClicked: root.pickModelNamed(root.pickModel, modelData)
+                  }
+                }
+              }
+            }
+
+            Caption {
+              width: parent.width
+              visible: text !== ""
+              text: {
+                var others = root.agents.filter(function(a) { return a.installed && !a.supported }).map(function(a) { return a.name })
+                return others.length ? others.join(", ") + ": not supported yet (their lock isn't checked)." : ""
+              }
+              wrapMode: Text.Wrap
+              elide: Text.ElideNone
+              opacity: 0.4
+            }
+
+            Row {
+              visible: root.runnable.length > 0
+              spacing: Commons.Style.space(10)
+              ActionButton {
+                text: root.hasGuide ? "Make it again" : "Make guide"
+                onClicked: root.makeGuide()
+              }
+              ActionButton {
+                visible: root.hasGuide
+                accent: false
+                text: "Cancel"
+                onClicked: root.makerOpen = false
+              }
+              Caption {
+                anchors.verticalCenter: parent.verticalCenter
+                visible: root.jobHere && (root.job.state === "failed" || root.job.state === "stopped")
+                text: root.job.line || ""
+                color: root.job.state === "failed" ? Commons.Color.accent : root.foreground
+              }
+            }
+          }
+        }
+
+        // ---- the guide itself
+
+        SectionLabel {
+          visible: root.hasGuide && (root.guide.next || []).length > 0 && !root.appliedSearch
+          text: "UP NEXT"
+          color: Commons.Color.accent
+          opacity: 1
+        }
+        Column {
+          width: parent.width
+          visible: root.hasGuide && !root.appliedSearch
+          spacing: Commons.Style.space(2)
+          Repeater {
+            model: root.hasGuide ? root.guide.next || [] : []
+            delegate: GuideRow { required property string modelData; api: modelData }
+          }
+        }
+
+        Repeater {
+          model: root.hasGuide && !root.appliedSearch
+                 ? [{ key: "overview", title: "OVERVIEW" }, { key: "route", title: "RECOMMENDED ROUTE" },
+                    { key: "missables", title: "MISSABLES" }, { key: "combos", title: "COMBOS" }] : []
+          delegate: Column {
+            required property var modelData
+            readonly property string body: root.guide.sections ? root.guide.sections[modelData.key] || "" : ""
+            width: guideColumn.width
+            visible: body !== ""
+            spacing: Commons.Style.space(4)
+            SectionLabel { text: parent.modelData.title }
+            Prose { width: parent.width; text: parent.body }
+          }
+        }
+        // An imported guide may have prose but no sections.
+        Prose {
+          width: parent.width
+          visible: root.hasGuide && !root.appliedSearch && !!root.guide.notes
+                   && !(root.guide.sections && root.guide.sections.overview)
+          text: root.guide ? root.guide.notes || "" : ""
+        }
+
+        Repeater {
+          model: root.hasGuide ? root.phaseGroups() : []
+          delegate: Column {
+            required property var modelData
+            width: guideColumn.width
+            spacing: Commons.Style.space(2)
+            SectionLabel {
+              text: (root.phaseNames[parent.modelData.phase] || parent.modelData.phase).toUpperCase()
+                    + " · " + parent.modelData.apis.length + " open"
+              color: parent.modelData.phase === "missable" ? Commons.Color.accent : root.foreground
+            }
+            Repeater {
+              model: parent.modelData.apis
+              delegate: GuideRow { required property string modelData; api: modelData }
+            }
+          }
+        }
+
+        Caption {
+          visible: root.hasGuide && root.doneCount() > 0 && !root.appliedSearch
+          text: root.doneCount() + " in the guide already done"
+          opacity: 0.4
+        }
+        Item { width: 1; height: Commons.Style.space(8) }
       }
     }
 

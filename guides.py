@@ -142,7 +142,17 @@ def guide_answer(store, app, achievements, folder=None):
     return {'store': store, 'app': str(app), 'file': os.path.basename(path),
             'generated': plan.get('generated', 0), 'order': order, 'items': items,
             'sections': plan.get('sections') or {}, 'notes': notes, 'ticks': ticks,
-            'next': open_order(order, items, done)}
+            'next': open_order(order, items, done),
+            'agent': plan.get('agent') if isinstance(plan.get('agent'), dict) else {},
+            'cost_usd': plan_cost(plan)}
+
+
+def plan_cost(plan):
+    """What the agent reported the guide cost in all (every make), in
+    dollars; 0 when it didn't say."""
+    usage = plan.get('usage') if isinstance(plan.get('usage'), list) else []
+    return round(sum(u['cost_usd'] for u in usage
+                     if isinstance(u, dict) and isinstance(u.get('cost_usd'), (int, float))), 4)
 
 
 def import_guides(source, replace=False, folder=None):

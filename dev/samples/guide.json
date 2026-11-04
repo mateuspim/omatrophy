@@ -1,0 +1,152 @@
+{
+ "store": "steam",
+ "app": "1",
+ "file": "starfall-odyssey-1.md",
+ "generated": 1793059700,
+ "agent": {
+  "name": "claude",
+  "model": "sonnet",
+  "effort": "medium"
+ },
+ "order": [
+  "A4",
+  "A3",
+  "A5",
+  "A6",
+  "A8"
+ ],
+ "items": {
+  "A3": {
+   "name": "Cartographer",
+   "api": "A3",
+   "phase": "missable",
+   "difficulty": 2,
+   "time": "~1-2 h",
+   "minutes": [
+    60,
+    120
+   ],
+   "missable": true,
+   "missable_note": "Before the Veil collapses in chapter 6",
+   "counter": {
+    "target": 14,
+    "label": "systems"
+   },
+   "combine_with": [
+    "Collector"
+   ],
+   "tips": "Scan every system the first time you pass it; the Veil closes for good after chapter 6.",
+   "cites": [
+    {
+     "source": "https://example.com/starfall-guide",
+     "quote": "the Veil closes for good after chapter 6",
+     "verified": true
+    }
+   ],
+   "unverified": []
+  },
+  "A4": {
+   "name": "The Quiet Part",
+   "api": "A4",
+   "phase": "missable",
+   "difficulty": 1,
+   "time": "~5 min",
+   "minutes": [
+    5,
+    5
+   ],
+   "missable": true,
+   "missable_note": "The last choice of the story",
+   "combine_with": [],
+   "tips": "Pick the quiet answer at the very end.",
+   "cites": [],
+   "unverified": [
+    "time",
+    "missable",
+    "tips"
+   ]
+  },
+  "A5": {
+   "name": "Pacifist Run",
+   "api": "A5",
+   "phase": "challenge",
+   "difficulty": 3,
+   "time": "~40 min",
+   "minutes": [
+    30,
+    50
+   ],
+   "missable": false,
+   "combine_with": [],
+   "tips": "Chapter 2 is the shortest; sneak past the drones.",
+   "cites": [
+    {
+     "source": "S1.3",
+     "quote": "chapter 2 is the shortest",
+     "verified": true
+    }
+   ],
+   "unverified": []
+  },
+  "A6": {
+   "name": "Collector",
+   "api": "A6",
+   "phase": "collect",
+   "difficulty": 2,
+   "time": "~3-4 h",
+   "minutes": [
+    180,
+    240
+   ],
+   "missable": false,
+   "counter": {
+    "target": 80,
+    "label": "relics"
+   },
+   "combine_with": [
+    "Cartographer"
+   ],
+   "tips": "Relics glow on the map once a system is scanned.",
+   "cites": [
+    {
+     "source": "S2.1",
+     "quote": "relics glow on the map",
+     "verified": true
+    }
+   ],
+   "unverified": []
+  },
+  "A8": {
+   "name": "Starfall",
+   "api": "A8",
+   "phase": "challenge",
+   "difficulty": 5,
+   "time": "~12 h",
+   "minutes": [
+    600,
+    900
+   ],
+   "missable": false,
+   "combine_with": [],
+   "tips": "Play it last, with every upgrade carried over.",
+   "cites": [],
+   "unverified": [
+    "time",
+    "tips"
+   ]
+  }
+ },
+ "sections": {
+  "overview": "About **20 hours** to 100%. Two achievements are missable; nothing is online.",
+  "route": "1. Story, scanning each system as you go.\n2. Pick the quiet answer at the end.\n3. Mop up relics, then a chapter 2 pacifist run.\n4. Nightmare last.",
+  "missables": "Cartographer closes after chapter 6; The Quiet Part is the last choice.",
+  "combos": "Cartographer and Collector share the same sweep."
+ },
+ "notes": "",
+ "ticks": [],
+ "next": [
+  "A4",
+  "A3",
+  "A5"
+ ]
+}
