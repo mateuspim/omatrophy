@@ -44,9 +44,12 @@ Column {
   // The Steam profile backfill's latest line, from its status.json
   // (stores/steam_community.py); {} before the first run.
   property var backfill: ({})
-  // Load from Steam (ADR 13): played Steam games with no stats here, from
-  // `steam-load status`, and the latest run, from steam-load/status.json.
+  // Load from Steam (ADR 13): played Steam games with no stats here, those
+  // no load has tried yet (a load only takes these, unless the owner asks
+  // for all), from `steam-load status`; the latest run from
+  // steam-load/status.json.
   property int steamMissing: 0
+  property int steamUnchecked: 0
   property var steamLoad: ({})
   // A run rewrites its status every few seconds; one quiet for a minute
   // died (omatrophy.py's STEAM_LOAD_STALE).
@@ -312,24 +315,36 @@ Column {
   function steamLoadText() {
     var l = steamLoad
     if (steamLoading)
-      return "Loading " + l.done + " of " + l.total + " · " + l.loaded + " found. Steam's window moves while this runs."
+      return "Loading " + l.done + " of " + l.total + " · " + l.loaded + " found. Steam stays out of sight; progress is at the top of the panel."
     if (l.state === "failed") return l.line.replace(/^stopped: /, "Stopped: ")
-    var left = steamMissing === 1 ? "1 played game isn't" : steamMissing + " played games aren't"
+    if (steamUnchecked > 0)
+      return (steamUnchecked === 1 ? "1 played game isn't" : steamUnchecked + " played games aren't")
+             + " here yet. Load has Steam save their achievements on this machine, out of sight; it picks up where it stopped."
+    var none = steamMissing === 1 ? "1 game" : steamMissing + " games"
     if (steamMissing > 0)
-      return left + " here yet. Load opens each one's page in Steam, so Steam saves its achievements on this machine; its window moves while it runs."
-    if (l.time) return "Every played game is here. Last load " + Qt.formatTime(new Date(l.time * 1000), "hh:mm") + "."
+      return "Every played game checked; " + none + " had no achievements. New games load on their own next time; Check all tries them all again."
     return "Every played game is here."
   }
 
   // Detached: the panel's content is rebuilt on every open, and a child
-  // process would end with it.
-  function startSteamLoad() {
-    steamLoad = { state: "running", time: Date.now() / 1000, done: 0, total: steamMissing, loaded: 0 }
-    Quickshell.execDetached(["python3", helperPath, "steam-load"])
+  // process would end with it. `all` tries games a load already tried.
+  function startSteamLoad(all) {
+    steamLoad = { state: "running", time: Date.now() / 1000, done: 0, total: all ? steamMissing : steamUnchecked,
+                  loaded: 0, none: 0, app: "" }
+    Quickshell.execDetached(["python3", helperPath, "steam-load"].concat(all ? ["all"] : []))
   }
 
+  // Shown as stopped at once; the loader ends within a quarter second.
   function stopSteamLoad() {
     runner.exec(["python3", helperPath, "steam-load", "stop"])
+    steamLoad = Object.assign({}, steamLoad, { state: "stopped" })
+  }
+
+  // A game's name for the progress strip, from the panel's own lists.
+  function steamGameName(app) {
+    var all = (games || []).concat(cabinet && cabinet.recent ? cabinet.recent : [])
+    var g = all.find(function(x) { return x.store === "steam" && x.app === app })
+    return g ? g.game : "App " + app
   }
 
   // ---------------------------------------------------- Files and processes
@@ -416,7 +431,11 @@ Column {
     command: ["python3", root.helperPath, "steam-load", "status"]
     stdout: StdioCollector {
       onStreamFinished: {
-        try { root.steamMissing = JSON.parse(text).missing || 0 } catch (e) {}
+        try {
+          var answer = JSON.parse(text)
+          root.steamMissing = answer.missing || 0
+          root.steamUnchecked = answer.unchecked || 0
+        } catch (e) {}
       }
     }
   }
@@ -916,6 +935,69 @@ Column {
             cursorShape: Qt.PointingHandCursor
             onClicked: root.tab = tabItem.modelData.value
           }
+        }
+      }
+    }
+  }
+
+  // Load from Steam's progress, on every tab while it runs: it works out of
+  // sight, so this is the only sign it is going.
+  Rectangle {
+    id: steamLoadStrip
+    width: root.width
+    height: visible ? stripBody.height + Commons.Style.space(16) : 0
+    visible: root.steamLoading
+    radius: Commons.Style.cornerRadius
+    color: Qt.alpha(root.foreground, 0.04)
+    border.width: 1
+    border.color: Qt.alpha(root.foreground, 0.08)
+    Column {
+      id: stripBody
+      x: Commons.Style.space(10)
+      y: Commons.Style.space(8)
+      width: parent.width - Commons.Style.space(20)
+      spacing: Commons.Style.space(6)
+      Item {
+        width: parent.width
+        height: Math.max(stripLabel.implicitHeight, stripStop.height)
+        Column {
+          id: stripLabel
+          anchors.left: parent.left
+          anchors.right: stripStop.left
+          anchors.rightMargin: Commons.Style.space(8)
+          anchors.verticalCenter: parent.verticalCenter
+          spacing: Commons.Style.space(2)
+          MiniLabel {
+            text: (root.steamLoad.everything ? "CHECKING ALL" : "LOADING FROM STEAM")
+                  + " · " + root.steamLoad.done + " / " + root.steamLoad.total
+          }
+          Caption {
+            textFormat: Text.PlainText
+            width: parent.width
+            opacity: 0.5
+            text: (root.steamLoad.app ? root.steamGameName(root.steamLoad.app) + " · " : "")
+                  + (root.steamLoad.loaded || 0) + " found, " + (root.steamLoad.none || 0) + " without achievements"
+          }
+        }
+        PillButton {
+          id: stripStop
+          anchors.right: parent.right
+          anchors.verticalCenter: parent.verticalCenter
+          label: "Stop"
+          onClicked: root.stopSteamLoad()
+        }
+      }
+      Rectangle {
+        width: parent.width
+        height: 3
+        radius: 1.5
+        color: Qt.alpha(root.foreground, 0.1)
+        Rectangle {
+          width: parent.width * (root.steamLoad.total ? root.steamLoad.done / root.steamLoad.total : 0)
+          height: parent.height
+          radius: parent.radius
+          color: Commons.Color.accent
+          Behavior on width { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
         }
       }
     }
@@ -2522,7 +2604,7 @@ Column {
     Item {
       width: root.width
       height: Math.max(steamLoadLine.implicitHeight, steamLoadButton.height)
-      visible: root.steamLoading || root.steamMissing > 0
+      visible: !root.steamLoading && root.steamUnchecked > 0
       Caption {
         textFormat: Text.PlainText
         id: steamLoadLine
@@ -2531,16 +2613,14 @@ Column {
         anchors.rightMargin: Commons.Style.space(8)
         anchors.verticalCenter: parent.verticalCenter
         opacity: 0.5
-        text: root.steamLoading
-              ? "Loading from Steam · " + root.steamLoad.done + " of " + root.steamLoad.total
-              : (root.steamMissing === 1 ? "1 Steam game isn't here yet" : root.steamMissing + " Steam games aren't here yet")
+        text: root.steamUnchecked === 1 ? "1 Steam game isn't here yet" : root.steamUnchecked + " Steam games aren't here yet"
       }
       PillButton {
         id: steamLoadButton
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
-        label: root.steamLoading ? "Stop" : "Load from Steam"
-        onClicked: root.steamLoading ? root.stopSteamLoad() : root.startSteamLoad()
+        label: "Load from Steam"
+        onClicked: root.startSteamLoad(false)
       }
     }
 
@@ -3077,10 +3157,18 @@ Column {
       // never by the watcher, because Steam's window moves.
       SettingRow {
         label: "LIBRARY"
-        PillButton {
-          label: root.steamLoading ? "Stop" : "Load from Steam"
-          visible: root.steamLoading || root.steamMissing > 0
-          onClicked: root.steamLoading ? root.stopSteamLoad() : root.startSteamLoad()
+        Row {
+          spacing: Commons.Style.space(4)
+          PillButton {
+            label: "Check all again"
+            visible: !root.steamLoading && root.steamMissing > root.steamUnchecked
+            onClicked: root.startSteamLoad(true)
+          }
+          PillButton {
+            label: root.steamLoading ? "Stop" : "Load from Steam"
+            visible: root.steamLoading || root.steamUnchecked > 0
+            onClicked: root.steamLoading ? root.stopSteamLoad() : root.startSteamLoad(false)
+          }
         }
       }
 
