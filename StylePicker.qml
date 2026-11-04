@@ -107,6 +107,11 @@ Column {
     return !!hiddenKeys[g.store + ":" + g.app]
   }
 
+  // The rows of a list whose game isn't hidden.
+  function unhidden(rows) {
+    return rows.filter(function(g) { return !isHidden(g) })
+  }
+
   function showGame(g) {
     if (sort === "closest" && isHidden(g)) return false
     return !gameFilter || g.game.toLowerCase().indexOf(gameFilter.toLowerCase()) >= 0
@@ -1154,7 +1159,11 @@ Column {
     Item {
       id: rarestHeader
       readonly property var lists: root.cabinet && root.cabinet.rarest ? root.cabinet.rarest : null
-      visible: lists !== null && lists.ever.length > 0
+      // A game hidden since the last read leaves at once; `now` sends a
+      // couple spare unlocks so three still show.
+      readonly property var ever: lists ? root.unhidden(lists.ever).slice(0, 3) : []
+      readonly property var month: lists ? root.unhidden(lists.month).slice(0, 3) : []
+      visible: ever.length > 0
       width: root.width
       height: rarestChips.height
       PanelSectionHeader {
@@ -1180,7 +1189,7 @@ Column {
       width: root.width
       spacing: Commons.Style.space(6)
       Repeater {
-        model: rarestHeader.lists ? rarestHeader.lists[root.rarestRange] : []
+        model: rarestHeader[root.rarestRange]
         delegate: Item {
           id: rareRow
           required property var modelData
@@ -1232,7 +1241,7 @@ Column {
         }
       }
       Caption {
-        visible: rarestHeader.lists !== null && rarestHeader.lists[root.rarestRange].length === 0
+        visible: rarestHeader[root.rarestRange].length === 0
         width: parent.width
         opacity: 0.5
         text: "Nothing unlocked yet this month."
@@ -1243,7 +1252,7 @@ Column {
 
     PanelSectionHeader {
       readonly property int hiddenPlatinums: root.cabinet ? root.cabinet.shelf.length - shelf.count : 0
-      visible: shelf.count > 0 || hiddenPlatinums > 0
+      visible: shelf.count > 0 || hiddenPlatinums > 0 || almost.count > 0
       text: "PLATINUM SHELF · " + shelf.count + (hiddenPlatinums > 0 ? " · " + hiddenPlatinums + " HIDDEN" : "")
       foreground: root.foreground
     }
@@ -1251,7 +1260,7 @@ Column {
     // Every platinum, in a grid whose tiles fit the width exactly.
     Grid {
       id: shelfGrid
-      visible: shelf.count > 0
+      visible: shelf.count > 0 || almost.count > 0
       columns: 4
       spacing: Commons.Style.space(6)
       readonly property real tileWidth: (root.width - spacing * (columns - 1)) / columns
@@ -1331,6 +1340,76 @@ Column {
               visible: removeHit.containsMouse
               text: "Off the shelf · Games tab › Show brings it back"
             }
+          }
+        }
+      }
+      // The shelf's empty slots, or a fresh row when it is full, go to
+      // the games nearest platinum: dimmed art, how many are left, and a
+      // bar, so the shelf shows what's next to finish.
+      Repeater {
+        id: almost
+        readonly property int slots: (shelfGrid.columns - shelf.count % shelfGrid.columns) % shelfGrid.columns || shelfGrid.columns
+        model: root.cabinet && root.cabinet.nearest ? root.unhidden(root.cabinet.nearest).slice(0, slots) : []
+        delegate: Rectangle {
+          id: almostCard
+          required property var modelData
+          required property int index
+          readonly property int toGo: modelData.total - modelData.unlocked
+          width: shelfGrid.tileWidth
+          height: Math.round(width * 215 / 460)
+          radius: Commons.Style.cornerRadius
+          color: "transparent"
+          border.width: 1
+          border.color: Qt.alpha(root.foreground, almostHit.containsMouse ? 0.45 : 0.14)
+          property real rise: 0
+          opacity: 0
+          transform: Translate { y: almostCard.rise }
+          FadeIn { item: almostCard; order: shelf.count + almostCard.index }
+          Accessible.role: Accessible.Button
+          Accessible.name: modelData.game + ", " + toGo + " to platinum"
+
+          Art {
+            anchors.fill: parent
+            anchors.margins: 1
+            source: almostCard.modelData.header || ""
+            label: almostCard.modelData.game
+            zoom: almostHit.containsMouse ? 1.08 : 1
+            opacity: almostHit.containsMouse ? 0.75 : 0.4
+            Behavior on opacity { NumberAnimation { duration: 160 } }
+          }
+          Rectangle {
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.margins: 3
+            width: leftText.implicitWidth + 8
+            height: leftText.implicitHeight + 2
+            radius: height / 2
+            color: Qt.alpha(Commons.Color.popups.background, 0.85)
+            Text {
+              textFormat: Text.PlainText
+              id: leftText
+              anchors.centerIn: parent
+              text: almostCard.toGo + " left"
+              color: root.foreground
+              font.family: Commons.Style.font.family
+              font.pixelSize: 9
+              font.bold: true
+            }
+          }
+          Bar {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            // Flush with the frame, under the art's name label.
+            anchors.margins: 1
+            height: 2
+            radius: 0
+            fraction: almostCard.modelData.unlocked / almostCard.modelData.total
+          }
+          Hit { id: almostHit; game: almostCard.modelData }
+          PanelToolTip {
+            visible: almostHit.containsMouse
+            text: almostCard.modelData.game + " · " + almostCard.modelData.unlocked + " / " + almostCard.modelData.total + " · " + almostCard.toGo + " to platinum"
           }
         }
       }

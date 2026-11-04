@@ -624,11 +624,24 @@ class PanelJson(unittest.TestCase):
     def test_now_lists_the_rarest_unlocks_with_their_games(self):
         with FakeLibrary():
             rarest = omatrophy.now()['rarest']
-        self.assertEqual([(u['name'], u['percent'], u['tier'], u['game']) for u in rarest['ever']],
+        self.assertEqual([(u['name'], u['percent'], u['tier'], u['game']) for u in rarest['ever'][:3]],
                          [('Half Game 1', 5.0, 'gold', 'Half Game'), ('Done Game 1', 5.0, 'gold', 'Done Game'),
                           ('Half Game 0', 50.0, 'bronze', 'Half Game')])
         # The fake unlocks are from 1970, long before this month.
         self.assertEqual(rarest['month'], [])
+
+    def test_hidden_games_leave_the_rarest_unlocks_and_the_nearest(self):
+        with FakeLibrary(hidden=['steam:20']):
+            now = omatrophy.now()
+        self.assertEqual({u['app'] for u in now['rarest']['ever']}, {'10'})
+        self.assertEqual(now['nearest'], [])
+
+    def test_now_lists_the_games_nearest_platinum(self):
+        with FakeLibrary():
+            nearest = omatrophy.now()['nearest']
+        self.assertEqual([(c['app'], c['game'], c['unlocked'], c['total']) for c in nearest],
+                         [('20', 'Half Game', 2, 4)])
+        self.assertEqual(nearest[0]['latest'], [])
 
     def test_game_detail_for_the_tracker(self):
         with FakeLibrary(running={'game': '20', 'since': 0}):

@@ -125,7 +125,7 @@
    "unlocked": 44,
    "total": 46,
    "game": "Ember Crown",
-   "header": ""
+   "header": "dev/samples/art/ember-crown-header.svg"
   },
   {
    "store": "steam",
@@ -133,7 +133,7 @@
    "unlocked": 27,
    "total": 30,
    "game": "Velvet Circuit",
-   "header": ""
+   "header": "dev/samples/art/velvet-circuit-header.svg"
   },
   {
    "store": "steam",
@@ -141,7 +141,7 @@
    "unlocked": 88,
    "total": 100,
    "game": "Deep Signal",
-   "header": ""
+   "header": "dev/samples/art/deep-signal-header.svg"
   }
  ],
  "rarest": {

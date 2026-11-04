@@ -371,11 +371,14 @@ def rarest_unlocks(unlocks, n, since=0):
     return sorted(ranked, key=lambda u: (u['percent'], -u['time']))[:n]
 
 
-def library_unlocks(lib):
+def library_unlocks(lib, hidden=()):
     """Every unlock with a date across the library, with its rarity from
-    the cache (no network) and where it came from."""
+    the cache (no network) and where it came from; games in `hidden`
+    ("store:game") are set aside, so they stay out."""
     out = []
     for s, g, achs in lib:
+        if game_key(s.id, g) in hidden:
+            continue
         pcts = None
         for a in achs:
             if not (a['unlocked'] and a['time']):
@@ -386,9 +389,9 @@ def library_unlocks(lib):
     return out
 
 
-def rarest_cards(lib, n, now_time):
+def rarest_cards(lib, n, now_time, hidden=()):
     """The panel's rarest unlocks, ever and this month, each named with its game."""
-    unlocks = library_unlocks(lib)
+    unlocks = library_unlocks(lib, hidden)
     stores_by_id = {s.id: s for s, _, _ in lib}
     def card(u):
         return dict(u, tier=tier(u['percent']), game=stores_by_id[u['store']].game_name(u['app']))
@@ -428,7 +431,7 @@ def playing_card(store, game, achs, since):
     return card
 
 
-def now(recent_n=3, rarest_n=3):
+def now(recent_n=3, rarest_n=3, nearest_n=4):
     """Everything the panel's Now tab shows, in one read of every store."""
     found = found_stores()
     lib = library(found)
@@ -448,8 +451,15 @@ def now(recent_n=3, rarest_n=3):
         recent.append(game_card(s, key[1], achs, when))
     shelf = sorted((dict(game_card(s, g, achs), latest=[]) for s, g, achs in lib if platinum_time(achs)),
                    key=lambda c: -c['platinum'])
-    return dict(totals(rows), playing=playing, recent=recent, shelf=shelf,
-                rarest=rarest_cards(lib, rarest_n, time.time()))
+    # The panel hides games live, before the next read: a few extra rarest
+    # unlocks and nearest games let it drop a hidden one and still fill.
+    hidden = hidden_games()
+    nearest = []
+    for r in nearest_platinum(rows, nearest_n + 2, hidden):
+        s, achs = by_key[(r['store'], r['app'])]
+        nearest.append(dict(game_card(s, r['app'], achs), latest=[]))
+    return dict(totals(rows), playing=playing, recent=recent, shelf=shelf, nearest=nearest,
+                rarest=rarest_cards(lib, rarest_n + 2, time.time(), hidden))
 
 
 def games():

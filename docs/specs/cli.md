@@ -39,6 +39,7 @@ the next read names them locally. The command itself exits at once.
 {"games": 126, "trophies": 1779, "platinums": 12,
  "playing": {...card, "hero": "...", "since": 1793065549, "session": [...], "next": [...]} | null,
  "recent": [card, ...], "shelf": [card, ...],
+ "nearest": [card, ...],
  "rarest": {"ever": [unlock, ...], "month": [unlock, ...]}}
 ```
 
@@ -53,9 +54,13 @@ the next read names them locally. The command itself exits at once.
   hidden achievements and `progress` is as in [game](#game).
 - `recent`: the three games played last, minus the running one.
 - `shelf`: every complete game, newest platinum first, with `latest` empty.
-- `rarest`: the three unlocks fewest players have across the library,
+- `nearest`: the six started, unfinished games closest to 100%, ties to
+  the one with fewer left, with `latest` empty; the panel fills the
+  platinum shelf's empty slots with them. Hidden games are left out.
+- `rarest`: the five unlocks fewest players have across the library,
   ever and since the first of this month (local time), rarest first, ties
-  to the newest. An **unlock** is `{name, icon, time, percent, tier,
+  to the newest; hidden games are left out. The panel shows three; the
+  spares let it drop a game hidden since the read. An **unlock** is `{name, icon, time, percent, tier,
   store, app, game}`. Rarity is read from the cache only, so `now` makes
   no request for it; unlocks of games with no cached rarity are left out.
   The watcher fetches the missing ones once after `ready`.

@@ -3,13 +3,21 @@
 ## Unreleased
 
 - The Now tab lists your rarest unlocks across every game, ever or this
-  month, each opening its game in the tracker. Rarity comes from the
+  month, each opening its game in the tracker; hidden games stay out. Rarity comes from the
   cache, so the panel makes no extra requests; the watcher fetches it
   once for games that have none.
 - Before any game has achievements, the Now tab says where they come
   from and points to the Steam profile switch in Settings.
-- Settings groups the Steam rows under their own header, and the "applies
-  to the next toast" note sits under the toast settings it is about.
+- The platinum shelf's empty slots show the games closest to platinum:
+  dimmed art, how many are left and a bar, each opening the tracker.
+- Settings is one list of choices: style, then position, glass and sound
+  as chip rows (no more screen drawing or slider), then Try it. The Steam
+  rows have their own header, and the "applies to the next toast" note
+  sits under the toast settings it is about.
+- Switching panel tabs no longer jumps: the page fades in from hidden
+  without the rise, instead of flashing at full opacity first.
+- The tracker no longer fills the shell log with "Cannot set a duration
+  of < 0" when rows leave the list.
 
 ## 0.3.0 - 2026-11-03
 
