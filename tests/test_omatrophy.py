@@ -540,7 +540,10 @@ class FakeLibrary:
         names = os.path.join(self.tmp.name, 'names.json')
         with open(names, 'w') as f:
             json.dump({a: g[0] for a, g in self.GAMES.items()}, f)
-        self.patches = [mock.patch.dict(os.environ, {'STEAM_DIR': root, 'STEAM_ACCOUNT': UID, 'HOME': home}),
+        # COMET_DIR and HEROIC_DIR point nowhere so a real GOG install on
+        # the test machine never joins the fake library.
+        self.patches = [mock.patch.dict(os.environ, {'STEAM_DIR': root, 'STEAM_ACCOUNT': UID, 'HOME': home,
+                                                     'COMET_DIR': f'{home}/none', 'HEROIC_DIR': f'{home}/none'}),
                         mock.patch.object(steam, 'NAMES', names), mock.patch.object(steam, 'CACHE', cache),
                         mock.patch.object(steam, 'running_game', return_value=self.running),
                         mock.patch('urllib.request.urlopen', side_effect=AssertionError('network in a test'))]
@@ -1044,7 +1047,7 @@ class Hidden(unittest.TestCase):
                 self.assertEqual(json.load(f), {'icons': 'vector', 'hidden': ['steam:10']})
             self.assertEqual(omatrophy.hidden_games(), {'steam:10'})
             with self.assertRaises(SystemExit):
-                omatrophy.set_hidden('gog', '10', True)
+                omatrophy.set_hidden('epic', '10', True)
 
     def test_hidden_games_leave_nearest_platinum(self):
         rows = [{'store': 'steam', 'app': '1', 'unlocked': 9, 'total': 10},

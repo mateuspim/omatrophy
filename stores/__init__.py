@@ -1,9 +1,10 @@
 """The game stores OmaTrophy watches. Add a store by subclassing
 stores.base.Store in its own module and listing the class here; see
 docs/guide/stores.md."""
+from .gog import Gog
 from .steam import Steam
 
-STORES = [Steam]
+STORES = [Steam, Gog]
 
 
 def available():
