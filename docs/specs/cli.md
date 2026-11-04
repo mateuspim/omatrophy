@@ -13,6 +13,10 @@ installed.
 | `now` | Prints [what the bar panel's Now tab shows](#now), in one read of every store, and keeps a copy in `~/.cache/omatrophy/panel/now.json` that the panel shows on its next open until a fresh read answers. |
 | `games` | Prints [every game with achievements](#games) for the panel's Games tab. Uncached names are looked up eight at a time; the watcher warms that cache in the background after `ready`, so this is usually a file read. Keeps a copy in `~/.cache/omatrophy/panel/games.json`, like `now`. |
 | `game [store app]` | Prints [one game's every achievement](#game) for the tracker. Without arguments: the game running now, else the one played last. Exits non-zero, with what to do, when the game has no cached achievements. |
+| `guide [store app]`, `guide import <folder> [--replace]` | One game's 100% guide as JSON for the tracker, or copy guides in from another folder ([guides](guides.md#command-line)). |
+| `guide make <store> <app> [--no-web] [--agent a] [--model m] [--effort e]`, `guide stop`, `guide status` | Make a guide through your agent (ADR 14), stop it, or read its progress ([guides](guides.md#the-make-job)). |
+| `guide agents`, `guide model <agent> <model> [effort]\|default` | The agents, their models and your picks; set or clear one agent's pick. |
+| `set guide-agent default\|<agent>`, `set guide-web on\|off` | Which agent makes guides, and whether it may search the web. |
 | `set position top-center\|top-left\|top-right` | Where cards appear. |
 | `set sound on\|off\|omatrophy\|classic` | The chime: on, off, or which set (which also turns it on). |
 | `set icons omarchy\|vector\|painted` | Trophy art set. |
@@ -63,9 +67,14 @@ the next read names them locally. The command itself exits at once.
 - `playing`: the game running now, or `null`. `hero` is its wide art (no
   logo), `since` when it started,
   `session` the unlocks since then (newest first, up to 12), `next` the three
-  locked achievements most players have, as `{name, icon, time, desc,
-  percent, progress}`; `icon` is the greyed-out one, `desc` is `""` for
-  hidden achievements and `progress` is as in [game](#game).
+  locked achievements most players have, as `{name, api, icon, time, desc,
+  percent, progress, guide_time, missable, missable_note, tip}`; `icon` is the
+  greyed-out one, `desc` is `""` for hidden achievements and `progress` is
+  as in [game](#game). With a [guide](guides.md) for the game, `guide` is
+  `true` and `next` is the guide's next three instead (its order,
+  missables first, hand ticks counted done), with the plan's time as
+  `guide_time` (text, like `"~20 min"`), `missable`, `missable_note` and
+  `tip` (`""` for a hidden achievement); without one those are empty.
 - `recent`: the three games played last, minus the running one.
 - `shelf`: every complete game, newest platinum first, with `latest` empty.
 - `metals`: every unlock counted by the metal its toast would have, from

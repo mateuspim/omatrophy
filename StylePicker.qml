@@ -1706,7 +1706,8 @@ Column {
         MiniLabel {
           x: Commons.Style.space(10)
           visible: playing.game !== null && playing.game.next.length > 0
-          text: "UP NEXT"
+          // With a guide the order is its route, missables first.
+          text: playing.game && playing.game.guide ? "UP NEXT · FROM YOUR GUIDE" : "UP NEXT"
         }
         Column {
           x: Commons.Style.space(10)
@@ -1745,7 +1746,16 @@ Column {
                 Caption {
                   width: parent.width
                   visible: text !== ""
-                  text: nextRow.modelData.desc
+                  text: nextRow.modelData.tip || nextRow.modelData.desc
+                }
+                // The guide's time and missable warning, when it has them.
+                Caption {
+                  width: parent.width
+                  readonly property var n: nextRow.modelData
+                  visible: text !== ""
+                  text: [n.missable ? "⚠ Missable" + (n.missable_note ? ": " + n.missable_note : "") : "", n.guide_time || ""]
+                        .filter(function(t) { return t !== "" }).join(" · ")
+                  color: n.missable ? Commons.Color.accent : root.foreground
                 }
                 // A counter achievement shows how far along it is: a thin
                 // bar under its text and the count beside the rarity.

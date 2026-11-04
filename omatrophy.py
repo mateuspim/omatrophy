@@ -613,11 +613,38 @@ def playing_card(store, game, achs, since):
     card = game_card(store, game, achs, since)
     card.update(since=since, hero=store.art(game)['hero'])
     card['session'] = [brief(a) for a in latest_unlocks(achs, 12, since)]
-    card['next'] = [dict(brief(a), icon=a.get('icon_locked') or a['icon'],
+    # With a guide, Up next follows its route (missables first); without
+    # one, the locked achievements most players have.
+    plan = guide_next(store.id, game, achs)
+    by_api = {a['api']: a for a in achs}
+    upcoming = [by_api[api] for api in plan] if plan else next_up(achs, pcts, 3)
+    card['guide'] = bool(plan)
+    card['next'] = [dict(brief(a), api=a['api'], icon=a.get('icon_locked') or a['icon'],
                          desc='' if a.get('hidden') else a['desc'], percent=pcts.get(a['api']),
-                         progress=a.get('progress'))
-                    for a in next_up(achs, pcts, 3)]
+                         progress=a.get('progress'), **guide_hint(plan.get(a['api']), a.get('hidden')))
+                    for a in upcoming]
     return card
+
+
+def guide_next(store_id, game, achs):
+    """{api: plan item} for the guide's next three open achievements, in
+    its order; {} with no guide. A broken guide only costs the hints."""
+    import guides
+    try:
+        answer = guides.guide_answer(store_id, game, achs)
+    except Exception:
+        return {}
+    by_api = {a['api']: a for a in achs}
+    return {api: dict(answer['items'][api], api=api) for api in answer.get('next', []) if api in by_api}
+
+
+def guide_hint(item, hidden=False):
+    """The few plan fields the Now tab's Up next shows: time, missable and
+    one tip (`guide_time`, not `time`: that is the unlock time); a hidden achievement's tip stays out (spoilers)."""
+    if not item:
+        return {'guide_time': '', 'missable': False, 'missable_note': '', 'tip': ''}
+    return {'guide_time': item.get('time') or '', 'missable': bool(item.get('missable')),
+            'missable_note': item.get('missable_note') or '', 'tip': '' if hidden else item.get('tips') or ''}
 
 
 def now(recent_n=3, rarest_n=8, nearest_n=4):
