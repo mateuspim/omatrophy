@@ -69,6 +69,16 @@ class Missing(unittest.TestCase):
         tried = {'10': {'time': 1, 'found': False}}
         self.assertEqual(steam_loader.missing(played, {'20'}, tried, everything=True), ['10'])
 
+    def test_unsure_games_are_queued_first_and_not_settled(self):
+        played = {'10': {'total': 5}, '20': {'total': 9}, '30': {'total': 1}}
+        tried = {'30': {'time': 1, 'found': None}, '20': {'time': 1, 'found': False}}
+        self.assertEqual(steam_loader.missing(played, set(), tried), ['30', '10'])
+        self.assertTrue(steam_loader.unsure(tried, '30'))
+        self.assertFalse(steam_loader.settled(tried, '30'))
+        self.assertTrue(steam_loader.settled(tried, '20'))
+        self.assertFalse(steam_loader.settled(tried, '10'))
+        self.assertFalse(steam_loader.unsure(tried, '10'))
+
     def test_bad_ids_are_skipped(self):
         self.assertEqual(steam_loader.missing({'../x': {'total': 9}, '7': {'total': 1}}, set(), {}), ['7'])
 

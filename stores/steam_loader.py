@@ -104,8 +104,8 @@ def missing(playtimes, local, tried, everything=False):
             if app_id(app) and p.get('total', 0) > 0 and app not in local
             and (everything or not settled(tried, app))]
     # Unsure games first: they were next in line when the streak stopped.
-    return [app for _, _, app in sorted(((not unsure(tried, app), -t, app) for t, app in rows),
-                                        key=lambda r: (r[0], r[1], int(r[2])))]
+    rows.sort(key=lambda r: (not unsure(tried, r[1]), -r[0], int(r[1])))
+    return [app for _, app in rows]
 
 
 def steam_running(proc='/proc'):
