@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- GOG support: games played through Heroic Games Launcher toast, show
+  in the panel and open in the tracker like Steam's, with GOG's own
+  rarity picking the metal. OmaTrophy reads the database Heroic's Comet
+  service keeps for each game; no GOG login or API (ADR 12).
 - Settings has a Steam profile row: the community backfill's switch,
   what it sends, and how its latest run went, including when Steam has
   asked for a pause.

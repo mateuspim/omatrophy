@@ -4,7 +4,8 @@
 
 **Achievement unlocks as trophies over your games, on the Omarchy shell:
 bronze, silver and gold by rarity, and a platinum moment when you finish a
-game. No API key, works with a private Steam profile.**
+game. Steam and GOG (through Heroic); no API key, works with a private
+Steam profile.**
 
 ## Quick start
 
@@ -21,8 +22,9 @@ achievement list.
 
 - Toasts on the shell's Overlay layer, so they land over fullscreen games
   even when Steam's own popup doesn't. Click-through; never takes focus.
-- About two seconds from unlock to toast: OmaTrophy reads Steam's local
-  achievement cache, so no Steam Web API key and no public profile.
+- About two seconds from unlock to toast: OmaTrophy reads the launcher's
+  local achievement data (Steam's cache, the GOG database Heroic keeps),
+  so no Web API key, no login and no public profile.
 - Rarity picks the metal: bronze, silver at 35% of players or fewer, gold at
   10% or fewer, with glitter and a sweep of light for gold.
 - A platinum card at 100%: the trophy spins in over the game's hero art and
@@ -46,7 +48,7 @@ achievement list.
 - A chime per tier, from a short tick for bronze to a ringing bloom for
   platinum, made for OmaTrophy; or the classic desktop sounds, or silence.
 - Top centre, top left or top right.
-- Built for more stores than Steam: each one is a small module
+- Steam and GOG today, and built for more: each store is a small module
   ([adding a store](docs/guide/stores.md)).
 
 ## Install
@@ -68,10 +70,10 @@ rm -rf ~/.config/omatrophy ~/.local/state/omatrophy ~/.cache/omatrophy
 ## Security and privileges
 
 OmaTrophy runs inside `omarchy-shell` as your user. It reads Steam's local
-achievement cache, keeps its settings and a small cache in its own folders,
+achievement cache and, for GOG, the database Heroic's Comet service keeps, keeps its settings and a small cache in its own folders,
 and calls Steam's public endpoints for rarity, game names and art when a
 toast shows, the bar panel opens or the watcher starts (game names, once
-each). No root, no API key, no login. Details in
+each). GOG needs no network at all. No root, no API key, no login. Details in
 [SECURITY.md](SECURITY.md).
 
 ## Trophy cabinet and tracker
@@ -137,8 +139,11 @@ settings file in [docs/specs/settings.md](docs/specs/settings.md).
 
 ## Game stores
 
-Steam is supported today, native or Flatpak; set `STEAM_DIR` if yours lives
-elsewhere.
+Steam and GOG are supported today.
+
+### Steam
+
+Native or Flatpak; set `STEAM_DIR` if yours lives elsewhere.
 
 Steam keeps a game's achievements on disk only once that game has run on
 this machine, so a fresh install shows just a few games. If your profile
@@ -154,14 +159,34 @@ Steam limits how fast a profile can be read, so the watcher fetches a few
 pages an hour (15 to start, fewer after Steam says to slow down, more while
 it doesn't) and a large library fills in over a day or two. Settings has
 the same switch, and shows how the latest run went. Toasts still
-come only from this machine's own data. Other launchers plug in as one module each:
+come only from this machine's own data.
+
+### GOG
+
+GOG games played through [Heroic Games Launcher](https://heroicgameslauncher.com)
+(`omarchy-install-gaming-heroic`), native or Flatpak. Heroic runs Comet, an
+open-source stand-in for GOG Galaxy, beside every GOG game, and Comet keeps
+each game's achievements, unlock times and GOG's rarity in a small database
+OmaTrophy reads ([ADR 12](docs/adr/0012-read-comets-gameplay-database-for-gog.md)).
+Nothing goes online and Heroic's GOG login is never read.
+
+- A game shows once it has run through Heroic. Comet is on by default;
+  with it turned off among Heroic's experimental features, nothing is
+  recorded.
+- Names and art come from Heroic's library, so a game you've
+  uninstalled keeps them.
+- Set `HEROIC_DIR` or `COMET_DIR` if Heroic or Comet keep their files
+  somewhere unusual.
+
+Other launchers plug in as one module each:
 [adding a store](docs/guide/stores.md).
 
 ## Requirements
 
 - Omarchy 4.0+ with the Quickshell-based `omarchy-shell`
 - Python 3 (standard library only)
-- Steam, with games that have achievements
+- Steam, or Heroic Games Launcher for GOG (Heroic 2.x with Comet, its
+  default), with games that have achievements
 - PipeWire (`pw-play`) for the chime
 
 ## Documentation

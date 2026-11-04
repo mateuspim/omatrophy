@@ -19,6 +19,13 @@ Start with the log:
 - **The shell runs an old copy.** After updating, `omarchy restart shell`
   (not while a game runs).
 
+- **A GOG game doesn't show.** It needs to have run through Heroic with
+  Comet on (Heroic's default): look for
+  `~/.local/share/comet/gameplay/<client id>/` (set `COMET_DIR` if Comet
+  keeps it elsewhere). A game installed outside Heroic, or played in GOG
+  Galaxy, leaves nothing to read. A game listed by a long number is one
+  OmaTrophy never saw installed; it takes its name once Heroic lists it.
+
 Check the pipeline with `python3 omatrophy.py test silver`: a toast means the
 shell side works and the problem is upstream.
 

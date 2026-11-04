@@ -1,8 +1,10 @@
 # Adding a game store
 
-Steam is the only store today, but the watcher doesn't know that: it asks
-every class in `stores.STORES` that reports itself available. Adding Epic,
-GOG, Battle.net, Heroic, Lutris or anything else is one module.
+Steam and GOG are the stores today, but the watcher doesn't know that: it
+asks every class in `stores.STORES` that reports itself available. Adding
+Epic, Battle.net, Lutris or anything else is one module. `stores/steam.py`
+parses binary files; `stores/gog.py` reads a SQLite database a launcher
+service keeps, and is the shorter one to copy.
 
 ## What a store does
 
@@ -25,7 +27,9 @@ Subclass `stores.base.Store` in `stores/<id>.py`:
 Then add the class to `STORES` in `stores/__init__.py`.
 
 The base module also gives you `read_json`, `write_json`, `http_json` (4 s
-timeout) and `cached(url, name)` for local image copies.
+timeout), `cached(url, name)` for local image copies, and `started_at` /
+`boot_time` for a process's start time in `/proc`. Image hosts must be in
+`TRUSTED_HOSTS` there, or the watcher and the panel won't fetch them.
 
 ## Rules
 
@@ -41,7 +45,8 @@ timeout) and `cached(url, name)` for local image copies.
 ## Test it
 
 Add a test class in `tests/` that builds the launcher's files in a temporary
-folder (see `SteamDir` in `tests/test_omatrophy.py`) and checks
+folder (see `SteamDir` in `tests/test_omatrophy.py`, or `HeroicDir` in
+`tests/test_gog.py`) and checks
 `available()`, `games()` and `achievements()`. The contract test there
 already covers every class in `STORES`. Then:
 
@@ -56,9 +61,11 @@ python3 omatrophy.py test silver     # a toast from your latest game
 Unconfirmed starting points; check them on a real install before relying on
 them.
 
-- Heroic / Legendary (Epic, GOG): no local achievement cache known
+- GOG through Heroic: done. Comet, which Heroic starts beside every GOG
+  game, keeps `comet/gameplay/<client id>/<user id>/gameplay.db` (ADR 12).
+- Epic through Heroic / Legendary: no local achievement cache known
   (unverified).
 - Battle.net under Wine/Proton: achievements live server-side per game
   (unverified).
-- GOG Galaxy is Windows-only; under Wine its local database may hold them
-  (unverified).
+- GOG Galaxy itself is Windows-only; under Wine its local database may hold
+  them (unverified).

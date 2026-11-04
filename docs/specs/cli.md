@@ -96,3 +96,5 @@ omarchy-shell shell summon pym.omatrophy '{}'   # the running or last game
 | --- | --- |
 | `STEAM_DIR` | Steam folder, when it isn't in `~/.local/share/Steam`, `~/.steam/steam` or the Flatpak path. |
 | `STEAM_ACCOUNT` | Steam account id (the number in `UserGameStats_<id>_<app>.bin`), when several accounts share the machine. Default: the one with the most games. |
+| `HEROIC_DIR` | Heroic's config folder, when it isn't in `$XDG_CONFIG_HOME/heroic` (`~/.config/heroic`) or the Flatpak path. |
+| `COMET_DIR` | Comet's gameplay folder (the one holding `<client id>/<user id>/gameplay.db`), when it isn't in `$XDG_DATA_HOME/comet/gameplay` or the Flatpak path. |

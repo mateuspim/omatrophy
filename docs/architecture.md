@@ -6,7 +6,7 @@ turns those lines into cards on screen.
 
 ```
  launcher files ──▶ stores/<id>.py ──▶ omatrophy.py watch ──stdout──▶ Service.qml ──▶ TrophyToast.qml
- (Steam cache)       read + describe     diff, tier, events   JSON lines   queue, window      PlatinumCard.qml
+ (Steam, Comet)      read + describe     diff, tier, events   JSON lines   queue, window      PlatinumCard.qml
                                               ▲                               ▲
            omatrophy.py test ──▶ inbox.jsonl ─┘        config.json ───────────┘ (watched live)
                                                            ▲
@@ -23,6 +23,7 @@ turns those lines into cards on screen.
 | --- | --- |
 | `stores/base.py` | The `Store` contract and shared helpers (JSON files, HTTP, image cache). |
 | `stores/steam.py` | Steam: binary and text KeyValues parsers, stats cache, rarity (cached a day), names, art, the running game (`/proc`) and last-played times (`localconfig.vdf`). |
+| `stores/gog.py` | GOG through Heroic: reads Comet's per-game SQLite database read-only (achievements, unlock times, GOG's rarity), pairs Comet's client ids with product ids from install folders, and takes titles, art and last-played times from Heroic's files (ADR 12). |
 | `stores/steam_community.py` | The opt-in backfill for games that never ran here: reads the JSON embedded in a public profile's achievement pages, cached under `~/.cache/omatrophy/community/` (ADR 11). |
 | `stores/__init__.py` | The list of stores; `available()` keeps the installed ones. |
 | `omatrophy.py` | Watch loop, diffing, tiers, event shapes, test inbox, settings, the panel's and tracker's JSON (`now`, `games`, `game`), CLI. |

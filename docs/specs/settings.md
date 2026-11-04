@@ -29,6 +29,7 @@ bar panel).
 | --- | --- |
 | `~/.config/omatrophy/config.json` | The settings above. |
 | `~/.local/state/omatrophy/names.json` | Steam game names, so offline toasts keep them. |
+| `~/.local/state/omatrophy/gog-clients.json` | Which GOG product each Comet client id belongs to, with its name, read from install folders, so an uninstalled game keeps both. |
 | `~/.local/state/omatrophy/inbox.jsonl` | Events queued by `omatrophy.py test`. |
 | `~/.cache/omatrophy/` | Achievement icons (`icons/<store>/<game>/`), art, the panel's and tracker's images (`images/<sha1 of URL>`, fetched in the background after the read that first names them), global rarity (`rarity/<game>.json`, refreshed daily), delisted games whose name lookup failed (`name-misses.json`, retried after a day) and, with `community` on, profile pages (`community/games/<app>.json`, refetched after you play, else weekly for games played in the last 60 days and every 60 days for the rest, 180 with nothing unlocked, never for a finished game; `community/none.json` for games without achievements, `community/status.json` for the latest run's line, which Settings shows, and `community/runs.json` for the last 50 runs' budget, pages fetched and whether Steam rate-limited them). Safe to delete. |
 
