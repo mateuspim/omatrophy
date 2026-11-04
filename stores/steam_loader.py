@@ -8,7 +8,7 @@ fills the cache locally, with no key and no rate limit (ADR 13). Steam's
 window moves page to page while it runs, so only the owner starts it,
 never the watcher.
 """
-import json, os, shutil, subprocess, time
+import json, os, re, shutil, subprocess, time
 
 from .base import CACHE, read_json, write_json
 from .steam_community import app_id
@@ -24,6 +24,25 @@ POLL_SECONDS = 0.25
 HIDDEN_WORKSPACE = 'special:omatrophy'
 # hyprctl answers in milliseconds; a hung compositor shouldn't hang a load.
 HYPRCTL_SECONDS = 4
+# The client's main window. A load closes it again only when it appeared
+# during the load (Steam sat in the tray); any other new window (Friends,
+# a sign-in dialog) is the user's and comes back to their workspace.
+MAIN_TITLE = 'Steam'
+# Steam offline or still signing in loads nothing, and every game would
+# time out and pass for one without achievements. After this many
+# timeouts in a row the load stops and keeps those games unsure, to try
+# first next time. Most played go first, so a real run that long is rare
+# (180 of 313 games had none on the owner's library, and 0.57^15 is about
+# 1 in 4500 per position); an unsure game that times out again is
+# settled as none and doesn't count toward a new streak, so a library
+# that has one can't stop every load.
+TIMEOUT_STREAK = 15
+# Steam's logs/connection_log.txt starts most lines with the client's
+# connection state: "[2026-11-03 20:01:14] [Logged On, 4, 23] ...". Seen
+# on 2026-11-04: Connecting, Connected, Logging On, Logged On, Logging
+# Off, Logged Off. Only Logged On loads stats.
+CONNECTION_STATE = re.compile(r'^\[[^\]]*\] \[([A-Za-z ]+), ')
+CONNECTION_TAIL = 64 * 1024
 # The panel's progress strip shows this many of the latest results.
 RECENT_KEPT = 6
 
@@ -36,9 +55,21 @@ def checked():
     """{app: {time, found}} of every game a load has tried: the checkpoint.
     A tried game is never tried again unless the owner asks for the whole
     library (`steam-load all`), so a later load only sees games played
-    since, and a stopped one picks up where it ended."""
+    since, and a stopped one picks up where it ended. `found` is None for
+    a game left unsure by a timeout streak, tried again by the next load."""
     found = read_json(f'{cache_dir()}/checked.json', {})
     return found if isinstance(found, dict) else {}
+
+
+def settled(tried, app):
+    """True when a load has tried `app` and its answer stands."""
+    entry = tried.get(app)
+    return isinstance(entry, dict) and entry.get('found') is not None
+
+
+def unsure(tried, app):
+    entry = tried.get(app)
+    return isinstance(entry, dict) and 'found' in entry and entry['found'] is None
 
 
 def status():
@@ -77,8 +108,10 @@ def missing(playtimes, local, tried, everything=False):
     with a stats file, `tried` checked()."""
     rows = [(p.get('total', 0), app) for app, p in playtimes.items()
             if app_id(app) and p.get('total', 0) > 0 and app not in local
-            and (everything or app not in tried)]
-    return [app for _, app in sorted(rows, key=lambda r: (-r[0], int(r[1])))]
+            and (everything or not settled(tried, app))]
+    # Unsure games first: they were next in line when the streak stopped.
+    rows.sort(key=lambda r: (not unsure(tried, r[1]), -r[0], int(r[1])))
+    return [app for _, app in rows]
 
 
 def steam_running(proc='/proc'):
@@ -96,6 +129,24 @@ def steam_running(proc='/proc'):
         except OSError:
             continue
     return False
+
+
+def signed_in(log):
+    """True when Steam's connection log last said Logged On, False for any
+    other state (offline, still signing in), None when it can't tell (no
+    log, or a format we don't know): then the timeout streak decides."""
+    try:
+        with open(log, 'rb') as f:
+            f.seek(0, os.SEEK_END)
+            f.seek(max(0, f.tell() - CONNECTION_TAIL))
+            lines = f.read().decode('utf8', 'replace').splitlines()
+    except OSError:
+        return None
+    for line in reversed(lines):
+        m = CONNECTION_STATE.match(line)
+        if m:
+            return m.group(1) == 'Logged On'
+    return None
 
 
 def open_page(app):
@@ -133,10 +184,11 @@ class SteamWindow:
     misc:focus_on_activate on Hyprland jumps to it. So each Steam window
     moves to HIDDEN_WORKSPACE, with focus_on_activate off for that window
     only (Omarchy turns it off the same way for Telegram), and goes back
-    where it was afterwards. Hyprland's config is never touched. A window
-    that only appeared during the load (Steam sat in the tray) is closed
-    again, which puts Steam back in the tray. Without Hyprland nothing
-    happens and Steam's window comes forward as before."""
+    where it was afterwards. Hyprland's config is never touched. A main
+    window that only appeared during the load (Steam sat in the tray) is
+    closed again, which puts Steam back in the tray; other new windows
+    come to the active workspace. Without Hyprland nothing happens and
+    Steam's window comes forward as before."""
 
     def __init__(self, ctl=None):
         # Looked up now, not at import, so tests can swap the module's hyprctl.
@@ -164,10 +216,14 @@ class SteamWindow:
     def dispatch(self, lua):
         self.ctl('dispatch', lua)
 
-    def set_focus_on_activate(self, address, on):
-        # A Lua `false` reads as a missing value to set_prop; 0 and 1 work.
+    def set_focus_on_activate(self, address, value):
+        # A Lua `false` reads as a missing value to set_prop; 0 and 1 work,
+        # and "unset" drops the window's override (checked on Hyprland
+        # 0.56.2: border_size 7 went back to the global 2; other strings
+        # are ignored).
+        value = lua_string(value) if isinstance(value, str) else int(value)
         self.dispatch(f'hl.dsp.window.set_prop({{ window = {lua_string("address:" + address)}, '
-                      f'prop = "focus_on_activate", value = {1 if on else 0} }})')
+                      f'prop = "focus_on_activate", value = {value} }})')
 
     def move(self, address, workspace):
         self.dispatch(f'hl.dsp.window.move({{ window = {lua_string("address:" + address)}, '
@@ -186,25 +242,36 @@ class SteamWindow:
             if name == HIDDEN_WORKSPACE:
                 continue
             self.moved.setdefault(c['address'], name)
-            self.set_focus_on_activate(c['address'], False)
+            self.set_focus_on_activate(c['address'], 0)
             self.move(c['address'], HIDDEN_WORKSPACE)
 
-    def global_focus_on_activate(self):
+    def active_workspace(self):
+        """The workspace the user is on, or None when hyprctl didn't say."""
         try:
-            return bool(json.loads(self.ctl('getoption', 'misc:focus_on_activate', '-j') or '{}').get('int', 1))
+            name = json.loads(self.ctl('activeworkspace', '-j') or '{}').get('name')
         except (ValueError, AttributeError):
-            return True
+            return None
+        return name if isinstance(name, str) and name else None
 
     def restore(self):
         if not self.enabled or not self.moved:
             return
-        on = self.global_focus_on_activate()
+        # Titles as they are now; unknown (hyprctl silent) is never "main",
+        # so a window is moved rather than closed when in doubt.
+        titles = {c['address']: c.get('title') for c in self.windows() or []}
+        active = None
         for address, workspace in self.moved.items():
-            self.set_focus_on_activate(address, on)
+            # Unset, not the global value: a window rule of the user's
+            # (or a later config change) applies again.
+            self.set_focus_on_activate(address, 'unset')
             if address in (self.before or set()):
                 self.move(address, workspace)
-            else:
+            elif titles.get(address) == MAIN_TITLE:
                 self.dispatch(f'hl.dsp.window.close({{ window = {lua_string("address:" + address)} }})')
+            else:
+                active = active or self.active_workspace()
+                if active:
+                    self.move(address, active)
         self.moved = {}
 
 
@@ -225,14 +292,15 @@ def wait_for(has_stats, app, wait, poll, clock, sleep):
 
 def load(todo, has_stats, busy, opener=open_page, running=steam_running, say=None,
          wait=WAIT_SECONDS, poll=POLL_SECONDS, clock=time.time, sleep=time.sleep, window=None,
-         everything=False, describe=None, prepare=None):
+         everything=False, describe=None, prepare=None, online=lambda: None):
     """Open each app's page in turn and wait for its stats file. Stops when
     Steam closes, a game starts (`busy()`: Steam's window must not jump
     over a game) or a stop is requested. Each tried game goes into
     checked.json at once, so a stopped run resumes at the next game.
     `describe(app)` gives {name, art} for the panel's progress strip,
     from what is already on disk; `prepare(app)` is told the next game
-    while the current one loads (the store warms its name). Returns
+    while the current one loads (the store warms its name); `online()` is
+    signed_in() for this Steam. Returns
     {loaded, none, state}."""
     clear_stop()
     tried = checked()
@@ -269,7 +337,7 @@ def load(todo, has_stats, busy, opener=open_page, running=steam_running, say=Non
     report('', 'running', 0)
     try:
         return run(todo, has_stats, busy, opener, running, wait, poll, clock, sleep, window, tried, counts, report, end,
-                   prepare or (lambda app: None))
+                   prepare or (lambda app: None), online)
     except BaseException:
         # A kill or a bug: the panel would show a live run until the status
         # went stale; say it ended.
@@ -279,8 +347,11 @@ def load(todo, has_stats, busy, opener=open_page, running=steam_running, say=Non
         window.restore()
 
 
-def run(todo, has_stats, busy, opener, running, wait, poll, clock, sleep, window, tried, counts, report, end, prepare):
+def run(todo, has_stats, busy, opener, running, wait, poll, clock, sleep, window, tried, counts, report, end, prepare,
+        online):
     """load()'s loop, with Steam's window kept out of sight."""
+    retried = {app for app in todo if unsure(tried, app)}
+    streak = []
     for i, app in enumerate(todo):
         if stop_requested():
             clear_stop()
@@ -289,6 +360,11 @@ def run(todo, has_stats, busy, opener, running, wait, poll, clock, sleep, window
             return end('stopped: Steam is not running; start it and load again', 'failed', i)
         if busy():
             return end('stopped: a game is running; load again after it closes', 'failed', i)
+        # Offline or still signing in, a page loads nothing and every game
+        # would pass for one without achievements.
+        if online() is False:
+            return end('stopped: Steam is not signed in (offline, or still signing in); load again once it is',
+                       'failed', i)
         try:
             opener(app)
         except OSError as e:
@@ -305,6 +381,17 @@ def run(todo, has_stats, busy, opener, running, wait, poll, clock, sleep, window
             return end(f'stopped: {i} of {len(todo)} done', 'stopped', i)
         counts['loaded' if found == 'loaded' else 'none'] += 1
         tried[app] = {'time': int(clock()), 'found': found == 'loaded'}
+        if found == 'loaded':
+            streak.clear()
+        elif app not in retried:
+            streak.append(app)
+        if len(streak) >= TIMEOUT_STREAK:
+            for a in streak:
+                tried[a]['found'] = None
+            write_json(f'{cache_dir()}/checked.json', tried)
+            counts['none'] -= len(streak)
+            return end(f'stopped: {len(streak)} games in a row gave no stats; Steam may be offline or still '
+                       'signing in. Load again once it is online', 'failed', i + 1)
         write_json(f'{cache_dir()}/checked.json', tried)
         report(f"{i + 1}/{len(todo)} {app}: " + ('loaded' if found == 'loaded' else 'no stats'), 'running', i + 1,
                app, found == 'loaded')

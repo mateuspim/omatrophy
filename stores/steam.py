@@ -343,8 +343,10 @@ class Steam(Store):
         """Open each missing game's library page so the client caches its
         stats. Only the owner starts this."""
         stats = lambda app: os.path.exists(f'{self.stats}/UserGameStats_{self.uid}_{app}.bin')
+        log = f'{self.root}/logs/connection_log.txt'
         return steam_loader.load(self.missing(everything), stats, busy, say=say, everything=everything,
-                                 describe=self.describe_for_load, prepare=self.name_in_background)
+                                 describe=self.describe_for_load, prepare=self.name_in_background,
+                                 online=lambda: steam_loader.signed_in(log))
 
     def name_in_background(self, app):
         """Look a game's name up in a thread, once per game: the load tells

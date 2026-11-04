@@ -194,7 +194,9 @@ and time left. It takes about a second per game with achievements and 8 s for
 one without. Each game is remembered once tried, so a stopped load picks
 up where it ended and later loads only take games you played since; only
 `all` goes over the whole library again. It stops by itself when a game
-starts or Steam closes. Everything stays on this machine
+starts, Steam closes or Steam isn't signed in (offline, or still signing
+in), and after 15 games in a row with no stats, which usually means the
+same; those 15 go first next time. Everything stays on this machine
 ([ADR 13](docs/adr/0013-load-stats-through-the-steam-client.md)).
 
 If your profile and game details are public, you can also fill in games

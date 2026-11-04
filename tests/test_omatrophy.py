@@ -288,6 +288,15 @@ class CheckApp(unittest.TestCase):
             omatrophy.check_game(self.store, APP, seen)
         return [json.loads(line) for line in out.getvalue().splitlines()]
 
+    def test_a_game_seen_for_the_first_time_toasts_only_fresh_timed_unlocks(self):
+        # Regression: a game cached by Load from Steam has no baseline, and
+        # its unlocks with no time (bit set, no time stored) all toasted.
+        self.steam.unlock({0: 0, 1: int(time.time()) - 86400})
+        self.assertEqual(self.events({}), [])
+        self.steam.unlock({0: 0})
+        [ev] = self.events({('steam', APP): set()})
+        self.assertEqual(ev['name'], 'First')
+
     def test_new_unlock_becomes_one_event(self):
         self.steam.unlock({})
         seen = {('steam', APP): set()}

@@ -69,6 +69,16 @@ class Missing(unittest.TestCase):
         tried = {'10': {'time': 1, 'found': False}}
         self.assertEqual(steam_loader.missing(played, {'20'}, tried, everything=True), ['10'])
 
+    def test_unsure_games_are_queued_first_and_not_settled(self):
+        played = {'10': {'total': 5}, '20': {'total': 9}, '30': {'total': 1}}
+        tried = {'30': {'time': 1, 'found': None}, '20': {'time': 1, 'found': False}}
+        self.assertEqual(steam_loader.missing(played, set(), tried), ['30', '10'])
+        self.assertTrue(steam_loader.unsure(tried, '30'))
+        self.assertFalse(steam_loader.settled(tried, '30'))
+        self.assertTrue(steam_loader.settled(tried, '20'))
+        self.assertFalse(steam_loader.settled(tried, '10'))
+        self.assertFalse(steam_loader.unsure(tried, '10'))
+
     def test_bad_ids_are_skipped(self):
         self.assertEqual(steam_loader.missing({'../x': {'total': 9}, '7': {'total': 1}}, set(), {}), ['7'])
 
@@ -104,6 +114,65 @@ class Load(LoaderCache):
                                                   '3': {'time': 1_800_000_008, 'found': True}})
         status = steam_loader.status()
         self.assertEqual((status['done'], status['total'], status['state']), (3, 3, 'done'))
+
+    def test_stops_when_steam_is_not_signed_in(self):
+        states = iter([True, False])
+        clock = FakeClock()
+        result = steam_loader.load(['1', '2'], lambda app: False, lambda: False, opener=lambda app: None,
+                                   running=lambda: True, clock=clock.time, sleep=clock.sleep, window=NoWindow(),
+                                   online=lambda: next(states))
+        self.assertEqual(result, {'loaded': 0, 'none': 1, 'state': 'failed'})
+        self.assertIn('not signed in', steam_loader.status()['line'])
+        # The game it didn't get to stays untried.
+        self.assertNotIn('2', steam_loader.checked())
+
+    def test_reads_the_last_connection_state(self):
+        with tempfile.TemporaryDirectory() as d:
+            log = os.path.join(d, 'connection_log.txt')
+            self.assertIsNone(steam_loader.signed_in(log))
+            with open(log, 'w') as f:
+                f.write('[2026-11-03 20:01:01] [Logging On, 4, 23] [U:1:1] Using JWT\n'
+                        '[2026-11-03 20:01:14] [Logged On, 4, 23] [U:1:1] processing complete\n'
+                        '[2026-11-03 20:31:43] CClientJobGetClientUpdateHosts: cached version not expired\n')
+            self.assertTrue(steam_loader.signed_in(log))
+            with open(log, 'a') as f:
+                f.write('[2026-11-03 21:00:00] [Logged Off, 4, 0] [U:1:1] lost connection\n')
+            self.assertFalse(steam_loader.signed_in(log))
+            with open(log, 'w') as f:
+                f.write('a format we have never seen\n')
+            self.assertIsNone(steam_loader.signed_in(log))
+
+    def test_a_timeout_streak_stops_and_keeps_those_games_unsure(self):
+        # Steam offline: every game times out. Before, all of them were
+        # filed as "no achievements" and never tried again.
+        n = steam_loader.TIMEOUT_STREAK
+        todo = [str(i) for i in range(1, n + 3)]
+        result, opened, _ = self.run_load(todo)
+        self.assertEqual(len(opened), n)
+        self.assertEqual(result, {'loaded': 0, 'none': 0, 'state': 'failed'})
+        self.assertIn('Steam may be offline', steam_loader.status()['line'])
+        tried = steam_loader.checked()
+        self.assertTrue(all(tried[a]['found'] is None for a in todo[:n]))
+        playtimes = {a: {'total': 100 - int(a)} for a in todo}
+        playtimes['99'] = {'total': 1000}
+        # Unsure games come back first, ahead of a more played new one.
+        self.assertEqual(steam_loader.missing(playtimes, set(), tried), todo[:n] + ['99'] + todo[n:])
+
+    def test_unsure_games_that_time_out_again_are_settled(self):
+        n = steam_loader.TIMEOUT_STREAK
+        todo = [str(i) for i in range(1, n + 1)]
+        self.run_load(todo)
+        result, opened, _ = self.run_load(todo + ['50'], ready={'50'})
+        self.assertEqual(result, {'loaded': 1, 'none': n, 'state': 'done'})
+        tried = steam_loader.checked()
+        self.assertTrue(all(tried[a]['found'] is False for a in todo))
+        self.assertTrue(steam_loader.settled(tried, '50'))
+
+    def test_a_loaded_game_breaks_the_streak(self):
+        n = steam_loader.TIMEOUT_STREAK
+        todo = [str(i) for i in range(1, 2 * n)]
+        result, _, _ = self.run_load(todo, ready={str(n)})
+        self.assertEqual(result['state'], 'done')
 
     def test_a_game_without_stats_waits_only_the_timeout(self):
         _, _, clock = self.run_load(['2'])
@@ -207,21 +276,21 @@ class Load(LoaderCache):
 class FakeHyprctl:
     """hyprctl with a fixed client list; records dispatches."""
 
-    def __init__(self, clients, focus_on_activate=1):
-        self.clients, self.focus = clients, focus_on_activate
+    def __init__(self, clients):
+        self.clients = clients
         self.dispatched = []
 
     def __call__(self, *args):
         if args[0] == 'clients':
             return json.dumps(self.clients)
-        if args[0] == 'getoption':
-            return json.dumps({'int': self.focus})
+        if args[0] == 'activeworkspace':
+            return json.dumps({'name': '3'})
         self.dispatched.append(args[1])
         return 'ok'
 
 
-def client(address, workspace, cls='steam'):
-    return {'address': address, 'class': cls, 'workspace': {'name': workspace}}
+def client(address, workspace, cls='steam', title='Steam'):
+    return {'address': address, 'class': cls, 'title': title, 'workspace': {'name': workspace}}
 
 
 class SteamWindowOnHyprland(unittest.TestCase):
@@ -242,15 +311,32 @@ class SteamWindowOnHyprland(unittest.TestCase):
         w.hide()
         self.assertEqual(len(ctl.dispatched), 2)
         w.restore()
-        self.assertIn('value = 1', ctl.dispatched[2])
+        self.assertIn('value = "unset"', ctl.dispatched[2])
         self.assertIn('workspace = "4"', ctl.dispatched[3])
 
-    def test_keeps_the_users_focus_setting(self):
-        ctl = FakeHyprctl([client('0x1', '4')], focus_on_activate=0)
+    def test_drops_the_per_window_override_instead_of_copying_the_global(self):
+        # Regression: restore wrote the global value back as an override,
+        # which outlived any later change to the user's config.
+        ctl = FakeHyprctl([client('0x1', '4')])
         w = steam_loader.SteamWindow(ctl)
         w.hide()
         w.restore()
-        self.assertIn('value = 0', ctl.dispatched[2])
+        self.assertIn('prop = "focus_on_activate", value = "unset"', ctl.dispatched[2])
+
+    def test_a_new_window_that_is_not_the_main_one_comes_back_instead_of_closing(self):
+        # Regression: a Friends list or sign-in dialog opened mid-load was
+        # closed with the main window.
+        ctl = FakeHyprctl([client('0x1', '4')])
+        w = steam_loader.SteamWindow(ctl)
+        w.hide()
+        ctl.clients = [client('0x1', 'special:omatrophy'), client('0x7', '2', title='Friends List')]
+        w.hide()
+        ctl.clients[1]['workspace']['name'] = 'special:omatrophy'
+        w.restore()
+        sent = ''.join(ctl.dispatched)
+        self.assertNotIn('window.close', sent)
+        self.assertIn('window = "address:0x7", workspace = "3"', sent)
+        self.assertIn('window = "address:0x1", workspace = "4"', sent)
 
     def test_a_window_the_load_opened_is_closed_again(self):
         ctl = FakeHyprctl([])

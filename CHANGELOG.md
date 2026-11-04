@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+Fixes left open from the Load from Steam review (PR #5). Toasts and the
+loader run in the watcher and CLI: one `omarchy restart shell` for the
+running watcher.
+
+- Load from Steam stops when Steam isn't signed in (offline, or still
+  signing in; read from Steam's own connection log), and after 15 games
+  in a row give no stats, trying those games first next time, instead of
+  filing them all as games without achievements.
+- A game that first shows up while the watcher runs (just cached by a
+  load, or first played) no longer toasts its old unlocks that Steam
+  stored without a time.
+- A Steam window that opened during a load (Friends, a sign-in dialog)
+  comes back to your workspace; only the main window the load itself
+  opened from the tray is closed again.
+- Steam's window gets its own `focus_on_activate` rule dropped after a
+  load, instead of a copy of the global value, so your Hyprland rules
+  apply again.
+
 ## 0.5.1 - 2026-11-04
 
 - The Steam profile backfill keeps the time of its next run on disk

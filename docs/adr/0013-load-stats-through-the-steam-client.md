@@ -33,14 +33,25 @@ client's own cache needs none of that.
   the moment it is done, with whether a stats file came: the checkpoint. A
   game in it is never tried again, so a stopped run resumes at the next
   game and a later load only takes games played since. A game whose page
-  opened without a file has no achievements, as far as we can tell. Only
+  opened without a file has no achievements, as far as we can tell. A
+  page loads nothing while Steam is offline or still signing in, so the
+  run checks the client's own `logs/connection_log.txt` before each game:
+  its lines start with the connection state, and anything but
+  `Logged On` stops the run. When the log can't be read, a streak of 15
+  timeouts in a row stops it instead, and the run and keeps those games unsure
+  (`found: null`), first in line for the next load. One that times out
+  again then counts as none and starts no new streak, so a library with
+  15 games without achievements in a row can't stop every load. Only
   `steam-load all` (Check all again in the panel) tries every played game
   without stats again: whole-library passes happen only when the owner
   asks.
 - On Hyprland, Steam's window waits on a hidden special workspace
   (`special:omatrophy`) while a load runs, with `focus_on_activate` off
-  for that window only, and goes back to its workspace afterwards; a
-  window the load itself opened (Steam was in the tray) is closed again.
+  for that window only, and goes back to its workspace afterwards with
+  that override dropped (`value = "unset"`), so the user's own rules
+  apply again. A main window the load itself opened (Steam was in the
+  tray) is closed again; any other window that appeared meanwhile
+  (Friends, a sign-in dialog) comes to the active workspace instead.
   This is set at runtime through `hyprctl`; Hyprland's config is never
   written. Elsewhere the window comes forward page by page.
 - Only the owner starts it, from the CLI or the panel, never the watcher.
