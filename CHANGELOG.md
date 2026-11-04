@@ -16,7 +16,10 @@ open; the watcher and `Tracker.qml` are unchanged, so no restart is needed.
   Live progress and Stop in the tracker; the last guide is kept as
   `.prev`.
 - **Settings > Guides** picks the agent, its model (or any typed one), the
-  effort and web search.
+  effort, web search and, with ai-jail installed, a sandbox around the agent.
+- `guide bench` makes one game's guide with several agents and models and
+  ranks them by verified quotes, coverage and filled fields, with time and
+  cost; `--pick` makes the winner the default, local endpoints included.
 - The Now tab's **Up next** follows the game's guide when it has one,
   with its time, missable warning and tip.
 - `omatrophy.py guide [store app]`, `guide import <folder>`, `guide make`,

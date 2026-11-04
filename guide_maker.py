@@ -339,10 +339,13 @@ def check_item(raw, names):
     else:
         errors.append(f'{name}: phase must be one of {", ".join(guides.PHASES)}')
     diff = raw.get('difficulty')
+    # A weak model writes numbers as text ("3"); that is still a number.
+    if isinstance(diff, str) and re.fullmatch(r'\s*\d+(\.\d+)?\s*', diff):
+        diff = float(diff)
     if isinstance(diff, (int, float)) and not isinstance(diff, bool) and 1 <= diff <= 5:
         item['difficulty'] = int(round(diff))
     elif diff is not None:
-        errors.append(f'{name}: difficulty must be 1-5')
+        errors.append(f'{name}: difficulty must be a number 1-5 (got {json.dumps(diff)[:30]})')
     if isinstance(raw.get('time'), str) and raw['time'].strip():
         item['time'] = raw['time'].strip()
     mins = raw.get('minutes')
@@ -575,7 +578,7 @@ class Job:
     """One make: holds the status, the usage and the sources as it goes."""
 
     def __init__(self, store, app, game, achievements, adapter, model='', effort='', web=True, folder=None,
-                 fetch=None, list_guides=None, say=None, clock=time.time, minutes=0, jail=False):
+                 fetch=None, list_guides=None, say=None, clock=time.time, minutes=0, jail=False, env=None, source_root=None):
         self.store, self.app, self.game, self.achs = store, str(app), game, achievements
         self.adapter, self.model, self.effort = adapter, model, effort
         self.web = web and adapter.web
@@ -586,6 +589,11 @@ class Job:
         self.clock = clock
         self.minutes = minutes
         self.jail = jail
+        # Extra environment for the agent (a bench entry's local endpoint).
+        self.env = env or {}
+        # Where saved pages and earlier sources are read: a bench run writes
+        # in its own folder but reads the owner's.
+        self.source_root = source_root or self.folder
         self.usage, self.sources, self.fetched, self.links = [], {}, 0, []
         self.done, self.total, self.stage = 0, 0, ''
         self.started = int(clock())
@@ -617,7 +625,8 @@ class Job:
                 text = (text + '\n\nYour last answer had these problems:\n' + '\n'.join(f'- {e}' for e in errors[:20])
                         + '\nAnswer again in full, inside the tags.')
             found = guide_agents.run(self.adapter, text, web=self.web and stage == 'research', model=self.model,
-                                     effort=self.effort, stopped=lambda: stop_requested(self.folder), jail=self.jail)
+                                     effort=self.effort, stopped=lambda: stop_requested(self.folder), jail=self.jail,
+                                     env=self.env)
             self.usage.append({'engine': self.adapter.id, 'model': self.model, 'stage': stage,
                                'input': found['usage'].get('input', 0), 'output': found['usage'].get('output', 0),
                                'cost_usd': found['usage'].get('cost_usd'), 'seconds': found['seconds'],
@@ -648,8 +657,10 @@ class Job:
             self.add_source(url, text, kind)
 
     def gather(self, name):
-        self.sources.update(kept_sources(os.path.join(self.folder, name + '.sources.json'), self.clock()))
-        self.sources.update(saved_sources(os.path.join(self.folder, 'sources', name)))
+        root = self.source_root
+        stem = guide_name(self.store, self.app, self.game, root) if root != self.folder else name
+        self.sources.update(kept_sources(os.path.join(root, stem + '.sources.json'), self.clock()))
+        self.sources.update(saved_sources(os.path.join(root, 'sources', stem)))
         if self.store == 'steam':
             for url in self.list_guides(self.app):
                 self.fetch_into(url, 'steam-guide')

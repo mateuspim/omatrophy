@@ -343,6 +343,19 @@ def jailed(argv, extra_env):
     return out + ['--'] + list(argv)
 
 
+def endpoint_env(adapter, endpoint):
+    """The environment that points an agent at a local endpoint: Claude
+    Code reads ANTHROPIC_BASE_URL (an Anthropic-compatible server, such as
+    llama.cpp's /v1/messages or LiteLLM). Other agents set their local
+    providers in their own config, so they take none."""
+    if not endpoint:
+        return {}
+    if adapter.id == 'claude':
+        return {'ANTHROPIC_BASE_URL': endpoint}
+    raise SystemExit(f'omatrophy: guide: an endpoint works with claude only; set {adapter.id}\'s local '
+                     'provider in its own config and name its model instead')
+
+
 def supported_ids():
     return [a.id for a in ADAPTERS if a.checked]
 
@@ -373,7 +386,8 @@ def picks(cfg):
     out = {}
     for agent, pick in (found.items() if isinstance(found, dict) else []):
         if isinstance(pick, dict):
-            out[agent] = {'model': str(pick.get('model') or ''), 'effort': str(pick.get('effort') or '')}
+            out[agent] = {'model': str(pick.get('model') or ''), 'effort': str(pick.get('effort') or ''),
+                          'endpoint': str(pick.get('endpoint') or '')}
     return out
 
 
@@ -389,19 +403,21 @@ def listing(cfg):
                     # Only agents that can run: a listing command can be slow
                     # (opencode's took over 20 s once), and the panel waits on it.
                     'models': a.models() if installed and a.checked else [],
-                    'model': pick.get('model', ''), 'effort': pick.get('effort', ''), 'source': a.models_source,
+                    'model': pick.get('model', ''), 'effort': pick.get('effort', ''),
+                    'endpoint': pick.get('endpoint', ''), 'source': a.models_source,
                     'jail': jail})
     return out
 
 
 def run(adapter, prompt, web=False, model='', effort='', stopped=lambda: False, timeout=STAGE_SECONDS,
-        clock=time.monotonic, sleep=time.sleep, jail=False):
+        clock=time.monotonic, sleep=time.sleep, jail=False, env=None):
     """Run one locked stage in a fresh empty folder (inside ai-jail with
     `jail`). Returns the adapter's answer plus {seconds, ok, stopped}. A
     stop or the ceiling kills the agent's whole process group."""
     started = clock()
     with tempfile.TemporaryDirectory(prefix='omatrophy-guide-') as folder:
         argv, stdin_text, extra = adapter.command(folder, web, model, effort)
+        extra = dict(env or {}, **extra)
         env = dict(os.environ, **extra)
         if jail:
             argv = jailed(argv, extra)

@@ -163,6 +163,7 @@ class Checks(unittest.TestCase):
         self.assertEqual(item['combine_with'], ['B'])
         self.assertEqual(len(errors), 2)
         self.assertEqual(guide_maker.check_item({'name': 'Z'}, {'A'})[0], None)
+        self.assertEqual(guide_maker.check_item({'name': 'A', 'difficulty': ' 3 '}, {'A'})[0]['difficulty'], 3)
 
     def test_check_route(self):
         route, errors = guide_maker.check_route('<route>{"order": ["A", "Z", "A"], "sections": {}}</route>', {'A'})
@@ -310,3 +311,87 @@ class Agents(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class Bench(unittest.TestCase):
+    def test_parse_entry(self):
+        import guide_bench
+        self.assertEqual(guide_bench.parse_entry('claude:sonnet:high'),
+                         {'agent': 'claude', 'model': 'sonnet', 'effort': 'high', 'endpoint': ''})
+        self.assertEqual(guide_bench.parse_entry('opencode:local/qwen3:8b')['model'], 'local/qwen3:8b')
+        self.assertEqual(guide_bench.parse_entry('claude:qwen@http://127.0.0.1:8080')['endpoint'], 'http://127.0.0.1:8080')
+        self.assertEqual(guide_bench.parse_entry('claude')['model'], '')
+        with self.assertRaises(SystemExit):
+            guide_bench.parse_entry('Claude Sonnet')
+
+    def test_metrics_and_score(self):
+        import guide_bench
+        plan = {'order': ['A', 'B'], 'sections': {'overview': 'x', 'route': 'y'}, 'items': {
+            'A': {'api': 'a', 'name': 'A', 'phase': 'quick', 'difficulty': 1, 'time': '5 min', 'tips': 't',
+                  'cites': [{'verified': True}]},
+            'B': {'api': 'b', 'name': 'B', 'phase': 'grind', 'cites': [{'verified': False}], 'unverified': ['tips']}}}
+        m = guide_bench.metrics(plan, {'a', 'b', 'c', 'd'})
+        self.assertEqual((m['coverage'], m['verified'], m['complete'], m['route'], m['sections']),
+                         (0.5, 0.5, 0.625, 0.5, 0.5))
+        self.assertEqual(guide_bench.score(m), 35 * 0.5 + 25 * 0.5 + 20 * 0.625 + 10 * 0.5 + 10 * 0.5)
+
+    def test_ranked_ties_go_to_the_cheaper_then_faster(self):
+        import guide_bench
+        rows = [{'entry': 'a', 'score': 80, 'cost_usd': None, 'seconds': 10},
+                {'entry': 'b', 'score': 80, 'cost_usd': 0.5, 'seconds': 90},
+                {'entry': 'c', 'score': 80, 'cost_usd': 0.5, 'seconds': 30},
+                {'entry': 'd', 'score': 90, 'cost_usd': 3.0, 'seconds': 300}]
+        self.assertEqual([r['entry'] for r in guide_bench.ranked(rows)], ['d', 'c', 'b', 'a'])
+
+    def test_endpoint_is_claude_only(self):
+        self.assertEqual(guide_agents.endpoint_env(guide_agents.Claude(), 'http://x'), {'ANTHROPIC_BASE_URL': 'http://x'})
+        self.assertEqual(guide_agents.endpoint_env(guide_agents.Codex(), ''), {})
+        with self.assertRaisesRegex(SystemExit, 'claude only'):
+            guide_agents.endpoint_env(guide_agents.Codex(), 'http://x')
+
+    def test_bench_runs_each_entry_apart_and_keeps_the_winner(self):
+        import guide_bench
+        with tempfile.TemporaryDirectory() as d:
+            good, bad = os.path.join(d, 'good'), os.path.join(d, 'bad')
+            for folder, items in ((good, ITEMS), (bad, 'no tags')):
+                write(folder, 'fake.py', FAKE)
+                write(folder, 'items', items)
+                write(folder, 'route', ROUTE)
+            guides_dir = os.path.join(d, 'guides')
+            write(guides_dir, 'starfall-odyssey-1.md', 'mine\n')
+            # The owner's saved page: every entry must read it.
+            write(guides_dir, 'sources/starfall-odyssey-1/notes.txt', 'You must carry the lantern before chapter four ends.')
+            said = []
+            run_dir, results = guide_bench.bench(
+                'steam', '1', 'Starfall Odyssey', [dict(a) for a in ACHS],
+                [guide_bench.parse_entry('fakebad:m1'), guide_bench.parse_entry('fakegood:m2:high')],
+                web=False, folder=guides_dir, say=said.append,
+                adapters={'fakegood': FakeAgent(good), 'fakebad': FakeAgent(bad)},
+                list_guides=lambda app: [], fetch=lambda url: None)
+            self.assertEqual([(r['entry'], r['state']) for r in results],
+                             [('fakegood:m2:high', 'done'), ('fakebad:m1', 'failed')])
+            self.assertGreater(results[0]['score'], 50)
+            self.assertEqual(results[0]['metrics']['cited'], 1)
+            self.assertEqual(read(os.path.join(guides_dir, 'starfall-odyssey-1.md')), 'mine\n')
+            saved = json.loads(read(os.path.join(run_dir, 'results.json')))
+            self.assertEqual(saved['results'][0]['entry'], 'fakegood:m2:high')
+            self.assertIn('fakegood:m2:high', guide_bench.table(results))
+            guide_bench.keep(results[0], guides_dir)
+            self.assertIn('Short and gentle.', read(os.path.join(guides_dir, 'starfall-odyssey-1.md')))
+            self.assertEqual(read(os.path.join(guides_dir, 'starfall-odyssey-1.md.prev')), 'mine\n')
+
+
+class ModelPick(unittest.TestCase):
+    def test_guide_model_saves_effort_and_endpoint_and_clears(self):
+        import io, omatrophy
+        from contextlib import redirect_stdout
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {'HOME': d}), redirect_stdout(io.StringIO()):
+            omatrophy.main(['x', 'guide', 'model', 'claude', 'qwen', 'high', '@http://127.0.0.1:8080'])
+            cfg = json.loads(read(os.path.join(d, '.config/omatrophy/config.json')))
+            self.assertEqual(cfg['guide-models']['claude'],
+                             {'model': 'qwen', 'effort': 'high', 'endpoint': 'http://127.0.0.1:8080'})
+            omatrophy.main(['x', 'guide', 'model', 'claude', 'default'])
+            cfg = json.loads(read(os.path.join(d, '.config/omatrophy/config.json')))
+            self.assertNotIn('claude', cfg['guide-models'])
+            with self.assertRaises(SystemExit):
+                omatrophy.main(['x', 'guide', 'model', 'codex', 'm', '@http://x'])

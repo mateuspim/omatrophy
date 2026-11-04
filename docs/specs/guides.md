@@ -125,7 +125,8 @@ OmaTrophy doesn't know survive a rewrite.
 | `guide [store app]` | Prints the guide as JSON for the tracker: `{store, app, file, generated, order, items: {api: item}, sections, notes, ticks: [api], next: [api], agent, cost_usd}` (`agent` is the plan's, `cost_usd` the sum of its `usage`), or `{}` when there is none. The reader is `guides.py`. `items` holds only the plan items that match a store achievement (by `api`, then name); `ticks` are the `api`s of hand ticks; `ticks` and the store's unlocks both count as done for `next`. `next` is the first three open items in `order`, missables first. Without arguments, the game running now, else the last one played. |
 | `guide import <folder>` | Copies every `*-<app>.md` with its `.plan.json` and `.sources.json` from another folder (the games app's `games/`), skipping files we already have (`--replace` overwrites). Read-only on `<folder>`. Prints `imported N, skipped M`. |
 | `guide agents` | Every agent with its models and picks (see Settings). |
-| `guide model <agent> <model> [effort]`, `guide model <agent> default` | Sets or clears that agent's pick in `guide-models`. |
+| `guide model <agent> <model> [effort] [@http://endpoint]`, `guide model <agent> default` | Sets or clears that agent's pick in `guide-models`; `@endpoint` points claude at a local Anthropic-compatible server (`ANTHROPIC_BASE_URL`) for that model. |
+| `guide bench <store> <app> <agent:model[:effort][@endpoint]>... [--no-web] [--jail] [--pick] [--keep]` | [Compares](#benchmark) agents and models on one game. |
 | `guide make <store> <app> [--no-web] [--notify] [--jail\|--no-jail] [--agent a] [--model m] [--effort e]` | Runs the job below; the flags override the settings for this run only. `--notify` (the tracker passes it) sends a desktop notification when the job is done or failed. `--jail` runs the agent inside ai-jail (see Settings). One line per stage, then `done: N items, M verified`, or `stopped`/`failed: <what to do>`. Exits non-zero with no agent, an unsupported agent, or another job running. |
 | `guide stop` | Stops the job within half a second (the agent's process group is killed); nothing is written, so the old guide stays. |
 | `guide status` | `status.json`: `{state, store, app, game, stage, done, total, line, started, time, agent, model, pid, web, open}` (`web`: the research stage runs; `open`: achievements the guide covers); `state` is `running`, `done`, `stopped` or `failed`, and a `running` job whose `pid` is gone reads as `failed`. `{}` before any job. `done`/`total` count steps: gather, research (with web), one per classify batch, route, verify. |
@@ -135,7 +136,7 @@ OmaTrophy doesn't know survive a rewrite.
 | Key | Values | Default |
 | --- | --- | --- |
 | `guide-agent` | `""` (follow `omarchy-default-agent`) or any agent id in the adapter table. `set guide-agent default\|<id>`. | `""` |
-| `guide-models` | Per agent, `{agent: {"model": "...", "effort": "..."}}`; a missing agent or `""` uses that agent's own default. Written by `guide model` and the panel. | `{}` |
+| `guide-models` | Per agent, `{agent: {"model": "...", "effort": "...", "endpoint": "..."}}`; a missing agent or `""` uses that agent's own default. Written by `guide model` and the panel. | `{}` |
 | `guide-web` | `true`, `false`: let the agent search the web itself. `set guide-web on\|off`. | `true` |
 | `guide-jail` | `true`, `false`: run the agent inside [ai-jail](https://github.com/akitaonrails/ai-jail) (`ai-jail --exec ... --network -- <agent command>`): the job's empty folder read-write, the agent's own state dirs, the network, and only the environment variables it needs (its endpoint and key, when set). A second fence around the adapter's lock; an unchecked agent still never runs. Checked with `dev/check-lock.py --jail <agent>` (unverified as of 2026-11-04: written where ai-jail could not nest). `set guide-jail on\|off`. | `false` |
 
@@ -193,6 +194,27 @@ held; the cite then names that source.
 Each model stage is checked as it lands: on a shape error it is asked once
 more with the errors listed, then the valid part is kept. A cut-short
 job leaves the old guide in place.
+
+### Benchmark
+
+`guide bench` makes the guide once per entry, each in its own folder
+`guides/bench/<yyyymmdd-hhmmss>/<n>-<entry>/`, reading the owner's saved
+pages and earlier sources so every entry starts from the same text; the
+owner's guide is untouched. It prints a line per stage, then a table, and
+writes `results.json` there: `{store, app, game, web, jail, weights,
+results: [{entry, agent, model, effort, endpoint, state, error, score,
+metrics, seconds, cost_usd, tokens, calls, folder, name}]}`, best first.
+
+The score (0-100) uses only what OmaTrophy checks: `verified` (share of
+covered items with a verified quote) 35, `coverage` (share of open
+achievements classified) 25, `complete` (phase, difficulty, time and tip
+filled) 20, `route` (open achievements placed in the order) 10,
+`sections` (overview, route, missables, combos written) 10. Ties go to
+the cheaper (unknown cost last), then the faster. A failed or stopped
+entry scores 0. `--pick` saves the best as `guide-agent` and its
+`guide-models` pick (endpoint included); `--keep` copies its guide over
+the game's (the old one kept as `.prev`). Ctrl-C skips the entry running;
+`guide stop` doesn't reach a bench.
 
 ### Trusted sites
 

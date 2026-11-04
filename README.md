@@ -182,6 +182,18 @@ omatrophy.py guide status                      # the running job, as JSON; guide
 omatrophy.py guide steam 620                   # the guide, as JSON
 ```
 
+Which model writes the best guide? `guide bench` makes one game's guide
+with each, side by side, and ranks them by what OmaTrophy can check
+(quotes verified, achievements covered, fields filled), with time and
+cost. `--pick` makes the winner your default; `--keep` keeps its guide.
+A model on your own machine takes part through Claude Code pointed at a
+local Anthropic-compatible server:
+
+```bash
+omatrophy.py guide bench steam 620 claude:haiku claude:sonnet:medium \
+  claude:my-local-model@http://127.0.0.1:8080 --pick
+```
+
 Format and stages: [docs/specs/guides.md](docs/specs/guides.md).
 
 ## Settings

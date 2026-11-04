@@ -15,7 +15,8 @@ installed.
 | `game [store app]` | Prints [one game's every achievement](#game) for the tracker. Without arguments: the game running now, else the one played last. Exits non-zero, with what to do, when the game has no cached achievements. |
 | `guide [store app]`, `guide import <folder> [--replace]` | One game's 100% guide as JSON for the tracker, or copy guides in from another folder ([guides](guides.md#command-line)). |
 | `guide make <store> <app> [--no-web] [--agent a] [--model m] [--effort e]`, `guide stop`, `guide status` | Make a guide through your agent (ADR 14), stop it, or read its progress ([guides](guides.md#the-make-job)). |
-| `guide agents`, `guide model <agent> <model> [effort]\|default` | The agents, their models and your picks; set or clear one agent's pick. |
+| `guide agents`, `guide model <agent> <model> [effort] [@endpoint]\|default` | The agents, their models and your picks; set or clear one agent's pick. |
+| `guide bench <store> <app> <agent:model[:effort][@endpoint]>... [--pick] [--keep]` | Make one game's guide with each entry and rank them ([benchmark](guides.md#benchmark)). |
 | `set guide-agent default\|<agent>`, `set guide-web on\|off`, `set guide-jail on\|off` | Which agent makes guides, whether it may search the web, and whether it runs inside ai-jail. |
 | `set position top-center\|top-left\|top-right` | Where cards appear. |
 | `set sound on\|off\|omatrophy\|classic` | The chime: on, off, or which set (which also turns it on). |
