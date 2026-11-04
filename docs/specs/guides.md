@@ -208,7 +208,8 @@ but rank lower in excerpts.
 ### Agent adapters
 
 One table row per agent `omarchy-default-agent` offers, except
-openclaw, which only runs through its own gateway and terminal app. Each runs in a fresh, empty temporary folder, with the prompt
+openclaw, which only runs through its own gateway and terminal app.
+Each runs in a fresh, empty temporary folder, with the prompt
 on stdin or as an argument and a 25 min ceiling per stage. A row is
 **supported** once slice c has checked, on a real run, that its lock keeps
 shell and file tools off. Until then `guide agents` shows it as "not
