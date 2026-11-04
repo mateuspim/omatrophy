@@ -18,6 +18,7 @@ installed.
 | `set icons omarchy\|vector\|painted` | Trophy art set. |
 | `set glass clear\|frosted\|solid` | How see-through toasts are. |
 | `set tracker-sort recent\|rarity\|name\|game` | The tracker's sort; the tracker writes it when you change it. |
+| `set now-metals\|now-recent\|now-rarest\|now-shelf on\|off` | Shows or hides that section of the panel's Now tab. |
 | `set community on\|off` | The opt-in backfill of games that never ran on this machine from your public Steam profile ([ADR 11](../adr/0011-backfill-from-the-community-profile.md)). With it on, the watcher fetches in the background after `ready`. |
 | `sync` | Runs that backfill now, one line per game (`steam: 3/444 1903340: 55 achievements`), at most the run's page budget (15 to start; halved after a 429, five more after a run that used it all, between 5 and 30), ending `paused: N fetched, M left for later runs` when more are due, then `fetched N`; "stopped early" after any error (a 429 rate limit, offline, private profile), and the next run picks up where it stopped. The watcher runs the same backfill every hour. Exits non-zero while `community` is off. |
 | `hide <store> <game>` | Adds `"store:game"` to `hidden` in config.json: the game leaves `cabinet`'s `nearest`, the Games tab's Closest sort and the panel's platinum shelf (`now` still lists it in `shelf`; the panel filters). Exits non-zero for an unknown store. |
@@ -39,6 +40,7 @@ the next read names them locally. The command itself exits at once.
 {"games": 126, "trophies": 1779, "platinums": 12,
  "playing": {...card, "hero": "...", "since": 1793065549, "session": [...], "next": [...]} | null,
  "recent": [card, ...], "shelf": [card, ...],
+ "metals": {"bronze", "silver", "gold"}, "completion": 40,
  "nearest": [card, ...], "stores": [{"id", "name", "found", "games"}, ...],
  "rarest": {"ever": [unlock, ...], "month": [unlock, ...], "platinum": [unlock, ...]}}
 ```
@@ -54,6 +56,10 @@ the next read names them locally. The command itself exits at once.
   hidden achievements and `progress` is as in [game](#game).
 - `recent`: the three games played last, minus the running one.
 - `shelf`: every complete game, newest platinum first, with `latest` empty.
+- `metals`: every unlock counted by the metal its toast would have, from
+  cached rarity (an unknown rarity counts as bronze, as its toast would);
+  `completion`: the average share unlocked, in whole percent, over games
+  with at least one unlock.
 - `stores`: every store OmaTrophy knows (`stores.STORES` order), whether
   it was found on this machine, and how many of its games have
   achievements; Settings shows one card per store.
@@ -64,8 +70,8 @@ the next read names them locally. The command itself exits at once.
   ever, since the first of this month (local time) and from finished
   games only (`platinum`), rarest first, ties to the newest; hidden
   games are left out. The panel shows three; the
-  spares let it drop a game hidden since the read. An **unlock** is `{name, icon, time, percent, tier,
-  store, app, game}`. Rarity is read from the cache only, so `now` makes
+  spares let it drop a game hidden since the read. An **unlock** is
+  `{name, icon, time, api, percent, tier, store, app, game}`. Rarity is read from the cache only, so `now` makes
   no request for it; unlocks of games with no cached rarity are left out.
   The watcher fetches the missing ones once after `ready`.
 
@@ -105,6 +111,11 @@ with the same JSON:
 omarchy-shell shell summon pym.omatrophy '{"store":"steam","app":"1774580"}'
 omarchy-shell shell summon pym.omatrophy '{}'   # the running or last game
 ```
+
+An `api` key (an achievement's id from [game](#game)) opens the game with
+that achievement highlighted in the middle of the list, revealed if it is
+hidden, clearing a filter or search that would leave it out. The panel's
+rarest unlocks open this way.
 
 ## Environment
 

@@ -48,6 +48,8 @@ Item {
   property bool cascading: false
   // Hidden achievements revealed with Enter, by api name; hover reveals too.
   property var revealed: ({})
+  // An achievement to highlight once the game loads, from the request.
+  property string focusApi: ""
 
   readonly property color foreground: Commons.Color.menu.text
   readonly property color background: Commons.Color.menu.background
@@ -63,6 +65,7 @@ Item {
   // Called by Tracker.qml with the summon payload: {store, app}, or empty
   // for the game running now (or played last).
   function load(request) {
+    focusApi = request && request.api ? String(request.api) : ""
     var args = ["python3", helperPath, "game"]
     if (request && request.store && request.app) args = args.concat([String(request.store), String(request.app)])
     loader.command = args
@@ -78,6 +81,7 @@ Item {
     cascading = true
     rebuild()
     cascadeEnd.restart()
+    if (focusApi) Qt.callLater(focusRequested)
   }
   onFilterChanged: rebuild()
   onSearchChanged: {
@@ -165,6 +169,30 @@ Item {
       order.splice(k, 0, want[k])
     }
     shownApis = order
+  }
+
+  // Opened on one achievement (a rarest unlock in the panel): clear what
+  // could hide it, then highlight it in the middle of the list, revealed
+  // if it is a hidden one.
+  function focusRequested() {
+    var api = focusApi
+    focusApi = ""
+    if (!byApi[api]) return
+    if (!keep(byApi[api])) {
+      filter = "all"
+      search = ""
+      appliedSearch = ""
+      rebuild()
+    }
+    var index = rows.findIndex(function(a) { return a.api === api })
+    if (index < 0) return
+    list.currentIndex = index
+    list.positionViewAtIndex(index, ListView.Center)
+    if (byApi[api].hidden) {
+      var next = Object.assign({}, revealed)
+      next[api] = true
+      revealed = next
+    }
   }
 
   // Move the highlighted row; the first key press lands on the first row.

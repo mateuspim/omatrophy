@@ -326,6 +326,30 @@ def totals(rows):
             'platinums': sum(r['unlocked'] == r['total'] for r in rows)}
 
 
+def average_completion(rows):
+    """Mean share unlocked, in whole percent, over the games you've started
+    (Steam's "average game completion rate" counts the same games)."""
+    started = [r['unlocked'] / r['total'] for r in rows if r['unlocked'] and r['total']]
+    # Half up, not Python's round-half-to-even, so 62.5 shows as 63.
+    return int(100 * sum(started) / len(started) + 0.5) if started else 0
+
+
+def metal_tally(lib):
+    """Every unlock counted by the metal its toast would have, from cached
+    rarity (no network); an unlock with no known rarity counts as bronze,
+    as its toast would."""
+    tally = {'bronze': 0, 'silver': 0, 'gold': 0}
+    for s, g, achs in lib:
+        pcts = None
+        for a in achs:
+            if not a['unlocked']:
+                continue
+            if pcts is None:
+                pcts = s.known_percents(g)
+            tally[tier(pcts.get(a['api']))] += 1
+    return tally
+
+
 def cabinet(n=4):
     """Totals plus the games nearest platinum, named and with art, for the bar panel.
     Names only the few games it shows, since a name can cost a request."""
@@ -385,7 +409,7 @@ def library_unlocks(lib, hidden=()):
                 continue
             if pcts is None:
                 pcts = s.known_percents(g)
-            out.append(dict(brief(a), percent=pcts.get(a['api']), store=s.id, app=g))
+            out.append(dict(brief(a), api=a['api'], percent=pcts.get(a['api']), store=s.id, app=g))
     return out
 
 
@@ -472,7 +496,8 @@ def now(recent_n=3, rarest_n=3, nearest_n=4):
     for r in nearest_platinum(rows, nearest_n + 2, hidden):
         s, achs = by_key[(r['store'], r['app'])]
         nearest.append(dict(game_card(s, r['app'], achs), latest=[]))
-    return dict(totals(rows), playing=playing, recent=recent, shelf=shelf, nearest=nearest,
+    return dict(totals(rows), metals=metal_tally(lib), completion=average_completion(rows),
+                playing=playing, recent=recent, shelf=shelf, nearest=nearest,
                 stores=store_rows(stores.STORES, found, lib),
                 rarest=rarest_cards(lib, rarest_n + 2, time.time(), hidden))
 
@@ -629,6 +654,11 @@ SETTINGS = {'position': ('top-center', 'top-left', 'top-right'),
             'glass': ('clear', 'frosted', 'solid'),
             'tracker-sort': ('recent', 'rarity', 'name', 'game'),
             'community': ('on', 'off')}
+# The Now tab's sections, each shown unless switched off in Settings.
+NOW_SECTIONS = ('metals', 'recent', 'rarest', 'shelf')
+SETTINGS.update({f'now-{name}': ('on', 'off') for name in NOW_SECTIONS})
+# Settings stored as true/false rather than the word given.
+SWITCHES = {'community'} | {f'now-{name}' for name in NOW_SECTIONS}
 
 
 def set_option(key, value):
@@ -640,15 +670,16 @@ def set_option(key, value):
                          f'       omatrophy.py set icons {"|".join(SETTINGS["icons"])}\n'
                          f'       omatrophy.py set glass {"|".join(SETTINGS["glass"])}\n'
                          f'       omatrophy.py set tracker-sort {"|".join(SETTINGS["tracker-sort"])}\n'
-                         f'       omatrophy.py set community on|off')
+                         f'       omatrophy.py set community on|off\n'
+                         f'       omatrophy.py set now-{{{",".join(NOW_SECTIONS)}}} on|off')
     path = config_path()
     cfg = read_json(path, {})
     if key == 'sound':
         cfg['sound'] = value != 'off'
         if value not in ('on', 'off'):
             cfg['chimes'] = value
-    elif key == 'community':
-        cfg['community'] = value == 'on'
+    elif key in SWITCHES:
+        cfg[key] = value == 'on'
     else:
         cfg[key] = value
     write_json(path, cfg, indent=2)

@@ -518,6 +518,19 @@ class NowTab(unittest.TestCase):
                          [{'id': 'steam', 'name': 'Steam', 'found': True, 'games': 2},
                           {'id': 'gog', 'name': 'GOG', 'found': True, 'games': 0}])
 
+    def test_average_completion_counts_started_games_only(self):
+        rows = [{'unlocked': 1, 'total': 4}, {'unlocked': 4, 'total': 4}, {'unlocked': 0, 'total': 9}]
+        self.assertEqual(omatrophy.average_completion(rows), 63)
+        self.assertEqual(omatrophy.average_completion([]), 0)
+
+    def test_metal_tally_counts_unlocks_by_tier_unknown_as_bronze(self):
+        class Fake:
+            id = 'steam'
+            def known_percents(self, game):
+                return {'a': 5.0, 'b': 20.0, 'c': 80.0}
+        achs = [ach('a', True, 1), ach('b', True, 0), ach('c', True, 2), ach('d', True, 3), ach('e')]
+        self.assertEqual(omatrophy.metal_tally([(Fake(), '1', achs)]), {'bronze': 2, 'silver': 1, 'gold': 1})
+
     def test_rarest_unlocks_rarest_first_ties_to_the_newest(self):
         unlocks = [{'name': 'a', 'percent': 30.0, 'time': 5}, {'name': 'b', 'percent': 2.0, 'time': 6},
                    {'name': 'c', 'percent': 2.0, 'time': 9}, {'name': 'd', 'percent': None, 'time': 9}]
@@ -663,6 +676,13 @@ class PanelJson(unittest.TestCase):
             rows = omatrophy.now()['stores']
         self.assertEqual(rows, [{'id': 'steam', 'name': 'Steam', 'found': True, 'games': 3},
                                 {'id': 'gog', 'name': 'GOG', 'found': False, 'games': 0}])
+
+    def test_now_counts_metals_and_average_completion(self):
+        with FakeLibrary():
+            now = omatrophy.now()
+        # ACH_0 is 50% (bronze) and ACH_1 5% (gold) in both started games.
+        self.assertEqual(now['metals'], {'bronze': 2, 'silver': 0, 'gold': 2})
+        self.assertEqual(now['completion'], 75)
 
     def test_game_detail_for_the_tracker(self):
         with FakeLibrary(running={'game': '20', 'since': 0}):
@@ -1026,6 +1046,18 @@ class Settings(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 omatrophy.set_option('tracker-sort', 'random')
 
+
+    def test_now_sections_switch_on_and_off_as_booleans(self):
+        with tempfile.TemporaryDirectory() as home, mock.patch.dict(os.environ, {'HOME': home}):
+            with redirect_stdout(io.StringIO()):
+                omatrophy.set_option('now-rarest', 'off')
+                omatrophy.set_option('now-shelf', 'on')
+            with open(f'{home}/.config/omatrophy/config.json') as f:
+                self.assertEqual(json.load(f), {'now-rarest': False, 'now-shelf': True})
+            with self.assertRaises(SystemExit):
+                omatrophy.set_option('now-rarest', 'maybe')
+            with self.assertRaises(SystemExit):
+                omatrophy.set_option('now-playing', 'off')
 
 class BackfillLoop(unittest.TestCase):
     def test_wait_doubles_after_failures_up_to_a_cap(self):

@@ -235,5 +235,11 @@
    "found": true,
    "games": 6
   }
- ]
+ ],
+ "metals": {
+  "bronze": 640,
+  "silver": 398,
+  "gold": 169
+ },
+ "completion": 47
 }

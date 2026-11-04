@@ -78,12 +78,14 @@ each). GOG needs no network at all. No root, no API key, no login. Details in
 
 ## Trophy cabinet and tracker
 
-Click the trophy in the bar. The **Now** tab shows your totals, then the game
+Click the trophy in the bar. The **Now** tab shows your totals, split by
+metal with your average completion, then the game
 you're playing: its art and progress, what you've unlocked this session and
 the three locked achievements most players have. With nothing running it
 shows the last three games you played instead (a finished one carries its
 platinum date). Below them come your three rarest unlocks across every game,
-ever, this month or from your platinums only, and your platinum shelf,
+ever, this month or from your platinums only (click one to open it in the
+tracker), and your platinum shelf,
 whose empty slots tease the games you're closest to finishing ("2 left"). Before any game has
 achievements, the tab says where they come from and points to the Steam
 profile switch. The **Games** tab lists every
@@ -120,7 +122,8 @@ omarchy-shell shell summon pym.omatrophy '{}'   # the running or last game
 
 The panel's **Settings** tab holds the trophy style, then position, glass
 and sound as rows of choices, and **Try it** tiles that show a toast of
-each tier with your settings. Each choice applies to the next toast. Under
+each tier with your settings. Each choice applies to the next toast.
+**Now tab** picks which sections the Now tab shows. Under
 **Stores**, a card per store says whether OmaTrophy found it and how many
 games it has, or what to do when it didn't. In Steam's card, **Profile**
 fills in games this machine never ran from your public Steam profile (off

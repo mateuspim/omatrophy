@@ -56,6 +56,15 @@ Column {
   // From `omatrophy.py games`, read the first time the Games tab opens.
   property var games: null
   property string sort: "recent"
+  // The Now tab's sections, from config.json's now-* switches (all on
+  // unless switched off in Settings).
+  readonly property var nowSections: [
+    { value: "metals", label: "Metals" },
+    { value: "recent", label: "Recent" },
+    { value: "rarest", label: "Rarest" },
+    { value: "shelf", label: "Shelf" }
+  ]
+  property var nowShows: ({ metals: true, recent: true, rarest: true, shelf: true })
   // Which rarest unlocks the Now tab lists: "ever", "month" or "platinum"
   // (from finished games only).
   property string rarestRange: "ever"
@@ -88,7 +97,7 @@ Column {
 
   // Asks Panel.qml to open the tracker on one game; the panel owns the
   // shell handle, this file only knows the game.
-  signal track(string store, string app)
+  signal track(string store, string app, string api)
 
   // ---------------------------------------------------------------- Helpers
 
@@ -97,6 +106,11 @@ Column {
     if (key === "position") position = value
     if (key === "glass") glass = value
     if (key === "community") community = value === "on"
+    if (key.indexOf("now-") === 0) {
+      var shows = Object.assign({}, nowShows)
+      shows[key.slice(4)] = value === "on"
+      nowShows = shows
+    }
     if (key === "sound") {
       sound = value !== "off"
       if (value !== "on" && value !== "off") chimes = value
@@ -233,6 +247,9 @@ Column {
       if (c.chimes) root.chimes = c.chimes
       if (c.glass) root.glass = c.glass
       root.community = c.community === true
+      var shows = {}
+      root.nowSections.forEach(function(n) { shows[n.value] = c["now-" + n.value] !== false })
+      root.nowShows = shows
       var keys = {}
       if (Array.isArray(c.hidden)) c.hidden.forEach(function(k) { keys[k] = true })
       root.hiddenKeys = keys
@@ -520,7 +537,8 @@ Column {
     anchors.fill: parent
     hoverEnabled: true
     cursorShape: Qt.PointingHandCursor
-    onClicked: if (game) root.track(game.store, game.app)
+    // A row naming one achievement (a rarest unlock) opens on it.
+    onClicked: if (game) root.track(game.store, game.app, game.api || "")
   }
 
   // A quiet choice of a few options (the Games sort): plain words, the
@@ -779,6 +797,66 @@ Column {
         Stat {
           value: root.cabinet ? root.cabinet.games : -1
           label: "GAMES"
+        }
+      }
+    }
+
+    // Every trophy by the metal its toast would have, as one bar, with the
+    // average completion of the games you've started beside it.
+    Column {
+      id: metalTally
+      readonly property var metals: root.cabinet && root.cabinet.metals ? root.cabinet.metals : null
+      readonly property int total: metals ? metals.bronze + metals.silver + metals.gold : 0
+      property bool grown: false
+      visible: total > 0 && root.nowShows.metals
+      width: root.width
+      spacing: Commons.Style.space(6)
+      Component.onCompleted: grown = true
+      Row {
+        width: parent.width
+        height: 4
+        spacing: 2
+        Repeater {
+          model: ["gold", "silver", "bronze"]
+          delegate: Rectangle {
+            required property string modelData
+            readonly property int count: metalTally.metals ? metalTally.metals[modelData] : 0
+            visible: count > 0
+            height: 4
+            radius: 2
+            width: metalTally.grown && metalTally.total > 0 ? Math.max(4, (metalTally.width - 4) * count / metalTally.total) : 0
+            color: root.metalColors[modelData]
+            Behavior on width { NumberAnimation { duration: 650; easing.type: Easing.OutCubic } }
+          }
+        }
+      }
+      Item {
+        width: parent.width
+        height: metalLegend.height
+        Row {
+          id: metalLegend
+          spacing: Commons.Style.space(12)
+          Repeater {
+            model: ["gold", "silver", "bronze"]
+            delegate: Row {
+              required property string modelData
+              spacing: Commons.Style.space(5)
+              Rectangle {
+                anchors.verticalCenter: parent.verticalCenter
+                width: 6
+                height: 6
+                radius: 3
+                color: root.metalColors[modelData]
+              }
+              Caption {
+                text: (metalTally.metals ? metalTally.metals[modelData].toLocaleString(Qt.locale(), "f", 0) : "") + " " + modelData
+              }
+            }
+          }
+        }
+        Caption {
+          anchors.right: parent.right
+          text: (root.cabinet ? root.cabinet.completion : 0) + "% avg completion"
         }
       }
     }
@@ -1125,7 +1203,7 @@ Column {
     Repeater {
       id: recent
       // The game you're playing takes this space; the rest wait for it to end.
-      model: root.cabinet && !root.cabinet.playing ? root.cabinet.recent : []
+      model: root.cabinet && !root.cabinet.playing && root.nowShows.recent ? root.cabinet.recent : []
       // A recent game: art, its latest unlocks, progress. A finished game
       // gets the platinum edge and date instead of a count.
       delegate: Rectangle {
@@ -1205,6 +1283,25 @@ Column {
                 height: 18
               }
             }
+            // How many more unlocks than the icons show, like Steam's "+8".
+            Rectangle {
+              readonly property int more: recentCard.modelData.unlocked - recentCard.modelData.latest.length
+              visible: more > 0
+              width: moreText.implicitWidth + 8
+              height: 18
+              radius: 3
+              color: Qt.alpha(root.foreground, 0.08)
+              Text {
+                textFormat: Text.PlainText
+                id: moreText
+                anchors.centerIn: parent
+                text: "+" + parent.more
+                color: root.foreground
+                opacity: 0.7
+                font.family: Commons.Style.font.family
+                font.pixelSize: 10
+              }
+            }
           }
           Bar {
             width: parent.width
@@ -1242,7 +1339,7 @@ Column {
       readonly property var ever: lists ? root.unhidden(lists.ever).slice(0, 3) : []
       readonly property var month: lists ? root.unhidden(lists.month).slice(0, 3) : []
       readonly property var platinum: lists && lists.platinum ? root.unhidden(lists.platinum).slice(0, 3) : []
-      visible: ever.length > 0
+      visible: ever.length > 0 && root.nowShows.rarest
       width: root.width
       height: rarestChips.height
       PanelSectionHeader {
@@ -1332,7 +1429,7 @@ Column {
 
     PanelSectionHeader {
       readonly property int hiddenPlatinums: root.cabinet ? root.cabinet.shelf.length - shelf.count : 0
-      visible: shelf.count > 0 || hiddenPlatinums > 0 || almost.count > 0
+      visible: root.nowShows.shelf && (shelf.count > 0 || hiddenPlatinums > 0 || almost.count > 0)
       text: "PLATINUM SHELF · " + shelf.count + (hiddenPlatinums > 0 ? " · " + hiddenPlatinums + " HIDDEN" : "")
       foreground: root.foreground
     }
@@ -1340,7 +1437,7 @@ Column {
     // Every platinum, in a grid whose tiles fit the width exactly.
     Grid {
       id: shelfGrid
-      visible: shelf.count > 0 || almost.count > 0
+      visible: root.nowShows.shelf && (shelf.count > 0 || almost.count > 0)
       columns: 4
       spacing: Commons.Style.space(6)
       readonly property real tileWidth: (root.width - spacing * (columns - 1)) / columns
@@ -2017,6 +2114,56 @@ Column {
       elide: Text.ElideNone
       opacity: 0.4
       text: "Changes apply to the next toast. A tile shows one now, with your settings."
+    }
+
+    // ------------------------------------------------ now tab
+
+    Item { width: 1; height: Commons.Style.space(8) }
+
+    PanelSectionHeader { text: "NOW TAB"; foreground: root.foreground }
+
+    // Each section a chip of its own, lit while shown; the game you're
+    // playing always shows.
+    SettingRow {
+      label: "SHOW"
+      Row {
+        spacing: Commons.Style.space(2)
+        Repeater {
+          model: root.nowSections
+          delegate: Rectangle {
+            id: showChip
+            required property var modelData
+            readonly property bool shown: root.nowShows[modelData.value] !== false
+            width: showText.implicitWidth + Commons.Style.space(16)
+            height: showText.implicitHeight + Commons.Style.space(8)
+            radius: height / 2
+            color: shown ? Qt.alpha(Commons.Color.accent, 0.18) : (showHit.containsMouse ? Commons.Style.hoverFill : "transparent")
+            Accessible.role: Accessible.CheckBox
+            Accessible.name: "Show " + modelData.label + " on the Now tab"
+            Accessible.checked: shown
+            Behavior on color { ColorAnimation { duration: 120 } }
+            Text {
+              textFormat: Text.PlainText
+              id: showText
+              anchors.centerIn: parent
+              // The tick tells these apart from the one-of-many chips above.
+              text: (showChip.shown ? "✓ " : "") + showChip.modelData.label
+              color: showChip.shown ? Commons.Color.accent : root.foreground
+              opacity: showChip.shown ? 1 : 0.6
+              font.family: Commons.Style.font.family
+              font.pixelSize: Commons.Style.font.caption
+              font.bold: showChip.shown
+            }
+            MouseArea {
+              id: showHit
+              anchors.fill: parent
+              hoverEnabled: true
+              cursorShape: Qt.PointingHandCursor
+              onClicked: root.set("now-" + showChip.modelData.value, showChip.shown ? "off" : "on")
+            }
+          }
+        }
+      }
     }
 
     // ------------------------------------------------ stores

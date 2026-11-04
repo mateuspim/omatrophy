@@ -8,6 +8,13 @@
   once for games that have none.
 - Before any game has achievements, the Now tab says where they come
   from and points to the Steam profile switch in Settings.
+- The Now tab's totals are split by metal in one bar (gold, silver,
+  bronze, from cached rarity) with your average completion, and recent
+  games show "+N" after their latest unlock icons.
+- Clicking a rarest unlock opens the tracker on that achievement,
+  highlighted and revealed. Needs a shell restart (Panel.qml).
+- Settings has a Now tab row to show or hide the metal tally, recently
+  played, rarest unlocks and the platinum shelf (`set now-<section>`).
 - The platinum shelf's empty slots show the games closest to platinum:
   dimmed art, how many are left and a bar, each opening the tracker.
 - Settings is one list of choices: style, then position, glass and sound
