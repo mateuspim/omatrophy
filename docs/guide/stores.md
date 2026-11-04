@@ -56,16 +56,25 @@ python3 omatrophy.py status          # your games from every store
 python3 omatrophy.py test silver     # a toast from your latest game
 ```
 
-## Where other launchers keep achievements
+## Stores we checked
 
-Unconfirmed starting points; check them on a real install before relying on
-them.
+Read this before starting a store, and update the row with what you find
+(date, evidence) so nobody digs the same hole twice. "Local" means files the
+launcher keeps on this machine that change when you unlock something; that
+is what live toasts need (ADR 1). Omarchy's own gaming installers
+(`omarchy-install-gaming-*`) set the order we checked them in.
 
-- GOG through Heroic: done. Comet, which Heroic starts beside every GOG
-  game, keeps `comet/gameplay/<client id>/<user id>/gameplay.db` (ADR 12).
-- Epic through Heroic / Legendary: no local achievement cache known
-  (unverified).
-- Battle.net under Wine/Proton: achievements live server-side per game
-  (unverified).
-- GOG Galaxy itself is Windows-only; under Wine its local database may hold
-  them (unverified).
+| Store | Verdict | Why | What would change it |
+| --- | --- | --- | --- |
+| Steam | Done | Local stats and schema files per game; opt-in profile backfill for games never run here (ADR 11) | |
+| GOG through Heroic | Done (0.3.0) | Comet, which Heroic starts beside every GOG game, keeps a SQLite `gameplay.db` per game with unlock times and GOG's rarity (ADR 12) | |
+| Epic through Heroic (Legendary) | No | Legendary has no achievement support and keeps no unlocks on disk; Epic's achievements come from its online services (EOS) behind your login. Checked 2026-11-03: no achievement file in Heroic's `legendaryConfig/` or `store_cache/` | A local file the game or EOS writes on unlock; or a public, login-free profile page that could feed an opt-in backfill like ADR 11 (no live toasts; not checked) |
+| Amazon through Heroic (Nile) | No | No local achievement data found (unverified) | Same as Epic |
+| Heroic's `gog_achievements.json` | Don't use | A copy of GOG's online list, saved when you open a game's page in Heroic and never refreshed: not live, often stale | Use Comet's database instead (already done) |
+| Lutris | No store of its own | Lutris runs Windows games under Wine; it keeps no achievements. A GOG game run there without Comet writes nothing | GOG games launched with Comet should already work through the GOG store's database fallback (unverified) |
+| Battle.net | No | Blizzard keeps achievements inside each game's online service | A local file per game (none known) |
+| RetroArch | No | RetroAchievements needs an account and API key (ADR 1) | Revisiting ADR 1 for an opt-in, key-based store |
+| RPCS3 (PS3 emulator) | Possible, deferred | Per-game trophy files on disk: `TROPCONF.SFM` lists trophies, `TROPUSR.DAT` holds unlock flags and timestamps as plain big-endian records (per RPCS3's `Loader/TROPUSR.h`). The owner put it off on 2026-11-03 | A real trophy folder to build tests from |
+| Minecraft | Possible, not planned | Advancements are JSON per world on disk | Someone wanting it |
+| GeForce Now, Xbox Cloud | No | Cloud streaming: nothing runs or is stored here | |
+| GOG Galaxy under Wine | Unchecked | Its local database may hold achievements (unverified) | A real install to read |
