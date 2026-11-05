@@ -208,7 +208,7 @@ each tier with your settings. Each choice applies to the next toast.
 **Now tab** picks which sections the Now tab shows. **Guides** picks the
 agent that makes 100% guides and its model, each from a list that unfolds
 in place (every installed agent with its state; every model the agent
-lists, searchable, or any model id you type), then the effort and whether
+lists, searchable, or any model id you type) and its effort, then whether
 it may search the web. In
 **Stores**, a card per store says whether OmaTrophy found it and how many
 games it has, or what to do when it didn't. In Steam's card, **Profile**

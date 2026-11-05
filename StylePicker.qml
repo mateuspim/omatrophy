@@ -208,6 +208,21 @@ Column {
     guideModelField.focus = false
   }
 
+  function effortName(e) {
+    return e === "xhigh" ? "Extra high" : e.charAt(0).toUpperCase() + e.slice(1)
+  }
+
+  // What an effort level trades, in a few words (for the picker).
+  function effortNote(e) {
+    return ({ "": "Whatever the model uses on its own",
+              minimal: "Least thinking: fastest and cheapest",
+              low: "Quick: fine for short games",
+              medium: "Balanced: a good default for most guides",
+              high: "Thinks longer: slower, costs more",
+              xhigh: "Thinks much longer: for big or tricky games",
+              max: "Thinks the most: slowest and costliest" })[e] || ""
+  }
+
   function guideEfforts() {
     if (!guideRow) return []
     var m = guideRow.models.find(function(m) { return m.id === guidePick.model })
@@ -1040,6 +1055,83 @@ Column {
       hoverEnabled: true
       cursorShape: Qt.PointingHandCursor
       onClicked: picker.toggled()
+    }
+  }
+
+  // The list a PickerField unfolds: one row per choice, a dot on the
+  // current one, a line under each name.
+  component PickerList: Rectangle {
+    id: plist
+    property var rows: []
+    property string current: ""
+    signal picked(string value)
+    width: root.width
+    height: plistRows.height + Commons.Style.space(8)
+    radius: Commons.Style.cornerRadius
+    color: Qt.alpha(root.foreground, 0.03)
+    border.width: 1
+    border.color: Qt.alpha(root.foreground, 0.08)
+    Column {
+      id: plistRows
+      y: Commons.Style.space(4)
+      width: parent.width
+      Repeater {
+        model: plist.visible ? plist.rows : []
+        delegate: Rectangle {
+          id: prow
+          required property var modelData
+          readonly property bool chosen: plist.current === modelData.value
+          width: plistRows.width
+          height: prowName.implicitHeight + (prowDetail.visible ? prowDetail.implicitHeight : 0) + Commons.Style.space(14)
+          color: prowHit.containsMouse ? Commons.Style.hoverFill : "transparent"
+          Accessible.role: Accessible.RadioButton
+          Accessible.name: modelData.name
+          Accessible.checked: chosen
+          MouseArea {
+            id: prowHit
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: plist.picked(prow.modelData.value)
+          }
+          Text {
+            textFormat: Text.PlainText
+            id: prowDot
+            x: Commons.Style.space(12)
+            anchors.verticalCenter: parent.verticalCenter
+            text: prow.chosen ? "◉" : "○"
+            color: prow.chosen ? Commons.Color.accent : root.foreground
+            opacity: prow.chosen ? 1 : 0.5
+            font.pixelSize: Commons.Style.font.body
+          }
+          Column {
+            anchors.left: prowDot.right
+            anchors.leftMargin: Commons.Style.space(10)
+            anchors.right: parent.right
+            anchors.rightMargin: Commons.Style.space(12)
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: Commons.Style.space(1)
+            Text {
+              textFormat: Text.PlainText
+              id: prowName
+              width: parent.width
+              text: prow.modelData.name
+              color: root.foreground
+              elide: Text.ElideRight
+              font.family: Commons.Style.font.family
+              font.pixelSize: Commons.Style.font.bodySmall
+              font.bold: prow.chosen
+            }
+            Caption {
+              id: prowDetail
+              width: parent.width
+              visible: text !== ""
+              opacity: 0.5
+              text: prow.modelData.detail || ""
+            }
+          }
+        }
+      }
     }
   }
 
@@ -4220,14 +4312,20 @@ Column {
         }
       }
 
-      SettingRow {
-        label: "EFFORT"
+      MiniLabel { text: "EFFORT"; visible: root.guideEfforts().length > 0 }
+      PickerField {
         visible: root.guideEfforts().length > 0
-        Chips {
-          options: [{ value: "", label: "Default" }].concat(root.guideEfforts().map(function(e) { return { value: e, label: e } }))
-          value: root.guidePick.effort || ""
-          onPicked: value => root.setGuideModel(root.guidePick.model, value)
-        }
+        open: root.guideMenu === "effort"
+        title: root.guidePick.effort ? root.effortName(root.guidePick.effort) : "Model's default"
+        detail: root.effortNote(root.guidePick.effort || "")
+        onToggled: root.guideMenu = open ? "" : "effort"
+      }
+      PickerList {
+        visible: root.guideMenu === "effort"
+        current: root.guidePick.effort || ""
+        rows: [{ value: "", name: "Model's default", detail: root.effortNote("") }].concat(
+                root.guideEfforts().map(function(e) { return { value: e, name: root.effortName(e), detail: root.effortNote(e) } }))
+        onPicked: value => { root.setGuideModel(root.guidePick.model, value); root.guideMenu = "" }
       }
 
       SettingRow {
