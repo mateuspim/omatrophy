@@ -200,13 +200,28 @@ Which model writes the best guide? `guide bench` makes one game's guide
 with each, side by side, and ranks them by what OmaTrophy can check
 (quotes verified, achievements covered, fields filled), with time and
 cost. `--pick` makes the winner your default; `--keep` keeps its guide.
-A model on your own machine takes part through Claude Code pointed at a
-local Anthropic-compatible server:
+A model on your own machine takes part through OpenCode (`opencode:<provider/model>`,
+once its **Check** passes) or through Claude Code pointed at a local
+Anthropic-compatible server:
 
 ```bash
 omatrophy.py guide bench steam 620 claude:haiku claude:sonnet:medium \
   claude:my-local-model@http://127.0.0.1:8080 --pick
 ```
+
+One bench on three games (2026-11-05, unreleased guides build, web
+research on, inside ai-jail). Results vary per game and machine; full
+numbers and caveats in [docs/guide/guide-models.md](docs/guide/guide-models.md).
+
+| Agent · model | Where it runs | Score (small / DLC / big game) | Verified quotes | Coverage | Time (small / DLC / big) | Cost (3 games) | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Claude Code · Haiku | cloud | 86.9 / 69.6 / 94.1 | 88% | 100% | 3 / 3 / 10 min | $0.30 | best verified share; tagged few DLC items |
+| Claude Code · Sonnet, medium | cloud | 87.1 / 70.2 / 81.7 | 69% | 100% | 2 / 2 / 4 min | $1.14 | fastest; left one section empty each time |
+| OpenCode · Qwen3.8 Flash Next, Q2 | local | 95.0 / 82.3 / 77.8 | 60% | 100% | 8 / 5 / 24 min | $0 | its web search was down; fetched pages only |
+
+Games: METAL GEAR SOLID V: GROUND ZEROES (13 open), Resident Evil 7
+Biohazard (11 open, all DLC), Rise of the Tomb Raider (81 open). Without
+web research no entry could back a single claim on RE7.
 
 Format and stages: [docs/specs/guides.md](docs/specs/guides.md).
 

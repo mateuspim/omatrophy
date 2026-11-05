@@ -141,7 +141,7 @@ OmaTrophy doesn't know survive a rewrite.
 | `guide-agent` | `""` (follow `omarchy-default-agent`) or any agent id in the adapter table. `set guide-agent default\|<id>`. | `""` |
 | `guide-models` | Per agent, `{agent: {"model": "...", "effort": "...", "endpoint": "..."}}`; a missing agent or `""` uses that agent's own default. Written by `guide model` and the panel. | `{}` |
 | `guide-web` | `true`, `false`: let the agent search the web itself. `set guide-web on\|off`. | `true` |
-| `guide-jail` | `true`, `false`: run the agent inside [ai-jail](https://github.com/akitaonrails/ai-jail) (`ai-jail --exec ... --network -- <agent command>`): the job's empty folder read-write, the agent's own state dirs, the network, and only the environment variables it needs (its endpoint and key, when set). A second fence around the adapter's lock; an unchecked agent still never runs. Checked with `guide check <agent> [model] --jail` (Settings > Guides: Check in ai-jail): passed for OpenCode with a local model on 2026-11-05 (ai-jail 2.15.0, its key file let in with `--map`); Claude Code and Codex in the jail are unverified. `set guide-jail on\|off`. | `false` |
+| `guide-jail` | `true`, `false`: run the agent inside [ai-jail](https://github.com/akitaonrails/ai-jail) (`ai-jail --exec ... --network -- <agent command>`): the job's empty folder read-write, the agent's own state dirs, the network, and only the environment variables it needs (its endpoint and key, when set). A second fence around the adapter's lock; an unchecked agent still never runs. Checked with `guide check <agent> [model] --jail` (Settings > Guides: Check in ai-jail): passed for OpenCode with a local model on 2026-11-05 (ai-jail 2.15.0, its key file let in with `--map`); Claude Code passed in the jail on 2026-11-05 once mise shims were resolved (mise itself fails in the jail with "Read-only file system", so OmaTrophy starts the tool `mise which` names); Codex in the jail is unverified. `set guide-jail on\|off`. | `false` |
 | `guide-jail-options` | Per agent, `{agent: ["--map", "~/path/to/key", ...]}`: ai-jail options added before `--` when that agent runs in the jail (the lock check too), `~` expanded. What a local model may need: its key file (`--map`); its server on the host's `127.0.0.1` is reachable already. Checked against the list under `guide jail-options` when written and when read: a saved filtered-network option is dropped with its value, and an entry that still fails reads as none. Written by `guide jail-options` and the panel. | `{}` |
 
 `guide agents` prints `[{agent, name, installed, supported, default,
@@ -189,11 +189,15 @@ it.
 
 Pages come from, in this order: the earlier `.sources.json`, files in
 `sources/<name>/` (named `file:<name>`), Steam guides, then pages the
-agent read (claude's WebFetch results, kind `agent`), the pages it cites,
-and trusted-site links its searches turned up, fetched by OmaTrophy
-within the budget. A cite verifies when its quote (folded, 12-400
-characters) is in the source it names, or failing that in any source
-held; the cite then names that source.
+agent read (Claude's WebFetch results, OpenCode's webfetch results, kind
+`agent`), the pages it cites, and trusted-site links its searches turned
+up, fetched by OmaTrophy within the budget. Search engines' result pages
+(Bing, DuckDuckGo, Google, any `/search?q=`) are never kept as sources. A
+cite verifies when its quote (folded, 12-400 characters) is in the source
+it names, or failing that in any source held, and says more than the
+store's own text: with the achievement's name, description and DLC name
+taken out, at least 10 letters or digits remain. The cite then names that
+source.
 
 Each model stage is checked as it lands: on a shape error it is asked once
 more with the errors listed, then the valid part is kept. A cut-short
@@ -218,7 +222,8 @@ the cheaper (unknown cost last), then the faster. A failed or stopped
 entry scores 0. `--pick` saves the best as `guide-agent` and its
 `guide-models` pick (endpoint included); `--keep` copies its guide over
 the game's (the old one kept as `.prev`). Ctrl-C skips the entry running;
-`guide stop` doesn't reach a bench.
+`guide stop` doesn't reach a bench. Results of a first bench on three
+games: [docs/guide/guide-models.md](../guide/guide-models.md).
 
 ### Trusted sites
 
