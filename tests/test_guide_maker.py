@@ -236,6 +236,29 @@ class Agents(unittest.TestCase):
         self.assertEqual(lock['permission']['webfetch'], 'deny')
         self.assertIn('--standalone', guide_agents.OpenCode.models_command)
 
+    # Regression: only text parts were read, so a local model's research
+    # (webfetch results, tokens) never reached sources.json or the usage.
+    def test_opencode_answer_reads_fetched_pages_links_and_usage(self):
+        events = [
+            {'type': 'tool_use', 'part': {'type': 'tool', 'tool': 'websearch', 'state': {
+                'status': 'error', 'input': {'query': 'q'}, 'error': 'Unable to search'}}},
+            {'type': 'tool_use', 'part': {'type': 'tool', 'tool': 'websearch', 'state': {
+                'status': 'completed', 'input': {'query': 'q'},
+                'output': 'Guide https://example.com/guide and https://example.org/b)'}}},
+            {'type': 'tool_use', 'part': {'type': 'tool', 'tool': 'webfetch', 'state': {
+                'status': 'completed', 'input': {'url': 'https://example.com/guide'}, 'output': '# Page text'}}},
+            {'type': 'step_finish', 'part': {'type': 'step-finish', 'cost': 0,
+                                            'tokens': {'input': 10, 'output': 2, 'reasoning': 1,
+                                                       'cache': {'read': 5, 'write': 0}}}},
+            {'type': 'text', 'part': {'type': 'text', 'text': '<answer/>'}},
+            {'type': 'step_finish', 'part': {'type': 'step-finish', 'tokens': {'input': 4, 'output': 3}}},
+        ]
+        found = guide_agents.OpenCode().answer('\n'.join(json.dumps(e) for e in events), '/x')
+        self.assertEqual(found['text'], '<answer/>')
+        self.assertEqual(found['pages'], [{'url': 'https://example.com/guide', 'text': '# Page text'}])
+        self.assertEqual(found['links'], ['https://example.com/guide', 'https://example.org/b'])
+        self.assertEqual((found['usage']['input'], found['usage']['output']), (19, 6))
+
     def test_no_adapter_ever_auto_approves(self):
         for a in guide_agents.ADAPTERS:
             try:

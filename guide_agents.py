@@ -281,19 +281,50 @@ class OpenCode(ListedModels):
         return argv, None, {'OPENCODE_CONFIG_CONTENT': json.dumps(lock)}
 
     def answer(self, stdout, folder):
-        texts, out = [], {'text': '', 'pages': [], 'links': [], 'usage': {}, 'error': ''}
+        """OpenCode's --format json: one event per line. `text` parts are the
+        answer; a completed `webfetch` tool part is a page the agent read
+        (its markdown, so a quote can verify), a completed `websearch` part
+        names links; `step_finish` parts carry tokens and cost per step.
+        Before 2026-11-05 only text was read, so a local model's research
+        left sources.json empty and every claim unverified."""
+        texts, pages, links, usage = [], [], [], {'input': 0, 'output': 0, 'cost_usd': 0.0}
+        out = {'text': '', 'pages': pages, 'links': links, 'usage': usage, 'error': ''}
         for line in stdout.splitlines():
             try:
                 event = json.loads(line)
             except ValueError:
                 continue
-            part = event.get('part') if isinstance(event, dict) else None
-            if isinstance(part, dict) and part.get('type') == 'text' and isinstance(part.get('text'), str):
-                texts.append(part['text'])
-            if isinstance(event, dict) and event.get('type') == 'error':
+            if not isinstance(event, dict):
+                continue
+            part = event.get('part')
+            if isinstance(part, dict):
+                self.read_part(part, texts, pages, links, usage)
+            if event.get('type') == 'error':
                 out['error'] = str((event.get('error') or {}).get('message') or event.get('error') or 'opencode failed')
         out['text'] = '\n'.join(texts) or stdout
         return out
+
+    @staticmethod
+    def read_part(part, texts, pages, links, usage):
+        kind = part.get('type')
+        if kind == 'text' and isinstance(part.get('text'), str):
+            texts.append(part['text'])
+        elif kind == 'step-finish':
+            tokens = part.get('tokens') if isinstance(part.get('tokens'), dict) else {}
+            cache = tokens.get('cache') if isinstance(tokens.get('cache'), dict) else {}
+            usage['input'] += int(tokens.get('input') or 0) + int(cache.get('read') or 0) + int(cache.get('write') or 0)
+            usage['output'] += int(tokens.get('output') or 0) + int(tokens.get('reasoning') or 0)
+            usage['cost_usd'] += float(part.get('cost') or 0)
+        elif kind == 'tool':
+            state = part.get('state') if isinstance(part.get('state'), dict) else {}
+            output = state.get('output') if isinstance(state.get('output'), str) else ''
+            if state.get('status') != 'completed' or not output:
+                return
+            args = state.get('input') if isinstance(state.get('input'), dict) else {}
+            if part.get('tool') == 'webfetch' and isinstance(args.get('url'), str):
+                pages.append({'url': args['url'], 'text': output})
+            elif part.get('tool') == 'websearch':
+                links.extend(u for u in re.findall(r'https://[^\s"\'<>)\]]+', output) if u not in links)
 
 
 class Unchecked(Adapter):
