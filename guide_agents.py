@@ -329,8 +329,26 @@ JAIL_ENV = ('ANTHROPIC_BASE_URL', 'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', '
             'OPENAI_API_KEY', 'OPENAI_BASE_URL', 'CODEX_HOME', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME')
 
 
+# ai-jail is Akita's sandbox for coding agents (bubblewrap, Landlock,
+# seccomp); OmaTrophy only calls it.
+JAIL_HOME = 'https://github.com/akitaonrails/ai-jail'
+
+
 def jail_installed():
     return shutil.which('ai-jail') is not None
+
+
+def jail_version(runner=subprocess.run):
+    """The installed ai-jail's version ("2.15.0"), or '' when it isn't
+    installed or doesn't answer within 4 s."""
+    if not jail_installed():
+        return ''
+    try:
+        out = runner(['ai-jail', '--version'], capture_output=True, text=True, timeout=4).stdout
+    except (OSError, subprocess.SubprocessError):
+        return ''
+    found = re.search(r'\d+(\.\d+)+', out or '')
+    return found.group(0) if found else ''
 
 
 def jailed(argv, extra_env, options=()):
@@ -351,12 +369,15 @@ def jailed(argv, extra_env, options=()):
 
 
 # The ai-jail options an owner may add per agent: what a local model needs
-# inside the jail (its server's port on the host's 127.0.0.1, a key file,
-# a host to reach), never one that turns off a fence we set. Each maps to
-# whether it takes a value.
-JAIL_OPTIONS = {'--forward-port': True, '--map': True, '--rw-map': True, '--env': True,
-                '--env-from-file': True, '--allow-host': True, '--allow-private-host': True,
+# inside the jail (a key file, a variable), never one that turns off a
+# fence we set. Each maps to whether it takes a value.
+JAIL_OPTIONS = {'--map': True, '--rw-map': True, '--env': True, '--env-from-file': True,
                 '--allow-loopback-listen': False}
+# Filtered-network options: ai-jail refuses them next to the --network we
+# pass ("--network and --forward-port are mutually exclusive"), and with
+# --network the host's 127.0.0.1 (a local model's server) is reachable
+# already. A saved one is dropped rather than failing the job.
+NETWORK_MODE_OPTIONS = ('--forward-port', '--allow-host', '--allow-private-host', '--publish-port')
 
 
 def jail_options(words):
@@ -368,6 +389,10 @@ def jail_options(words):
     words = [p for w in words for p in (w.split('=', 1) if w.startswith('--') and '=' in w else [w])]
     while i < len(words):
         word = words[i]
+        if word in NETWORK_MODE_OPTIONS:
+            raise SystemExit(f'omatrophy: guide jail-options: {word} is not needed: OmaTrophy runs ai-jail with '
+                             '--network, so the host\'s 127.0.0.1 ports (a local model\'s server) are reachable '
+                             f'already, and ai-jail refuses {word} next to it; leave it out')
         if word not in JAIL_OPTIONS:
             raise SystemExit(f'omatrophy: guide jail-options: {word!r} is not an option OmaTrophy passes to ai-jail; '
                              f'use {allowed}')
@@ -376,10 +401,8 @@ def jail_options(words):
             continue
         if i + 1 >= len(words) or words[i + 1].startswith('--'):
             raise SystemExit(f'omatrophy: guide jail-options: {word} needs a value, e.g. {word} '
-                             + ('8080' if word == '--forward-port' else '<value>'))
+                             + ('~/path/to/key' if word.endswith('map') else '<value>'))
         value = words[i + 1]
-        if word == '--forward-port' and not (value.isdigit() and 0 < int(value) < 65536):
-            raise SystemExit(f'omatrophy: guide jail-options: --forward-port takes a port number, not {value!r}')
         out, i = out + [word, value], i + 2
     return out
 
@@ -391,13 +414,23 @@ def config_file():
 
 def saved_jail_options(agent, cfg=None):
     """The owner's extra ai-jail options for `agent` from config.json's
-    `guide-jail-options`; a hand-edited entry that fails the check reads
-    as none, so a typo can't widen the jail."""
+    `guide-jail-options`. Filtered-network options (saved before they were
+    refused) are dropped with their value; an entry that still fails the
+    check reads as none, so a typo can't widen the jail."""
     cfg = read_json(config_file(), {}) if cfg is None else cfg
     found = cfg.get('guide-jail-options') if isinstance(cfg, dict) else None
     words = found.get(agent) if isinstance(found, dict) else None
     if not isinstance(words, list) or not all(isinstance(w, str) for w in words):
         return []
+    kept, skip = [], False
+    for w in words:
+        if skip:
+            skip = False
+        elif w.split('=', 1)[0] in NETWORK_MODE_OPTIONS:
+            skip = '=' not in w
+        else:
+            kept.append(w)
+    words = kept
     try:
         return jail_options(words)
     except SystemExit:
@@ -545,6 +578,7 @@ def picks(cfg):
 def listing(cfg):
     """`guide agents`: every row of the table, with its models and picks."""
     chosen, default, jail = picks(cfg), omarchy_default(), jail_installed()
+    version = jail_version() if jail else ''
     out = []
     for a in ADAPTERS:
         installed = a.installed()
@@ -562,7 +596,7 @@ def listing(cfg):
                     'models': a.models() if ok else [],
                     'model': pick.get('model', ''), 'effort': pick.get('effort', ''),
                     'endpoint': pick.get('endpoint', ''), 'source': a.models_source,
-                    'jail': jail, 'jail_options': saved_jail_options(a.id, cfg)})
+                    'jail': jail, 'jail_version': version, 'jail_options': saved_jail_options(a.id, cfg)})
     return out
 
 

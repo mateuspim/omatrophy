@@ -427,27 +427,30 @@ class RouteTable(unittest.TestCase):
 
 
 class JailOptions(unittest.TestCase):
-    # A local model inside ai-jail needs its server's port and key file
-    # (OpenCode at 127.0.0.1:8080 worked without the jail, failed in it).
+    # A local model inside ai-jail may need its key file (OpenCode at a
+    # local server worked without the jail, failed in it).
     def test_jailed_puts_the_options_before_the_agent_with_home_expanded(self):
         with mock.patch.dict(os.environ, {'HOME': '/h'}):
-            argv = guide_agents.jailed(['opencode', 'run'], {}, ['--forward-port', '8080', '--map', '~/k.key'])
+            argv = guide_agents.jailed(['opencode', 'run'], {}, ['--env', 'K', '--map', '~/k.key'])
         cut = argv.index('--')
-        self.assertEqual(argv[cut - 4:cut], ['--forward-port', '8080', '--map', '/h/k.key'])
+        self.assertEqual(argv[cut - 4:cut], ['--env', 'K', '--map', '/h/k.key'])
         self.assertEqual(argv[cut + 1:], ['opencode', 'run'])
 
     def test_jail_options_checks_each_word(self):
-        self.assertEqual(guide_agents.jail_options(['--forward-port=8080', '--allow-loopback-listen', '--map', '~/a']),
-                         ['--forward-port', '8080', '--allow-loopback-listen', '--map', '~/a'])
-        for bad in (['--no-network'], ['--forward-port', 'x'], ['--map'], ['--map', '--rw-map', 'a'], ['8080'],
+        self.assertEqual(guide_agents.jail_options(['--env=K', '--allow-loopback-listen', '--map', '~/a']),
+                         ['--env', 'K', '--allow-loopback-listen', '--map', '~/a'])
+        for bad in (['--no-network'], ['--forward-port', '8080'], ['--allow-host', 'x.org'], ['--map'], ['--map', '--rw-map', 'a'], ['8080'],
                     ['--', 'sh']):
             with self.assertRaises(SystemExit, msg=bad):
                 guide_agents.jail_options(bad)
 
     def test_a_bad_hand_edit_reads_as_no_options(self):
-        cfg = {'guide-jail-options': {'opencode': ['--forward-port', '8080'], 'claude': ['--no-landlock'],
+        # ai-jail refuses --forward-port next to our --network: a saved one
+        # is dropped, the rest kept.
+        cfg = {'guide-jail-options': {'opencode': ['--forward-port', '8080', '--map', '~/k', '--allow-host=x'],
+                                      'claude': ['--no-landlock'],
                                       'codex': '--map x'}}
-        self.assertEqual(guide_agents.saved_jail_options('opencode', cfg), ['--forward-port', '8080'])
+        self.assertEqual(guide_agents.saved_jail_options('opencode', cfg), ['--map', '~/k'])
         self.assertEqual(guide_agents.saved_jail_options('claude', cfg), [])
         self.assertEqual(guide_agents.saved_jail_options('codex', cfg), [])
         self.assertEqual(guide_agents.saved_jail_options('opencode', {}), [])
@@ -457,15 +460,41 @@ class JailOptions(unittest.TestCase):
         from contextlib import redirect_stdout
         with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {'HOME': d}), redirect_stdout(io.StringIO()):
             path = os.path.join(d, '.config/omatrophy/config.json')
-            omatrophy.main(['x', 'guide', 'jail-options', 'opencode', '--forward-port 8080 --map "~/my keys/a.key"'])
+            omatrophy.main(['x', 'guide', 'jail-options', 'opencode', '--env K --map "~/my keys/a.key"'])
             self.assertEqual(json.loads(read(path))['guide-jail-options']['opencode'],
-                             ['--forward-port', '8080', '--map', '~/my keys/a.key'])
+                             ['--env', 'K', '--map', '~/my keys/a.key'])
             self.assertEqual(guide_agents.saved_jail_options('opencode'),
-                             ['--forward-port', '8080', '--map', '~/my keys/a.key'])
+                             ['--env', 'K', '--map', '~/my keys/a.key'])
             omatrophy.main(['x', 'guide', 'jail-options', 'opencode', ''])
             self.assertNotIn('opencode', json.loads(read(path))['guide-jail-options'])
             with self.assertRaises(SystemExit):
                 omatrophy.main(['x', 'guide', 'jail-options', 'opencode', '--rw-map', '/', '--no-network'])
+
+
+class SandboxWithoutJail(unittest.TestCase):
+    def test_the_saved_setting_without_ai_jail_counts_as_off_and_says_so(self):
+        import omatrophy
+        said = []
+        with mock.patch.object(guide_agents, 'jail_installed', return_value=False):
+            self.assertFalse(omatrophy.use_jail(None, {'guide-jail': True}, say=said.append))
+            self.assertIn('akitaonrails/ai-jail', said[0])
+            self.assertFalse(omatrophy.use_jail(False, {'guide-jail': True}, say=said.append))
+            with self.assertRaises(SystemExit):
+                omatrophy.use_jail(True, {}, say=said.append)
+        with mock.patch.object(guide_agents, 'jail_installed', return_value=True):
+            self.assertTrue(omatrophy.use_jail(None, {'guide-jail': True}, say=said.append))
+        self.assertEqual(len(said), 1)
+
+    def test_jail_version_reads_the_number_or_nothing(self):
+        answer = lambda out: (lambda argv, **kw: mock.Mock(stdout=out))
+        with mock.patch.object(guide_agents, 'jail_installed', return_value=True):
+            self.assertEqual(guide_agents.jail_version(answer('ai-jail 2.15.0\n')), '2.15.0')
+            self.assertEqual(guide_agents.jail_version(answer('')), '')
+            def slow(argv, **kw):
+                raise guide_agents.subprocess.TimeoutExpired(argv, 4)
+            self.assertEqual(guide_agents.jail_version(slow), '')
+        with mock.patch.object(guide_agents, 'jail_installed', return_value=False):
+            self.assertEqual(guide_agents.jail_version(answer('ai-jail 2.15.0')), '')
 
 
 class LockCheck(unittest.TestCase):

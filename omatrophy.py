@@ -16,8 +16,9 @@ Usage:
   omatrophy.py guide make <store> <app> [--no-web] [--agent a] [--model m] [--effort e]
                                       make a guide through your agent (ADR 14); guide stop|status|agents
   omatrophy.py guide model <agent> <model> [effort] [@http://endpoint]|default
-  omatrophy.py guide jail-options <agent> [--forward-port 8080 --map <file> ...]
-                                      extra ai-jail options for that agent (a local model's port); none clears
+  omatrophy.py guide jail             is ai-jail installed, is the sandbox on, each agent's jail options
+  omatrophy.py guide jail-options <agent> [--map <file> --env NAME ...]
+                                      extra ai-jail options for that agent (a local model's key file); none clears
   omatrophy.py guide check <agent> [model] [--jail]
                                       check on a real run that the agent stays locked down; a pass enables it
   omatrophy.py guide bench <store> <app> <agent:model[:effort][@endpoint]>... [--no-web] [--jail] [--pick] [--keep]
@@ -848,7 +849,7 @@ def guide(args):
         imported, skipped = guides.import_guides(args[1], replace=len(args) == 3)
         print(f'imported {imported}, skipped {skipped}')
         return
-    if args[:1] in (['make'], ['stop'], ['status'], ['agents'], ['model'], ['jail-options'], ['bench'], ['check']):
+    if args[:1] in (['make'], ['stop'], ['status'], ['agents'], ['model'], ['jail'], ['jail-options'], ['bench'], ['check']):
         return guide_job(args)
     found = found_stores()
     if not args:
@@ -861,7 +862,7 @@ def guide(args):
                          '       omatrophy.py guide make <store> <app> [--no-web] [--notify] [--jail|--no-jail] [--agent a] [--model m] [--effort e]\n'
                          '       omatrophy.py guide stop|status|agents\n'
                          '       omatrophy.py guide model <agent> <model> [effort] [@http://endpoint] | default\n'
-                         '       omatrophy.py guide jail-options <agent> [ai-jail options...]')
+                         '       omatrophy.py guide jail | jail-options <agent> [ai-jail options...]')
     print(json.dumps(guides.guide_answer(store.id, app, store.achievements(app))))
 
 
@@ -892,6 +893,8 @@ def guide_job(args):
         cfg['guide-models'] = models
         write_json(config_path(), cfg, indent=2)
         print(f'{args[1]}: {args[2]}' + (f' ({effort})' if effort else '') + (f' at {endpoint}' if endpoint else ''))
+    elif cmd == 'jail' and len(args) == 1:
+        guide_jail(cfg)
     elif cmd == 'jail-options' and len(args) >= 2 and args[1] in guide_agents.BY_ID:
         guide_jail_options(args[1], args[2:], cfg)
     elif cmd == 'make' and len(args) >= 3:
@@ -903,16 +906,51 @@ def guide_job(args):
     else:
         raise SystemExit('usage: omatrophy.py guide make <store> <app> [--no-web] [--agent a] [--model m] [--effort e]\n'
                          '       omatrophy.py guide model <agent> <model> [effort] [@http://endpoint] | default\n'
-                         '       omatrophy.py guide jail-options <agent> [ai-jail options...]\n'
+                         '       omatrophy.py guide jail | jail-options <agent> [ai-jail options...]\n'
                          '       omatrophy.py guide bench <store> <app> <agent:model[:effort][@endpoint]>... '
                          '[--no-web] [--jail] [--pick] [--keep]\n'
                          '       omatrophy.py guide check <agent> [model] [--jail]')
 
 
+def use_jail(asked, cfg, say=print):
+    """Whether a guide job runs inside ai-jail. `asked` is the run's
+    --jail/--no-jail (None: the setting). An explicit --jail without
+    ai-jail fails; the saved setting with ai-jail gone (removed, or a
+    config copied from another machine) counts as off and says so, so a
+    make still runs behind the agent's own lock."""
+    import guide_agents
+    jail = cfg.get('guide-jail') is True if asked is None else asked
+    if not jail or guide_agents.jail_installed():
+        return jail
+    if asked:
+        raise SystemExit(f'omatrophy: guide: ai-jail not found; install it ({guide_agents.JAIL_HOME}), '
+                         'or leave out --jail')
+    say(f'note: sandbox is on but ai-jail is not installed, so the agent runs without it '
+        f'(its own lock still applies); get it at {guide_agents.JAIL_HOME}')
+    return False
+
+
+def guide_jail(cfg):
+    """`guide jail`: is ai-jail here, is the sandbox on, and what each agent
+    adds to it; exits non-zero when ai-jail isn't installed."""
+    import shlex, shutil, guide_agents
+    version = guide_agents.jail_version()
+    if not guide_agents.jail_installed():
+        raise SystemExit(f'omatrophy: guide: ai-jail not found; install it ({guide_agents.JAIL_HOME}) '
+                         'to run the agent inside it')
+    print(f'ai-jail {version or "(version unknown)"} at {shutil.which("ai-jail")}, by Akita: {guide_agents.JAIL_HOME}')
+    print('sandbox: ' + ('on' if cfg.get('guide-jail') is True else 'off (omatrophy.py set guide-jail on)'))
+    for a in guide_agents.ADAPTERS:
+        options = guide_agents.saved_jail_options(a.id, cfg)
+        if options:
+            print(f'{a.id}: ' + ' '.join(shlex.quote(o) for o in options))
+    print('check an agent in it: omatrophy.py guide check <agent> [model] --jail')
+
+
 def guide_jail_options(agent, words, cfg):
     """`guide jail-options <agent> [options...]`: the extra ai-jail options
     that agent runs with when the sandbox is on, such as a local model's
-    `--forward-port 8080`; none clears them. One string from the panel is
+    `--map` of its key file; none clears them. One string from the panel is
     split like a shell would."""
     import shlex, guide_agents
     if len(words) == 1 and ' ' in words[0].strip():
@@ -954,18 +992,20 @@ def guide_check(agent, words):
     def say(line):
         lines.append(line)
         print(line, flush=True)
-        write_json(path, {'agent': agent, 'state': 'running', 'lines': lines, 'time': int(time.time()), 'pid': os.getpid()})
+        write_json(path, {'agent': agent, 'jail': jail, 'state': 'running', 'lines': lines, 'time': int(time.time()),
+                          'pid': os.getpid()})
 
     say(f'checking {agent}' + (f' ({model})' if model else '') + ': asking it to write a file and run a command')
     try:
         result = guide_agents.check_lock(adapter, model=model, jail=jail, say=say)
     except BaseException:
-        write_json(path, {'agent': agent, 'state': 'failed', 'lines': lines + ['interrupted'], 'time': int(time.time())})
+        write_json(path, {'agent': agent, 'jail': jail, 'state': 'failed', 'lines': lines + ['interrupted'],
+                          'time': int(time.time())})
         raise
     verdict = ('PASS: ' + (f'{agent} runs inside ai-jail' if jail else f'{agent} can make guides now')) if result['passed'] \
         else f'FAIL: {agent} stays off'
     say(verdict)
-    write_json(path, {'agent': agent, 'state': 'passed' if result['passed'] else 'failed', 'lines': lines,
+    write_json(path, {'agent': agent, 'jail': jail, 'state': 'passed' if result['passed'] else 'failed', 'lines': lines,
                       'time': int(time.time()), 'runs': result['runs']})
     if not result['passed']:
         raise SystemExit(1)
@@ -997,9 +1037,7 @@ def guide_bench(store_id, app, words, cfg):
         raise SystemExit('omatrophy: guide bench: name at least one agent:model, e.g. claude:sonnet claude:opus:high')
     for e in entries:
         guide_agents.resolve(e['agent'])
-    jail = '--jail' in flags or cfg.get('guide-jail') is True
-    if jail and not guide_agents.jail_installed():
-        raise SystemExit('omatrophy: guide: ai-jail not found; install it, or leave out --jail')
+    jail = use_jail(True if '--jail' in flags else None, cfg)
     web = '--no-web' not in flags and cfg.get('guide-web', True) is not False
     store, achs, minutes = guide_target(store_id, app)
     run_dir, results = bench.bench(store.id, app, store.game_name(app), achs, entries, web=web, jail=jail,
@@ -1037,10 +1075,7 @@ def guide_make(store_id, app, flags, cfg):
         else:
             raise SystemExit(f'omatrophy: guide make: unknown option {flags[i]}')
     adapter = guide_agents.resolve(opts.get('agent', cfg.get('guide-agent') or ''))
-    jail = opts.get('jail', cfg.get('guide-jail') is True)
-    if jail and not guide_agents.jail_installed():
-        raise SystemExit('omatrophy: guide: ai-jail not found; install it, or turn the sandbox off: '
-                         'omatrophy.py set guide-jail off')
+    jail = use_jail(opts.get('jail'), cfg)
     pick = guide_agents.picks(cfg).get(adapter.id, {})
     if guide_maker.busy():
         raise SystemExit('omatrophy: guide: another guide is being made; stop it with: omatrophy.py guide stop')

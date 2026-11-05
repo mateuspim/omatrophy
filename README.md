@@ -172,8 +172,13 @@ and effort in the tracker or in **Settings > Guides**. With
 [ai-jail](https://github.com/akitaonrails/ai-jail) installed, **Sandbox**
 runs the agent inside it as well. A local model needs its server let in:
 **Jail options** under Sandbox (or `guide jail-options`) adds ai-jail
-options for the picked agent, such as `--forward-port 8080` for a server on
-`127.0.0.1:8080` and `--map ~/path/to/key` for a key file it reads.
+options for the picked agent, such as `--map ~/path/to/key` for a key file
+it reads. The jail keeps the network on (the agent searches the web), so a
+server on `127.0.0.1` is reachable without `--forward-port`, which ai-jail
+refuses next to it. **Check in ai-jail** runs the lock check there to see
+that the agent still answers, and `guide jail` says what is installed.
+[ai-jail](https://github.com/akitaonrails/ai-jail) is
+[Akita](https://github.com/akitaonrails)'s work; OmaTrophy only calls it.
 
 Guides from another folder of `<slug>-<appid>.md` files (with their
 `.plan.json`) come in with `guide import`; the folder is only read.
@@ -182,7 +187,8 @@ Guides from another folder of `<slug>-<appid>.md` files (with their
 omatrophy.py guide import ~/path/to/guides     # copy guides in (--replace overwrites)
 omatrophy.py set guide-agent claude            # or default: follow omarchy default agent
 omatrophy.py guide model claude sonnet medium  # that agent's model and effort; `default` clears
-omatrophy.py guide jail-options opencode --forward-port 8080  # extra ai-jail options; none clears
+omatrophy.py guide jail                        # is ai-jail installed, the sandbox on, each agent's options
+omatrophy.py guide jail-options opencode --map ~/path/to/key  # extra ai-jail options; none clears
 omatrophy.py guide make steam 620              # make one; --no-web, --model, --effort for this run
 omatrophy.py guide status                      # the running job, as JSON; guide stop ends it
 omatrophy.py guide steam 620                   # the guide, as JSON

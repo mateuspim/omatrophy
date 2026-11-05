@@ -129,6 +129,12 @@ Column {
   property bool guideJail: false
   // What `guide jail-options` last said, under the Jail options field.
   property string jailOptionsNote: ""
+  readonly property bool jailInstalled: guideAgents.some(function(a) { return a.jail })
+  readonly property string jailVersion: jailInstalled ? (guideAgents[0].jail_version || "") : ""
+  // A jail check for the picked agent, running or just ended, shows under
+  // its Jail options field.
+  readonly property bool jailCheckShown: guideCheck.jail === true && guideRow !== null && guideCheck.agent === guideRow.agent
+  readonly property bool jailChecking: jailCheckShown && guideCheck.state === "running"
   property var guideJob: ({})
   // Which guide picker is unfolded in Settings: "", "agent" or "model".
   property string guideMenu: ""
@@ -148,6 +154,8 @@ Column {
   function saveJailOptions(text) {
     if (!guideRow || text.trim() === jailOptionsText(guideRow)) return
     jailOptionsNote = ""
+    // New options: an earlier jail check's result no longer applies.
+    if (jailCheckShown && !jailChecking) guideCheck = ({})
     jailOptionsSaver.command = ["python3", helperPath, "guide", "jail-options", guideRow.agent, text.trim()]
     jailOptionsSaver.running = true
   }
@@ -178,7 +186,7 @@ Column {
       if (!guideRow) return guideAgents.length ? "No agent picked" : "Agent: " + (guideAgent || "Omarchy default")
       var model = guidePick.model ? guidePick.model + (guidePick.effort ? " " + guidePick.effort : "") : "its default model"
       return [guideRow.name + (guideAgent ? "" : " (default)"), model, guideWeb ? "web search" : "saved pages only"]
-               .concat(guideJail ? ["in ai-jail"] : []).join(" · ")
+               .concat(guideJail && jailInstalled ? ["in ai-jail"] : []).join(" · ")
     }
     if (section === "stores") {
       if (!cabinet || !cabinet.stores) return "…"
@@ -194,6 +202,16 @@ Column {
     if (guideCheck.state === "running") return
     guideCheck = { agent: agent, state: "running", lines: ["Starting " + agent + "…"] }
     Quickshell.execDetached(["python3", helperPath, "guide", "check", agent])
+  }
+
+  // The same check run inside ai-jail with the agent's jail options and
+  // model: does it still answer there (a local model's server reachable)?
+  // It enables nothing; the lock check above does that.
+  function checkJail() {
+    if (guideCheck.state === "running" || !guideRow) return
+    guideCheck = { agent: guideRow.agent, jail: true, state: "running", lines: ["Starting " + guideRow.name + " in ai-jail…"] }
+    var args = ["python3", helperPath, "guide", "check", guideRow.agent]
+    Quickshell.execDetached(args.concat(guidePick.model ? [guidePick.model, "--jail"] : ["--jail"]))
   }
 
   // The model picker's rows: the agent's default, every listed model the
@@ -4081,8 +4099,11 @@ Column {
               readonly property var a: modelData
               readonly property bool chosen: root.guideAgent === a.agent
               readonly property bool usable: a.installed && a.supported
+              // A jail check shows under Sandbox, not here.
               readonly property bool checking: root.guideCheck.state === "running" && root.guideCheck.agent === a.agent
+                                               && !root.guideCheck.jail
               readonly property bool failedCheck: root.guideCheck.state === "failed" && root.guideCheck.agent === a.agent
+                                                  && !root.guideCheck.jail
               readonly property string defaultName: {
                 var d = root.guideAgents.find(function(x) { return x.default })
                 return d ? d.name : ""
@@ -4369,29 +4390,68 @@ Column {
         }
       }
 
-      // A second fence around the agent's own lock, when ai-jail is here.
+      // A second fence around the agent's own lock, when ai-jail is here;
+      // the row stays when it isn't, so "is it installed?" has an answer.
       SettingRow {
         label: "SANDBOX"
-        visible: root.guideAgents.some(function(a) { return a.jail })
-        Chips {
-          options: [
-            { value: "off", label: "Off" },
-            { value: "on", label: "ai-jail" }
-          ]
-          value: root.guideJail ? "on" : "off"
-          onPicked: value => root.set("guide-jail", value)
+        visible: root.guideAgents.length > 0
+        // A Row, which skips hidden children: the slot's childrenRect
+        // counted the hidden caption and pushed the chips off the edge.
+        Row {
+          spacing: Commons.Style.space(8)
+          // Not installed reads as off: a make then runs behind the
+          // agent's own lock only, and says so.
+          Caption {
+            textFormat: Text.PlainText
+            anchors.verticalCenter: parent.verticalCenter
+            visible: !root.jailInstalled
+            text: "Off · not installed"
+          }
+          PillButton {
+            visible: !root.jailInstalled
+            label: "Get ai-jail"
+            onClicked: Qt.openUrlExternally("https://github.com/akitaonrails/ai-jail")
+          }
+          Chips {
+            visible: root.jailInstalled
+            options: [
+              { value: "off", label: "Off" },
+              { value: "on", label: "ai-jail" }
+            ]
+            value: root.guideJail ? "on" : "off"
+            onPicked: value => root.set("guide-jail", value)
+          }
         }
+      }
+
+      // Credit where it's due: the sandbox is Akita's ai-jail.
+      Caption {
+        textFormat: Text.PlainText
+        visible: root.guideAgents.length > 0
+        width: root.width
+        wrapMode: Text.WordWrap
+        elide: Text.ElideNone
+        opacity: 0.4
+        text: root.jailInstalled
+              ? "ai-jail " + (root.jailVersion ? root.jailVersion + " " : "") + "by Akita (github.com/akitaonrails/ai-jail): the agent sees only the job's folder, its own settings and the network."
+              : (root.guideJail ? "The sandbox is on, but ai-jail isn't on this system, so guides are made without it (the agent's own lock still applies). "
+                                 : "")
+                + "ai-jail is Akita's sandbox for coding agents (github.com/akitaonrails/ai-jail): install it to run the agent inside it too."
       }
 
       // What the picked agent needs let into the jail: a local model's
       // server port and key file (`guide-jail-options`).
-      MiniLabel {
-        visible: root.guideJail && root.guideRow !== null
-        text: "JAIL OPTIONS" + (root.guideRow ? " · " + root.guideRow.name.toUpperCase() : "")
+      SettingRow {
+        label: "JAIL OPTIONS" + (root.guideRow ? " · " + root.guideRow.name.toUpperCase() : "")
+        visible: root.jailInstalled && root.guideJail && root.guideRow !== null
+        PillButton {
+          label: root.jailChecking ? "Checking…" : "Check in ai-jail"
+          onClicked: root.checkJail()
+        }
       }
       Rectangle {
         width: root.width
-        visible: root.guideJail && root.guideRow !== null
+        visible: root.jailInstalled && root.guideJail && root.guideRow !== null
         height: Commons.Style.space(36)
         radius: Commons.Style.cornerRadius
         color: Qt.alpha(root.foreground, 0.03)
@@ -4418,7 +4478,7 @@ Column {
             width: parent.width
             elide: Text.ElideRight
             visible: !jailOptionsField.text
-            text: "None. A local model: --forward-port 8080 --map ~/path/to/key"
+            text: "None. A local model's key file: --map ~/path/to/key"
             color: root.foreground
             opacity: 0.4
             font: jailOptionsField.font
@@ -4427,11 +4487,13 @@ Column {
       }
       Caption {
         textFormat: Text.PlainText
-        visible: root.guideJail && root.guideRow !== null && root.jailOptionsNote !== ""
+        visible: root.jailInstalled && root.guideJail && root.guideRow !== null && text !== ""
         width: root.width
         wrapMode: Text.WordWrap
         elide: Text.ElideNone
-        text: root.jailOptionsNote
+        color: root.jailCheckShown && root.guideCheck.state === "failed" ? Commons.Color.accent : root.foreground
+        text: root.jailCheckShown ? (root.guideCheck.lines || []).slice(root.jailChecking ? -1 : -2).join(" · ")
+                                  : root.jailOptionsNote
       }
 
       Caption {
