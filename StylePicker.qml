@@ -127,6 +127,8 @@ Column {
     { value: "stores", label: "Stores" }
   ]
   property bool guideJail: false
+  // What `guide jail-options` last said, under the Jail options field.
+  property string jailOptionsNote: ""
   property var guideJob: ({})
   // Which guide picker is unfolded in Settings: "", "agent" or "model".
   property string guideMenu: ""
@@ -136,6 +138,19 @@ Column {
   // The agent a make uses now: the one picked, else Omarchy's default.
   readonly property var guideRow: guideAgents.find(function(a) { return guideAgent ? a.agent === guideAgent : a.default }) || null
   readonly property var guidePick: guideRow ? guideModels[guideRow.agent] || {} : {}
+
+  // The options as one line to edit: a value with a space is quoted, so
+  // the CLI's shell-style split gives the same list back.
+  function jailOptionsText(row) {
+    return ((row && row.jail_options) || []).map(function(o) { return /\s/.test(o) ? '"' + o + '"' : o }).join(" ")
+  }
+
+  function saveJailOptions(text) {
+    if (!guideRow || text.trim() === jailOptionsText(guideRow)) return
+    jailOptionsNote = ""
+    jailOptionsSaver.command = ["python3", helperPath, "guide", "jail-options", guideRow.agent, text.trim()]
+    jailOptionsSaver.running = true
+  }
 
   function setGuideModel(model, effort) {
     if (!guideRow) return
@@ -619,6 +634,15 @@ Column {
     repeat: true
     running: root.live && root.guideJob.state === "running"
     onTriggered: if (!guideJobReader.running) guideJobReader.running = true
+  }
+
+  // Saves the picked agent's extra ai-jail options; the CLI checks them,
+  // and its answer (or what it refused) shows under the field.
+  Process {
+    id: jailOptionsSaver
+    stdout: StdioCollector { onStreamFinished: if (text.trim()) root.jailOptionsNote = text.trim() }
+    stderr: StdioCollector { onStreamFinished: if (text.trim()) root.jailOptionsNote = text.trim().replace(/^omatrophy: guide jail-options: /, "") }
+    onExited: guideAgentsReader.running = true
   }
 
   Process {
@@ -4352,6 +4376,57 @@ Column {
           value: root.guideJail ? "on" : "off"
           onPicked: value => root.set("guide-jail", value)
         }
+      }
+
+      // What the picked agent needs let into the jail: a local model's
+      // server port and key file (`guide-jail-options`).
+      MiniLabel {
+        visible: root.guideJail && root.guideRow !== null
+        text: "JAIL OPTIONS" + (root.guideRow ? " · " + root.guideRow.name.toUpperCase() : "")
+      }
+      Rectangle {
+        width: root.width
+        visible: root.guideJail && root.guideRow !== null
+        height: Commons.Style.space(36)
+        radius: Commons.Style.cornerRadius
+        color: Qt.alpha(root.foreground, 0.03)
+        border.width: 1
+        border.color: Qt.alpha(root.foreground, jailOptionsField.activeFocus ? 0.3 : 0.08)
+        TextInput {
+          id: jailOptionsField
+          anchors.left: parent.left
+          anchors.right: parent.right
+          anchors.leftMargin: Commons.Style.space(12)
+          anchors.rightMargin: Commons.Style.space(12)
+          anchors.verticalCenter: parent.verticalCenter
+          clip: true
+          color: root.foreground
+          selectionColor: Qt.alpha(Commons.Color.accent, 0.4)
+          font.family: Commons.Style.font.family
+          font.pixelSize: Commons.Style.font.bodySmall
+          text: root.jailOptionsText(root.guideRow)
+          onEditingFinished: root.saveJailOptions(text)
+          Keys.onEscapePressed: { text = root.jailOptionsText(root.guideRow); focus = false }
+          Text {
+            textFormat: Text.PlainText
+            anchors.verticalCenter: parent.verticalCenter
+            width: parent.width
+            elide: Text.ElideRight
+            visible: !jailOptionsField.text
+            text: "None. A local model: --forward-port 8080 --map ~/path/to/key"
+            color: root.foreground
+            opacity: 0.4
+            font: jailOptionsField.font
+          }
+        }
+      }
+      Caption {
+        textFormat: Text.PlainText
+        visible: root.guideJail && root.guideRow !== null && root.jailOptionsNote !== ""
+        width: root.width
+        wrapMode: Text.WordWrap
+        elide: Text.ElideNone
+        text: root.jailOptionsNote
       }
 
       Caption {

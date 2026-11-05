@@ -16,6 +16,8 @@ Usage:
   omatrophy.py guide make <store> <app> [--no-web] [--agent a] [--model m] [--effort e]
                                       make a guide through your agent (ADR 14); guide stop|status|agents
   omatrophy.py guide model <agent> <model> [effort] [@http://endpoint]|default
+  omatrophy.py guide jail-options <agent> [--forward-port 8080 --map <file> ...]
+                                      extra ai-jail options for that agent (a local model's port); none clears
   omatrophy.py guide check <agent> [model] [--jail]
                                       check on a real run that the agent stays locked down; a pass enables it
   omatrophy.py guide bench <store> <app> <agent:model[:effort][@endpoint]>... [--no-web] [--jail] [--pick] [--keep]
@@ -844,7 +846,7 @@ def guide(args):
         imported, skipped = guides.import_guides(args[1], replace=len(args) == 3)
         print(f'imported {imported}, skipped {skipped}')
         return
-    if args[:1] in (['make'], ['stop'], ['status'], ['agents'], ['model'], ['bench'], ['check']):
+    if args[:1] in (['make'], ['stop'], ['status'], ['agents'], ['model'], ['jail-options'], ['bench'], ['check']):
         return guide_job(args)
     found = found_stores()
     if not args:
@@ -856,7 +858,8 @@ def guide(args):
                          '       omatrophy.py guide import <folder> [--replace]\n'
                          '       omatrophy.py guide make <store> <app> [--no-web] [--notify] [--jail|--no-jail] [--agent a] [--model m] [--effort e]\n'
                          '       omatrophy.py guide stop|status|agents\n'
-                         '       omatrophy.py guide model <agent> <model> [effort] [@http://endpoint] | default')
+                         '       omatrophy.py guide model <agent> <model> [effort] [@http://endpoint] | default\n'
+                         '       omatrophy.py guide jail-options <agent> [ai-jail options...]')
     print(json.dumps(guides.guide_answer(store.id, app, store.achievements(app))))
 
 
@@ -887,6 +890,8 @@ def guide_job(args):
         cfg['guide-models'] = models
         write_json(config_path(), cfg, indent=2)
         print(f'{args[1]}: {args[2]}' + (f' ({effort})' if effort else '') + (f' at {endpoint}' if endpoint else ''))
+    elif cmd == 'jail-options' and len(args) >= 2 and args[1] in guide_agents.BY_ID:
+        guide_jail_options(args[1], args[2:], cfg)
     elif cmd == 'make' and len(args) >= 3:
         guide_make(args[1], args[2], args[3:], cfg)
     elif cmd == 'bench' and len(args) >= 4:
@@ -896,9 +901,34 @@ def guide_job(args):
     else:
         raise SystemExit('usage: omatrophy.py guide make <store> <app> [--no-web] [--agent a] [--model m] [--effort e]\n'
                          '       omatrophy.py guide model <agent> <model> [effort] [@http://endpoint] | default\n'
+                         '       omatrophy.py guide jail-options <agent> [ai-jail options...]\n'
                          '       omatrophy.py guide bench <store> <app> <agent:model[:effort][@endpoint]>... '
                          '[--no-web] [--jail] [--pick] [--keep]\n'
                          '       omatrophy.py guide check <agent> [model] [--jail]')
+
+
+def guide_jail_options(agent, words, cfg):
+    """`guide jail-options <agent> [options...]`: the extra ai-jail options
+    that agent runs with when the sandbox is on, such as a local model's
+    `--forward-port 8080`; none clears them. One string from the panel is
+    split like a shell would."""
+    import shlex, guide_agents
+    if len(words) == 1 and ' ' in words[0].strip():
+        try:
+            words = shlex.split(words[0])
+        except ValueError as e:
+            raise SystemExit(f'omatrophy: guide jail-options: could not read {words[0]!r} ({e}); check the quotes')
+    words = [w for w in words if w.strip()]
+    options = guide_agents.jail_options(words)
+    found = cfg.get('guide-jail-options')
+    saved = dict(found) if isinstance(found, dict) else {}
+    if options:
+        saved[agent] = options
+    else:
+        saved.pop(agent, None)
+    cfg['guide-jail-options'] = saved
+    write_json(config_path(), cfg, indent=2)
+    print(f'{agent} in ai-jail: ' + (' '.join(shlex.quote(o) for o in options) if options else 'no extra options'))
 
 
 def guide_check(agent, words):

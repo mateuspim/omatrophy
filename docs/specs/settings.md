@@ -27,6 +27,7 @@ bar panel).
 | `guide-models` | `{agent: {"model", "effort"}}`, each agent's own pick; missing means the agent's default. Written by `omatrophy.py guide model` and the pickers. | `{}` |
 | `guide-web` | `true`, `false`: let the agent search the web while making a guide. | `true` |
 | `guide-jail` | `true`, `false`: run the agent inside ai-jail while making a guide ([guides](guides.md#settings-configjson)). | `false` |
+| `guide-jail-options` | Per agent, extra ai-jail options such as a local model's `--forward-port 8080` ([guides](guides.md#settings-configjson)). | `{}` |
 | `hidden` | Games left out of "closest to platinum" and, once finished, off the bar panel's platinum shelf (totals still count them), as `"store:game"` (`"steam:20920"`), sorted. Written by `omatrophy.py hide`/`unhide` and the Games tab. | `[]` |
 
 ```json

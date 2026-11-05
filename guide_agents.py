@@ -333,19 +333,75 @@ def jail_installed():
     return shutil.which('ai-jail') is not None
 
 
-def jailed(argv, extra_env):
+def jailed(argv, extra_env, options=()):
     """`argv` run inside ai-jail (bubblewrap, Landlock, seccomp): the agent
     sees only the job's empty folder read-write, its own state dirs and
     the network, whatever its own flags let it do. A second fence around
     the adapter's lock, not a replacement: an agent still runs only when
     its own lock was checked. `--exec` runs it directly, stdin and stdout
-    piped as without the jail; nothing is saved to a project .ai-jail."""
+    piped as without the jail; nothing is saved to a project .ai-jail.
+    `options` are the owner's extra jail options for this agent
+    (`guide-jail-options`), checked by jail_options()."""
     out = ['ai-jail', '--exec', '--no-status-bar', '--no-save-config', '--no-display', '--no-gpu',
            '--no-audio', '--no-docker', '--no-ssh', '--network']
     for name in sorted(set(JAIL_ENV) | set(extra_env)):
         if name in os.environ or name in extra_env:
             out += ['--env', name]
-    return out + ['--'] + list(argv)
+    return out + [os.path.expanduser(o) for o in options] + ['--'] + list(argv)
+
+
+# The ai-jail options an owner may add per agent: what a local model needs
+# inside the jail (its server's port on the host's 127.0.0.1, a key file,
+# a host to reach), never one that turns off a fence we set. Each maps to
+# whether it takes a value.
+JAIL_OPTIONS = {'--forward-port': True, '--map': True, '--rw-map': True, '--env': True,
+                '--env-from-file': True, '--allow-host': True, '--allow-private-host': True,
+                '--allow-loopback-listen': False}
+
+
+def jail_options(words):
+    """`words` (one agent's extra ai-jail options) checked against
+    JAIL_OPTIONS; `--opt=value` is split. Returns the list to store;
+    raises SystemExit naming the bad word and what is allowed."""
+    allowed = ', '.join(JAIL_OPTIONS)
+    out, i = [], 0
+    words = [p for w in words for p in (w.split('=', 1) if w.startswith('--') and '=' in w else [w])]
+    while i < len(words):
+        word = words[i]
+        if word not in JAIL_OPTIONS:
+            raise SystemExit(f'omatrophy: guide jail-options: {word!r} is not an option OmaTrophy passes to ai-jail; '
+                             f'use {allowed}')
+        if not JAIL_OPTIONS[word]:
+            out, i = out + [word], i + 1
+            continue
+        if i + 1 >= len(words) or words[i + 1].startswith('--'):
+            raise SystemExit(f'omatrophy: guide jail-options: {word} needs a value, e.g. {word} '
+                             + ('8080' if word == '--forward-port' else '<value>'))
+        value = words[i + 1]
+        if word == '--forward-port' and not (value.isdigit() and 0 < int(value) < 65536):
+            raise SystemExit(f'omatrophy: guide jail-options: --forward-port takes a port number, not {value!r}')
+        out, i = out + [word, value], i + 2
+    return out
+
+
+def config_file():
+    # Resolved per call so tests can move HOME.
+    return os.path.expanduser('~/.config/omatrophy/config.json')
+
+
+def saved_jail_options(agent, cfg=None):
+    """The owner's extra ai-jail options for `agent` from config.json's
+    `guide-jail-options`; a hand-edited entry that fails the check reads
+    as none, so a typo can't widen the jail."""
+    cfg = read_json(config_file(), {}) if cfg is None else cfg
+    found = cfg.get('guide-jail-options') if isinstance(cfg, dict) else None
+    words = found.get(agent) if isinstance(found, dict) else None
+    if not isinstance(words, list) or not all(isinstance(w, str) for w in words):
+        return []
+    try:
+        return jail_options(words)
+    except SystemExit:
+        return []
 
 
 def endpoint_env(adapter, endpoint):
@@ -506,7 +562,7 @@ def listing(cfg):
                     'models': a.models() if ok else [],
                     'model': pick.get('model', ''), 'effort': pick.get('effort', ''),
                     'endpoint': pick.get('endpoint', ''), 'source': a.models_source,
-                    'jail': jail})
+                    'jail': jail, 'jail_options': saved_jail_options(a.id, cfg)})
     return out
 
 
@@ -521,7 +577,7 @@ def run(adapter, prompt, web=False, model='', effort='', stopped=lambda: False, 
         extra = dict(env or {}, **extra)
         env = dict(os.environ, **extra)
         if jail:
-            argv = jailed(argv, extra)
+            argv = jailed(argv, extra, saved_jail_options(adapter.id))
         out_path, err_path = os.path.join(folder, '.stdout'), os.path.join(folder, '.stderr')
         with open(out_path, 'wb') as out, open(err_path, 'wb') as err:
             try:

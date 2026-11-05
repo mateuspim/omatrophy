@@ -407,6 +407,48 @@ class ModelPick(unittest.TestCase):
                 omatrophy.main(['x', 'guide', 'model', 'codex', 'm', '@http://x'])
 
 
+class JailOptions(unittest.TestCase):
+    # A local model inside ai-jail needs its server's port and key file
+    # (OpenCode at 127.0.0.1:8080 worked without the jail, failed in it).
+    def test_jailed_puts_the_options_before_the_agent_with_home_expanded(self):
+        with mock.patch.dict(os.environ, {'HOME': '/h'}):
+            argv = guide_agents.jailed(['opencode', 'run'], {}, ['--forward-port', '8080', '--map', '~/k.key'])
+        cut = argv.index('--')
+        self.assertEqual(argv[cut - 4:cut], ['--forward-port', '8080', '--map', '/h/k.key'])
+        self.assertEqual(argv[cut + 1:], ['opencode', 'run'])
+
+    def test_jail_options_checks_each_word(self):
+        self.assertEqual(guide_agents.jail_options(['--forward-port=8080', '--allow-loopback-listen', '--map', '~/a']),
+                         ['--forward-port', '8080', '--allow-loopback-listen', '--map', '~/a'])
+        for bad in (['--no-network'], ['--forward-port', 'x'], ['--map'], ['--map', '--rw-map', 'a'], ['8080'],
+                    ['--', 'sh']):
+            with self.assertRaises(SystemExit, msg=bad):
+                guide_agents.jail_options(bad)
+
+    def test_a_bad_hand_edit_reads_as_no_options(self):
+        cfg = {'guide-jail-options': {'opencode': ['--forward-port', '8080'], 'claude': ['--no-landlock'],
+                                      'codex': '--map x'}}
+        self.assertEqual(guide_agents.saved_jail_options('opencode', cfg), ['--forward-port', '8080'])
+        self.assertEqual(guide_agents.saved_jail_options('claude', cfg), [])
+        self.assertEqual(guide_agents.saved_jail_options('codex', cfg), [])
+        self.assertEqual(guide_agents.saved_jail_options('opencode', {}), [])
+
+    def test_cli_saves_one_panel_string_and_clears(self):
+        import io, omatrophy
+        from contextlib import redirect_stdout
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {'HOME': d}), redirect_stdout(io.StringIO()):
+            path = os.path.join(d, '.config/omatrophy/config.json')
+            omatrophy.main(['x', 'guide', 'jail-options', 'opencode', '--forward-port 8080 --map "~/my keys/a.key"'])
+            self.assertEqual(json.loads(read(path))['guide-jail-options']['opencode'],
+                             ['--forward-port', '8080', '--map', '~/my keys/a.key'])
+            self.assertEqual(guide_agents.saved_jail_options('opencode'),
+                             ['--forward-port', '8080', '--map', '~/my keys/a.key'])
+            omatrophy.main(['x', 'guide', 'jail-options', 'opencode', ''])
+            self.assertNotIn('opencode', json.loads(read(path))['guide-jail-options'])
+            with self.assertRaises(SystemExit):
+                omatrophy.main(['x', 'guide', 'jail-options', 'opencode', '--rw-map', '/', '--no-network'])
+
+
 class LockCheck(unittest.TestCase):
     def fake_run(self, writes):
         def runner(adapter, prompt, web=False, model='', timeout=0, jail=False):
