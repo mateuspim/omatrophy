@@ -480,7 +480,11 @@ def ach_line(a):
     return f'- {a["name"]}{flags}: {desc}{pct}'
 
 
-def table_line(name, item, unlocked):
+def table_line(name, item, unlocked, desc=''):
+    """One route-table row. The store's description goes last: it often
+    names the mode or DLC ("in Jack's 55th Birthday"), and a weak model
+    that left `dlc` empty in classify folded such DLC items into the main
+    story when the route saw only names."""
     parts = [item.get('phase', '?'), f'difficulty {item.get("difficulty", "?")}', item.get('time') or 'time ?']
     if item.get('missable'):
         parts.append('MISSABLE' + (f' ({item["missable_note"]})' if item.get('missable_note') else ''))
@@ -490,7 +494,7 @@ def table_line(name, item, unlocked):
         parts.append('combines with ' + ', '.join(item['combine_with']))
     if item.get('dlc'):
         parts.append(f'DLC {item["dlc"]}')
-    return f'- {name}{" [unlocked]" if unlocked else ""}: ' + '; '.join(parts)
+    return f'- {name}{" [unlocked]" if unlocked else ""}: ' + '; '.join(parts) + (f' — {desc}' if desc else '')
 
 
 def excerpt_block(pieces):
@@ -709,7 +713,10 @@ class Job:
         rows = []
         for a in self.achs:
             if a['name'] in items:
-                rows.append(table_line(a['name'], items[a['name']], a.get('unlocked')))
+                # A locked hidden one keeps its secret, as in classify.
+                secret = a.get('hidden') and not a.get('unlocked')
+                rows.append(table_line(a['name'], items[a['name']], a.get('unlocked'),
+                                       '' if secret else a.get('desc', '')))
         played = f', {self.minutes // 60} h played' if self.minutes else ''
         text = prompt('route', game=self.game, progress=f'{done} of {len(self.achs)} unlocked{played}',
                       table='\n'.join(rows))

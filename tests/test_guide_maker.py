@@ -407,6 +407,25 @@ class ModelPick(unittest.TestCase):
                 omatrophy.main(['x', 'guide', 'model', 'codex', 'm', '@http://x'])
 
 
+class RouteTable(unittest.TestCase):
+    # A local model left `dlc` empty and the route, seeing only names,
+    # folded "Get the true ending in Daughters" into the main story.
+    def test_rows_carry_the_description_but_a_locked_hidden_one_keeps_its_secret(self):
+        item = {'phase': 'story', 'difficulty': 2, 'dlc': ''}
+        self.assertTrue(guide_maker.table_line('One', item, False, 'Get the true ending in Daughters.')
+                        .endswith('— Get the true ending in Daughters.'))
+        self.assertNotIn('—', guide_maker.table_line('One', item, False))
+
+    def test_the_route_prompt_gets_descriptions(self):
+        seen = {}
+        job = guide_maker.Job('steam', '1', 'Game', [dict(a) for a in ACHS], guide_agents.BY_ID['claude'])
+        job.ask = lambda stage, text, check, merge: (seen.setdefault('text', text), None)[1:] + ([],)
+        items = {a['name']: {'phase': 'story', 'difficulty': 1} for a in ACHS}
+        job.route(items)
+        self.assertIn('Carry the lantern to the end', seen['text'])
+        self.assertNotIn('Quiet Hours: story; difficulty 1; time ? —', seen['text'])
+
+
 class JailOptions(unittest.TestCase):
     # A local model inside ai-jail needs its server's port and key file
     # (OpenCode at 127.0.0.1:8080 worked without the jail, failed in it).
