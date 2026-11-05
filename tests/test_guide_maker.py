@@ -227,6 +227,15 @@ class Agents(unittest.TestCase):
         self.assertIn('WebFetch', argv)
         self.assertNotIn('Bash', argv)
 
+    def test_opencode_runs_its_own_server_with_the_lock(self):
+        argv, _, env = guide_agents.OpenCode().command('/x', False, 'local/qwen', '')
+        self.assertIn('--standalone', argv)
+        lock = json.loads(env['OPENCODE_CONFIG_CONTENT'])
+        self.assertEqual((lock['permission']['bash'], lock['permission']['edit']), ('deny', 'deny'))
+        self.assertFalse(lock['tools']['bash'])
+        self.assertEqual(lock['permission']['webfetch'], 'deny')
+        self.assertIn('--standalone', guide_agents.OpenCode.models_command)
+
     def test_no_adapter_ever_auto_approves(self):
         for a in guide_agents.ADAPTERS:
             try:

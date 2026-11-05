@@ -258,19 +258,24 @@ class OpenCode(ListedModels):
     id, name, binary = 'opencode', 'OpenCode', 'opencode'
     # Lock through an inline config: every edit and shell permission denied,
     # those tools off. From opencode's config schema; `opencode run --help`
-    # (2026-11-04) shows no tool flags. Not checked on a real run yet (no
-    # provider set up in the session that wrote it): dev/check-lock.py opencode.
+    # (2026-11-04) shows no tool flags. Off until `guide check opencode`
+    # passes on the owner's machine (the session that wrote it reached only
+    # a rate-limited free model).
     checked = False
     web = True
     models_source = 'opencode models'
-    models_command = ('opencode', 'models')
+    models_command = ('opencode', 'models', '--standalone')
 
     def command(self, folder, web, model, effort):
         lock = {'permission': {'edit': 'deny', 'bash': 'deny', 'external_directory': 'deny',
                                'webfetch': 'allow' if web else 'deny'},
                 'tools': {'bash': False, 'edit': False, 'write': False, 'patch': False,
                           'webfetch': web, 'websearch': web}}
-        argv = ['opencode', 'run', '--format', 'json']
+        # --standalone: its own private server. Without it `run` talks to
+        # OpenCode's shared background service (port 49374 on 2026-11-04),
+        # which keeps its own config, not the lock above, or fails when that
+        # port is taken: the first Check failed that way.
+        argv = ['opencode', 'run', '--standalone', '--format', 'json']
         if model:
             argv += ['-m', model + (f'#{effort}' if effort else '')]
         return argv, None, {'OPENCODE_CONFIG_CONTENT': json.dumps(lock)}
