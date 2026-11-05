@@ -128,6 +128,9 @@ Column {
   ]
   property bool guideJail: false
   property var guideJob: ({})
+  // Which guide picker is unfolded in Settings: "", "agent" or "model".
+  property string guideMenu: ""
+  property string guideModelSearch: ""
   // `guide check`'s progress, from guide/check.json, while a Check runs.
   property var guideCheck: ({})
   // The agent a make uses now: the one picked, else Omarchy's default.
@@ -176,6 +179,33 @@ Column {
     if (guideCheck.state === "running") return
     guideCheck = { agent: agent, state: "running", lines: ["Starting " + agent + "…"] }
     Quickshell.execDetached(["python3", helperPath, "guide", "check", agent])
+  }
+
+  // The model picker's rows: the agent's default, every listed model the
+  // search matches, and the search itself as a model id when no row has it.
+  function modelChoices() {
+    var q = guideModelSearch.trim()
+    var low = q.toLowerCase()
+    var rows = []
+    if (!q) rows.push({ id: "", name: "Agent's default", detail: (guideRow ? guideRow.name : "The agent") + " picks it" })
+    var models = guideRow ? guideRow.models : []
+    models.forEach(function(m) {
+      if (low && m.id.toLowerCase().indexOf(low) < 0 && m.name.toLowerCase().indexOf(low) < 0) return
+      var bits = []
+      if (m.name.toLowerCase() !== m.id.toLowerCase()) bits.push(m.id)
+      if (m.efforts && m.efforts.length) bits.push(m.efforts.join(" · "))
+      rows.push({ id: m.id, name: m.name, detail: bits.join("  ·  ") })
+    })
+    if (q && !models.some(function(m) { return m.id === q }))
+      rows.push({ id: q, name: "Use “" + q + "”", detail: "A model id the list doesn't have: a full id, an alias, or provider/model", custom: true })
+    return rows
+  }
+
+  function chooseModel(row) {
+    setGuideModel(row.id, row.id ? guidePick.effort : "")
+    guideMenu = ""
+    guideModelSearch = ""
+    guideModelField.focus = false
   }
 
   function guideEfforts() {
@@ -949,6 +979,67 @@ Column {
       hoverEnabled: true
       cursorShape: Qt.PointingHandCursor
       onClicked: pill.clicked()
+    }
+  }
+
+  // A field that shows a choice and unfolds its list below (the guide's
+  // agent and model): the choice, a line about it, and a chevron.
+  component PickerField: Rectangle {
+    id: picker
+    property string title: ""
+    property string detail: ""
+    property bool open: false
+    signal toggled()
+    width: root.width
+    height: pickerText.implicitHeight + Commons.Style.space(18)
+    radius: Commons.Style.cornerRadius
+    color: pickerHit.containsMouse ? Commons.Style.hoverFill : Qt.alpha(root.foreground, 0.04)
+    border.width: 1
+    border.color: open ? Qt.alpha(Commons.Color.accent, 0.6) : Qt.alpha(root.foreground, pickerHit.containsMouse ? 0.25 : 0.12)
+    Accessible.role: Accessible.ComboBox
+    Accessible.name: title + (detail ? ", " + detail : "")
+    Behavior on color { ColorAnimation { duration: 120 } }
+    Column {
+      id: pickerText
+      x: Commons.Style.space(12)
+      anchors.verticalCenter: parent.verticalCenter
+      width: parent.width - Commons.Style.space(48)
+      spacing: Commons.Style.space(1)
+      Text {
+        textFormat: Text.PlainText
+        width: parent.width
+        text: picker.title
+        color: root.foreground
+        elide: Text.ElideRight
+        font.family: Commons.Style.font.family
+        font.pixelSize: Commons.Style.font.body
+        font.bold: true
+      }
+      Caption {
+        width: parent.width
+        visible: text !== ""
+        text: picker.detail
+        opacity: 0.5
+      }
+    }
+    Text {
+      textFormat: Text.PlainText
+      anchors.right: parent.right
+      anchors.rightMargin: Commons.Style.space(14)
+      anchors.verticalCenter: parent.verticalCenter
+      text: "▾"
+      color: picker.open ? Commons.Color.accent : root.foreground
+      opacity: picker.open ? 1 : 0.5
+      rotation: picker.open ? 180 : 0
+      font.pixelSize: Commons.Style.font.title * 1.4
+      Behavior on rotation { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+    }
+    MouseArea {
+      id: pickerHit
+      anchors.fill: parent
+      hoverEnabled: true
+      cursorShape: Qt.PointingHandCursor
+      onClicked: picker.toggled()
     }
   }
 
@@ -3830,12 +3921,27 @@ Column {
       spacing: root.spacing
       visible: root.settingsSection === "guides"
 
-      // Every installed agent, each with what it takes to use it: ready,
-      // a lock check to run (Check runs it here), or no headless mode yet.
-      // The ones not installed share a line at the end.
+      // The agent and the model as two pickers: each shows the choice and
+      // unfolds its list in place (a popup would fight the panel for keys).
+      // Agents carry their state and Check; models a search, every model
+      // the agent lists, and any name typed.
       MiniLabel { text: "AGENT" }
+      PickerField {
+        open: root.guideMenu === "agent"
+        title: root.guideAgent ? (root.guideRow ? root.guideRow.name : root.guideAgent) : "Omarchy default"
+        detail: {
+          var row = root.guideRow
+          if (!root.guideAgent) return row ? "Follows omarchy default agent: " + row.name : "Follows omarchy default agent (none picked yet)"
+          if (!row) return ""
+          if (!row.installed) return "Not installed"
+          if (!row.supported) return "Off until checked"
+          return "Ready" + (row.models.length ? " · " + row.models.length + " models" : "")
+        }
+        onToggled: root.guideMenu = open ? "" : "agent"
+      }
       Rectangle {
         width: root.width
+        visible: root.guideMenu === "agent"
         height: agentRows.height + Commons.Style.space(8)
         radius: Commons.Style.cornerRadius
         color: Qt.alpha(root.foreground, 0.03)
@@ -3871,7 +3977,11 @@ Column {
                 anchors.fill: parent
                 hoverEnabled: true
                 cursorShape: agentRow.usable ? Qt.PointingHandCursor : Qt.ArrowCursor
-                onClicked: if (agentRow.usable) root.set("guide-agent", agentRow.a.omarchy ? "default" : agentRow.a.agent)
+                onClicked: {
+                  if (!agentRow.usable) return
+                  root.set("guide-agent", agentRow.a.omarchy ? "default" : agentRow.a.agent)
+                  root.guideMenu = ""
+                }
               }
               Text {
                 textFormat: Text.PlainText
@@ -3937,7 +4047,7 @@ Column {
       }
       Caption {
         width: root.width
-        visible: text !== ""
+        visible: text !== "" && root.guideMenu === "agent"
         wrapMode: Text.WordWrap
         elide: Text.ElideNone
         opacity: 0.35
@@ -3947,62 +4057,166 @@ Column {
         }
       }
 
-      SettingRow {
-        label: "MODEL"
-        visible: root.guideRow !== null && root.guideRow.installed
+
+      MiniLabel { text: "MODEL"; visible: root.guideRow !== null && root.guideRow.supported }
+      PickerField {
+        visible: root.guideRow !== null && root.guideRow.supported
+        open: root.guideMenu === "model"
+        title: {
+          var id = root.guidePick.model
+          if (!id) return "Agent's default"
+          var m = root.guideRow ? root.guideRow.models.find(function(x) { return x.id === id }) : null
+          return m ? m.name : id
+        }
+        detail: {
+          var parts = []
+          var id = root.guidePick.model
+          var m = id && root.guideRow ? root.guideRow.models.find(function(x) { return x.id === id }) : null
+          if (!id) parts.push((root.guideRow ? root.guideRow.name : "The agent") + " picks it")
+          else if (!m) parts.push("Typed by you")
+          else if (m.name.toLowerCase() !== m.id.toLowerCase()) parts.push(m.id)
+          if (root.guidePick.effort) parts.push(root.guidePick.effort + " effort")
+          if (root.guidePick.endpoint) parts.push("at " + root.guidePick.endpoint)
+          return parts.join(" · ")
+        }
+        onToggled: {
+          root.guideMenu = open ? "" : "model"
+          root.guideModelSearch = ""
+        }
+      }
+
+      Rectangle {
+        width: root.width
+        visible: root.guideMenu === "model"
+        height: modelMenu.height + Commons.Style.space(8)
+        radius: Commons.Style.cornerRadius
+        color: Qt.alpha(root.foreground, 0.03)
+        border.width: 1
+        border.color: Qt.alpha(root.foreground, 0.08)
         Column {
-          width: root.width * 0.72
-          spacing: Commons.Style.space(4)
-          Flow {
+          id: modelMenu
+          y: Commons.Style.space(4)
+          width: parent.width
+          // Search, or type a model the list doesn't have; Enter takes the
+          // first row.
+          Item {
             width: parent.width
-            layoutDirection: Qt.RightToLeft
-            spacing: Commons.Style.space(2)
-            Repeater {
-              model: root.guideRow ? [{ value: "", label: "Default" }].concat(
-                       root.guideRow.models.slice(0, 6).map(function(m) { return { value: m.id, label: m.name } })).reverse() : []
-              delegate: Chips {
-                required property var modelData
-                options: [modelData]
-                value: root.guidePick.model || ""
-                onPicked: value => root.setGuideModel(value, root.guidePick.effort)
-              }
+            height: Commons.Style.space(36)
+            Text {
+              textFormat: Text.PlainText
+              id: modelSearchGlyph
+              x: Commons.Style.space(12)
+              anchors.verticalCenter: parent.verticalCenter
+              text: "⌕"
+              color: root.foreground
+              opacity: 0.5
+              font.pixelSize: Commons.Style.font.body
             }
-          }
-          // Free text for a model the list doesn't name (a full id, an
-          // alias, provider/model for a local endpoint); Enter saves it.
-          Rectangle {
-            anchors.right: parent.right
-            width: Commons.Style.space(170)
-            height: Commons.Style.space(24)
-            radius: height / 2
-            color: "transparent"
-            border.width: 1
-            border.color: guideModelField.activeFocus ? Qt.alpha(Commons.Color.accent, 0.6) : Qt.alpha(root.foreground, 0.15)
             TextInput {
               id: guideModelField
-              anchors.fill: parent
-              anchors.leftMargin: Commons.Style.space(10)
-              anchors.rightMargin: Commons.Style.space(10)
-              verticalAlignment: TextInput.AlignVCenter
+              anchors.left: modelSearchGlyph.right
+              anchors.leftMargin: Commons.Style.space(8)
+              anchors.right: parent.right
+              anchors.rightMargin: Commons.Style.space(12)
+              anchors.verticalCenter: parent.verticalCenter
               clip: true
               color: root.foreground
+              selectionColor: Qt.alpha(Commons.Color.accent, 0.4)
               font.family: Commons.Style.font.family
-              font.pixelSize: Commons.Style.font.caption
-              text: root.guideRow && root.guidePick.model && !root.guideRow.models.some(function(m) { return m.id === root.guidePick.model })
-                    ? root.guidePick.model : ""
-              onAccepted: { root.setGuideModel(text.trim(), root.guidePick.effort); focus = false }
-              Keys.onEscapePressed: focus = false
+              font.pixelSize: Commons.Style.font.bodySmall
+              text: root.guideModelSearch
+              onTextEdited: root.guideModelSearch = text
+              onAccepted: {
+                var first = root.modelChoices()[root.guideModelSearch ? 0 : 1]
+                if (first) root.chooseModel(first)
+              }
+              Keys.onEscapePressed: { root.guideMenu = ""; focus = false }
               Text {
                 textFormat: Text.PlainText
                 anchors.verticalCenter: parent.verticalCenter
-                visible: !guideModelField.text && !guideModelField.activeFocus
-                text: "Other model…"
+                visible: !guideModelField.text
+                text: "Search " + (root.guideRow ? root.guideRow.models.length : 0) + " models, or type any model id"
                 color: root.foreground
                 opacity: 0.4
                 font: guideModelField.font
               }
             }
+            Rectangle {
+              anchors.bottom: parent.bottom
+              x: Commons.Style.space(12)
+              width: parent.width - Commons.Style.space(24)
+              height: 1
+              color: Qt.alpha(root.foreground, 0.08)
+            }
           }
+          Repeater {
+            model: root.guideMenu === "model" ? root.modelChoices() : []
+            delegate: Rectangle {
+              id: modelRow
+              required property var modelData
+              readonly property var m: modelData
+              readonly property bool chosen: !m.custom && (root.guidePick.model || "") === m.id
+              width: modelMenu.width
+              height: modelName.implicitHeight + (modelDetail.visible ? modelDetail.implicitHeight : 0) + Commons.Style.space(14)
+              color: modelHit.containsMouse ? Commons.Style.hoverFill : "transparent"
+              Accessible.role: Accessible.RadioButton
+              Accessible.name: m.name
+              Accessible.checked: chosen
+              MouseArea {
+                id: modelHit
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.chooseModel(modelRow.m)
+              }
+              Text {
+                textFormat: Text.PlainText
+                id: modelDot
+                x: Commons.Style.space(12)
+                anchors.verticalCenter: parent.verticalCenter
+                text: modelRow.m.custom ? "+" : modelRow.chosen ? "◉" : "○"
+                color: modelRow.chosen || modelRow.m.custom ? Commons.Color.accent : root.foreground
+                opacity: modelRow.chosen || modelRow.m.custom ? 1 : 0.5
+                font.pixelSize: Commons.Style.font.body
+              }
+              Column {
+                anchors.left: modelDot.right
+                anchors.leftMargin: Commons.Style.space(10)
+                anchors.right: parent.right
+                anchors.rightMargin: Commons.Style.space(12)
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: Commons.Style.space(1)
+                Text {
+                  textFormat: Text.PlainText
+                  id: modelName
+                  width: parent.width
+                  text: modelRow.m.name
+                  color: modelRow.m.custom ? Commons.Color.accent : root.foreground
+                  elide: Text.ElideRight
+                  font.family: Commons.Style.font.family
+                  font.pixelSize: Commons.Style.font.bodySmall
+                  font.bold: modelRow.chosen
+                }
+                Caption {
+                  id: modelDetail
+                  width: parent.width
+                  visible: text !== ""
+                  opacity: 0.5
+                  text: modelRow.m.detail || ""
+                }
+              }
+            }
+          }
+          Caption {
+            x: Commons.Style.space(12)
+            width: parent.width - Commons.Style.space(24)
+            visible: root.guideRow !== null && root.guideRow.models.length === 0
+            wrapMode: Text.WordWrap
+            elide: Text.ElideNone
+            opacity: 0.4
+            text: root.guideRow ? root.guideRow.name + " doesn't list its models here; type the one you want above." : ""
+          }
+          Item { width: 1; height: Commons.Style.space(4) }
         }
       }
 
