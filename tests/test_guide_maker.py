@@ -426,6 +426,35 @@ class RouteTable(unittest.TestCase):
         self.assertNotIn('Quiet Hours: story; difficulty 1; time ? —', seen['text'])
 
 
+class JobStatus(unittest.TestCase):
+    # The panel's strip built the store's old header URL itself, a 404 for
+    # newer apps; the job now passes on the poster OmaTrophy found.
+    def test_status_carries_the_header(self):
+        with tempfile.TemporaryDirectory() as d:
+            job = guide_maker.Job('steam', '1', 'Game', [dict(a) for a in ACHS], guide_agents.BY_ID['claude'],
+                                  folder=d, header='file:///art/1_header.jpg')
+            job.report('gather')
+            status = json.loads(read(guide_maker.status_path(d)))
+        self.assertEqual(status['header'], 'file:///art/1_header.jpg')
+
+
+class CompleteGame(unittest.TestCase):
+    # A make on a platinum game sent the agent nothing to classify and
+    # wrote a page of filler on the owner's tokens.
+    def test_a_game_at_100_percent_is_refused(self):
+        import omatrophy
+        store = mock.Mock(id='steam')
+        store.game_name.return_value = 'Done Game'
+        done = [dict(a, unlocked=True) for a in ACHS]
+        with mock.patch.object(omatrophy, 'guide_target', return_value=(store, done, 60)), \
+                mock.patch.object(guide_agents, 'resolve', return_value=guide_agents.BY_ID['claude']), \
+                mock.patch.object(guide_maker, 'busy', return_value=False), \
+                mock.patch.object(guide_maker, 'make', side_effect=AssertionError('made')):
+            with self.assertRaises(SystemExit) as e:
+                omatrophy.guide_make('steam', '1', [], {})
+        self.assertIn('100%', str(e.exception))
+
+
 class JailOptions(unittest.TestCase):
     # A local model inside ai-jail may need its key file (OpenCode at a
     # local server worked without the jail, failed in it).

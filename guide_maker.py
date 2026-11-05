@@ -582,7 +582,8 @@ class Job:
     """One make: holds the status, the usage and the sources as it goes."""
 
     def __init__(self, store, app, game, achievements, adapter, model='', effort='', web=True, folder=None,
-                 fetch=None, list_guides=None, say=None, clock=time.time, minutes=0, jail=False, env=None, source_root=None):
+                 fetch=None, list_guides=None, say=None, clock=time.time, minutes=0, jail=False, env=None, source_root=None,
+                 header=''):
         self.store, self.app, self.game, self.achs = store, str(app), game, achievements
         self.adapter, self.model, self.effort = adapter, model, effort
         self.web = web and adapter.web
@@ -593,6 +594,9 @@ class Job:
         self.clock = clock
         self.minutes = minutes
         self.jail = jail
+        # The game's poster as OmaTrophy found it, for the panel's strip:
+        # building the store URL there gave a 404 for newer apps.
+        self.header = header
         # Extra environment for the agent (a bench entry's local endpoint).
         self.env = env or {}
         # Where saved pages and earlier sources are read: a bench run writes
@@ -608,7 +612,8 @@ class Job:
             'state': state, 'store': self.store, 'app': self.app, 'game': self.game, 'stage': self.stage,
             'done': self.done, 'total': self.total, 'line': line, 'started': self.started,
             'time': int(self.clock()), 'agent': self.adapter.id, 'model': self.model, 'pid': os.getpid(),
-            'web': self.web, 'jail': self.jail, 'open': sum(1 for a in self.achs if not a.get('unlocked'))})
+            'web': self.web, 'jail': self.jail, 'header': self.header,
+            'open': sum(1 for a in self.achs if not a.get('unlocked'))})
         if line:
             self.say(line)
 

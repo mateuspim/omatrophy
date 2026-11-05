@@ -1772,7 +1772,10 @@ Column {
             anchors.fill: parent
             fillMode: Image.PreserveAspectCrop
             asynchronous: true
-            source: guideStrip.job.store === "steam" && /^\d+$/.test(String(guideStrip.job.app || ""))
+            // The job's own poster first: the store URL built here is a 404
+            // for newer apps (2025 on).
+            source: guideStrip.job.header ? guideStrip.job.header
+                    : guideStrip.job.store === "steam" && /^\d+$/.test(String(guideStrip.job.app || ""))
                     ? "https://cdn.fastly.steamstatic.com/steam/apps/" + guideStrip.job.app + "/header.jpg" : ""
             opacity: status === Image.Ready ? 1 : 0
           }

@@ -1080,8 +1080,13 @@ def guide_make(store_id, app, flags, cfg):
     if guide_maker.busy():
         raise SystemExit('omatrophy: guide: another guide is being made; stop it with: omatrophy.py guide stop')
     store, achs, minutes = guide_target(store_id, app)
+    # Nothing open: a make only spent the agent's tokens on filler.
+    if all(a.get('unlocked') for a in achs):
+        raise SystemExit(f'omatrophy: guide: {store.game_name(app)} is already at 100%; there is nothing left for '
+                         'a guide to plan')
     job = guide_maker.Job(store.id, app, store.game_name(app), achs, adapter, model=opts.get('model', pick.get('model', '')),
                           effort=opts.get('effort', pick.get('effort', '')), web=web, minutes=minutes, jail=jail,
+                          header=store.art(app)['header'],
                           # The saved endpoint goes with the saved model (the tracker
                           # passes --model too); another model is a cloud one.
                           env=guide_agents.endpoint_env(adapter, pick.get('endpoint', '')

@@ -148,7 +148,8 @@ an overview and the recommended route, then every open achievement by
 phase (missable first, then story, quick, challenge, grind, collectibles,
 online), each with its time, difficulty, counter, where the point of no
 return is, a tip and what it combines with. A hidden achievement keeps its
-name and tip secret until you hover it. Anything no source backs says
+name and tip secret until you hover it, or **Reveal all** shows every one.
+Anything no source backs says
 "(unverified)". With a guide, the Now tab's **Up next** follows its route.
 
 No guide yet? **Make guide** asks your coding agent to write one. OmaTrophy
@@ -158,7 +159,8 @@ agent searches the web if you let it, classifies the achievements in small
 batches and plans the route, and OmaTrophy checks each quote against the
 page it came from. It takes a few minutes and keeps going if you close the
 tracker; **Stop** leaves the old guide as it was. A cloud agent bills your
-account (the guide records the cost it reports).
+account (the guide records the cost it reports). A game you already have at
+100% gets no **Make guide**: there is nothing left to plan.
 
 The agent runs headless in an empty folder with no shell and no file
 tools, only web search and fetch when it researches

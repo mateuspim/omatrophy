@@ -52,6 +52,14 @@ Item {
   property bool cascading: false
   // Hidden achievements revealed with Enter, by api name; hover reveals too.
   property var revealed: ({})
+  // The Guide tab's Reveal all: every hidden one shows its name and tip,
+  // for a player who'd rather plan than be surprised. Per open, like
+  // `revealed`; a new game starts hidden again.
+  property bool revealAll: false
+  // Nothing left to unlock: a make would spend the owner's tokens on a
+  // guide with nothing to plan (it did, for a platinum game).
+  readonly property bool complete: game !== null && game.total > 0 && game.unlocked >= game.total
+  readonly property int secretCount: game ? game.achievements.filter(function(a) { return a.hidden && !a.unlocked }).length : 0
   // The Profile showcase's picks from config.json, so a ★ shows lit;
   // "store:game:api", or "store:game" for a game's platinum.
   property var showcaseKeys: []
@@ -121,6 +129,7 @@ Item {
   }
 
   onGameChanged: {
+    revealAll = false
     var index = {}
     if (game) game.achievements.forEach(function(a) { index[a.api] = a })
     byApi = index
@@ -524,8 +533,12 @@ Item {
           var fresh = root.job.state === "done" && Date.now() / 1000 - (root.job.time || 0) < 900
           if ((root.making || fresh) && root.jobHere) root.filter = "guide"
         }
-        // A make of this game just ended: show what it wrote.
+        // A make of this game just ended: show what it wrote, or reopen
+        // the maker with what went wrong (it closed when the make began,
+        // and with no guide the tab was left empty).
         if (was.state === "running" && root.job.state === "done" && root.jobHere) root.readGuide()
+        if (was.state === "running" && (root.job.state === "failed" || root.job.state === "stopped") && root.jobHere)
+          root.makerOpen = true
       }
     }
   }
@@ -844,7 +857,7 @@ Item {
     readonly property var ach: root.byApi[api] || ({ name: "", desc: "", icon: "", hidden: false, unlocked: false })
     readonly property var item: root.guide && root.guide.items ? root.guide.items[api] || ({}) : ({})
     readonly property bool done: root.guideDone(api)
-    readonly property bool secret: ach.hidden && !ach.unlocked && !growHover.hovered && !root.revealed[api]
+    readonly property bool secret: ach.hidden && !ach.unlocked && !growHover.hovered && !root.revealed[api] && !root.revealAll
     readonly property string meta: {
       var parts = []
       if (item.missable && !done) parts.push("⚠ Missable" + (item.missable_note ? ": " + item.missable_note : ""))
@@ -1402,6 +1415,7 @@ Item {
         // Hidden achievements stay a secret until unlocked, or until you
         // hover or press Enter to reveal them.
         readonly property bool secret: ach.hidden && !ach.unlocked && !rowHover.containsMouse && !root.revealed[ach.api]
+                                       && !root.revealAll
         width: list.width
         height: Commons.Style.space(56)
         radius: Commons.Style.cornerRadius
@@ -1725,15 +1739,38 @@ Item {
             id: againButton
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
+            visible: !root.complete
             text: "↻ Make again"
             onClicked: root.makerOpen = true
+          }
+        }
+
+        // A game at 100% needs no guide: say so instead of offering one.
+        Column {
+          width: parent.width
+          visible: root.complete && !root.hasGuide && !root.making && root.guide !== null
+          spacing: Commons.Style.space(6)
+          Text {
+            textFormat: Text.PlainText
+            width: parent.width
+            text: "You already have the platinum"
+            color: Commons.Color.accent
+            font.family: Commons.Style.font.family
+            font.pixelSize: Commons.Style.font.title
+            font.bold: true
+          }
+          Caption {
+            width: parent.width
+            wrapMode: Text.Wrap
+            elide: Text.ElideNone
+            text: "All " + (root.game ? root.game.total : 0) + " achievements are unlocked, so there's nothing left for a guide to plan. Making one would only spend your agent's tokens."
           }
         }
 
         Rectangle {
           id: maker
           width: parent.width
-          visible: root.makerOpen && !root.making && root.guide !== null
+          visible: root.makerOpen && !root.making && root.guide !== null && !root.complete
           height: makerBody.height + Commons.Style.space(24)
           radius: Commons.Style.cornerRadius
           color: Qt.alpha(root.foreground, 0.04)
@@ -1882,6 +1919,19 @@ Item {
               opacity: 0.4
             }
 
+            // The last make's failure, in full: in the button row a long
+            // agent error ran past the card.
+            Caption {
+              width: parent.width
+              visible: root.jobHere && (root.job.state === "failed" || root.job.state === "stopped")
+              wrapMode: Text.Wrap
+              elide: Text.ElideNone
+              text: root.job.state === "stopped" ? "Stopped; the old guide is unchanged."
+                                                  : "Last try " + (root.job.line || "failed")
+              color: root.job.state === "failed" ? Commons.Color.accent : root.foreground
+              opacity: root.job.state === "failed" ? 0.9 : 0.6
+            }
+
             Row {
               visible: root.runnable.length > 0
               spacing: Commons.Style.space(10)
@@ -1894,12 +1944,6 @@ Item {
                 accent: false
                 text: "Cancel"
                 onClicked: root.makerOpen = false
-              }
-              Caption {
-                anchors.verticalCenter: parent.verticalCenter
-                visible: root.jobHere && (root.job.state === "failed" || root.job.state === "stopped")
-                text: root.job.line || ""
-                color: root.job.state === "failed" ? Commons.Color.accent : root.foreground
               }
             }
           }
@@ -2001,7 +2045,17 @@ Item {
             id: allTitle
             text: root.hasGuide ? "ALL TROPHIES · IN THE GUIDE'S ORDER" : root.making && root.jobHere ? "THE GUIDE WILL COVER" : "ALL TROPHIES"
           }
+          Chip {
+            anchors.right: doneCount.left
+            anchors.rightMargin: Commons.Style.space(12)
+            anchors.verticalCenter: allTitle.verticalCenter
+            visible: root.secretCount > 0
+            chosen: root.revealAll
+            text: (root.revealAll ? "Hide secrets · " : "Reveal all · ") + root.secretCount
+            onClicked: root.revealAll = !root.revealAll
+          }
           Caption {
+            id: doneCount
             anchors.right: parent.right
             anchors.verticalCenter: allTitle.verticalCenter
             text: root.game ? root.game.unlocked + " of " + root.game.total + " done" : ""
