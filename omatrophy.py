@@ -700,18 +700,20 @@ def now(recent_n=3, rarest_n=8, nearest_n=4):
 
 def games():
     """Every game with achievements as a slim card, for the Games tab. Names
-    not cached yet are looked up eight at a time, so a first open of a large
-    library takes seconds, not minutes; later opens read the cache."""
+    and store headers not cached yet are looked up eight at a time, so a
+    first open of a large library takes seconds, not minutes; later opens
+    read the cache."""
     found = found_stores()
     lib = library(found)
     played = {(s.id, g): t for s in found for t, g in s.recent()}
     hidden = hidden_games()
     with ThreadPoolExecutor(8) as pool:
         names = list(pool.map(lambda item: item[0].game_name(item[1]), lib))
-    return [dict(progress_row(s, g, achs), game=name, header=s.art(g)['header'],
+        headers = list(pool.map(lambda item: item[0].art(item[1])['header'], lib))
+    return [dict(progress_row(s, g, achs), game=name, header=header,
                  platinum=platinum_time(achs), played=played.get((s.id, g), 0),
                  hidden=game_key(s.id, g) in hidden)
-            for (s, g, achs), name in zip(lib, names)]
+            for (s, g, achs), name, header in zip(lib, names, headers)]
 
 
 # Fields of a panel or tracker answer that hold an image URL.

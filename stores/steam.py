@@ -465,9 +465,38 @@ class Steam(Store):
                 return 'file://' + os.path.join(dirpath, name)
         return None
 
+    def store_header(self, app):
+        """A saved copy of the store page's header, for a game Steam keeps
+        no library header for. Newer apps (2025 on) keep theirs under a
+        hashed store_item_assets path, and the old apps/<id>/header.jpg is
+        a 404 there, so their row showed no poster. Asked once through
+        appdetails; a failed lookup waits a day (a file per game, so the
+        threads `games` runs in never share one). '' when there is none."""
+        name = f'art/{app}_header.jpg'
+        if os.path.exists(f'{CACHE}/{name}'):
+            return f'file://{CACHE}/{name}'
+        miss = f'{CACHE}/art/{app}_header.miss'
+        try:
+            if time.time() - os.path.getmtime(miss) < NAME_MISS_SECONDS:
+                return ''
+        except OSError:
+            pass
+        try:
+            url = http_json(f'https://store.steampowered.com/api/appdetails?appids={app}&filters=basic')[app]['data']['header_image']
+        except Exception:
+            url = ''
+        found = cached(url, name) if isinstance(url, str) and url.startswith('https://') else ''
+        if found.startswith('file://'):
+            return found
+        os.makedirs(os.path.dirname(miss), exist_ok=True)
+        with open(miss, 'w'):
+            pass
+        return ''
+
     def art(self, app):
         if not app_id(app):
             return {'hero': '', 'header': ''}
         return {'hero': self.library_art(app, 'library_hero.jpg')
                 or cached(f'{ART_BASE}/{app}/library_hero.jpg', f'art/{app}_hero.jpg'),
-                'header': self.library_art(app, 'library_header.jpg') or f'{ART_BASE}/{app}/header.jpg'}
+                'header': self.library_art(app, 'library_header.jpg') or self.store_header(app)
+                or f'{ART_BASE}/{app}/header.jpg'}
