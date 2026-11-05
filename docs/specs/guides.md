@@ -251,7 +251,7 @@ tools off: `guide check <agent>` (Settings > Guides' Check, or
 a file and run a shell command, with no tools and with web tools, and
 passes when every run answered and neither happened. Claude's check was
 made when its adapter was written (`checked` in `guide_agents.py`); any
-other passes on the owner's machine and is recorded in
+other passes on the owner's machine ([ADR 15](../adr/0015-check-an-agents-lock-on-the-owners-machine.md)) and is recorded in
 `~/.local/state/omatrophy/guide-locks.json` as `{agent: {passed, binary,
 time, model}}`, where `binary` is the agent's real path, size and mtime: an
 update of the agent turns it off again until checked. A check inside
