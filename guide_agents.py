@@ -382,6 +382,19 @@ def jail_version(runner=subprocess.run):
     return found.group(0) if found else ''
 
 
+def jail_binary(name, runner=subprocess.run):
+    """What ai-jail should start for `name`: the tool itself when `name` is
+    a mise shim or command wrapper. mise exits with "Read-only file system"
+    inside the jail (mise 2026.11.0, 2026-11-05), while the tool it points
+    at runs there fine."""
+    path = shutil.which(name)
+    if not path:
+        return name
+    real = os.path.realpath(path)
+    target = mise_target(real, name, runner)
+    return target if target != real else name
+
+
 def jailed(argv, extra_env, options=()):
     """`argv` run inside ai-jail (bubblewrap, Landlock, seccomp): the agent
     sees only the job's empty folder read-write, its own state dirs and
@@ -396,7 +409,7 @@ def jailed(argv, extra_env, options=()):
     for name in sorted(set(JAIL_ENV) | set(extra_env)):
         if name in os.environ or name in extra_env:
             out += ['--env', name]
-    return out + [os.path.expanduser(o) for o in options] + ['--'] + list(argv)
+    return out + [os.path.expanduser(o) for o in options] + ['--', jail_binary(argv[0])] + list(argv[1:])
 
 
 # The ai-jail options an owner may add per agent: what a local model needs
@@ -493,19 +506,34 @@ def check_status_path():
     return f'{CACHE}/guide/check.json'
 
 
-def fingerprint(adapter):
+def fingerprint(adapter, runner=subprocess.run):
     """The installed agent binary as it is now (real path, size, mtime): an
     update changes it, and a lock checked on the old one no longer counts.
-    No subprocess, so `guide agents` stays fast."""
+    No subprocess, so `guide agents` stays fast, except for a mise shim."""
     path = shutil.which(adapter.binary) if adapter.binary else None
     if not path:
         return ''
-    real = os.path.realpath(path)
+    real = mise_target(os.path.realpath(path), adapter.binary, runner)
     try:
         st = os.stat(real)
     except OSError:
         return ''
     return f'{real}:{st.st_size}:{int(st.st_mtime)}'
+
+
+def mise_target(real, binary, runner=subprocess.run):
+    """The tool a mise shim runs, or `real` unchanged. mise's shims and
+    command wrappers are links to mise itself, so stamping them saw no
+    agent update, and the stamp changed with PATH order: the shell found
+    the shim, a terminal the install (2026-11-05). `mise which` answers in
+    milliseconds."""
+    if os.path.basename(real) != 'mise':
+        return real
+    try:
+        out = runner([real, 'which', binary], capture_output=True, text=True, timeout=4).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return real
+    return os.path.realpath(out) if out and os.path.isabs(out) else real
 
 
 def recorded_locks():

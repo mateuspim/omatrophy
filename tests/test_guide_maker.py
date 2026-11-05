@@ -1,4 +1,4 @@
-import json, os, re, sys, tempfile, unittest
+import json, os, re, subprocess, sys, tempfile, unittest
 from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -285,7 +285,8 @@ class Agents(unittest.TestCase):
         self.assertEqual(out['usage'], {'input': 7, 'output': 2, 'cost_usd': 0.5})
 
     def test_jailed_wraps_the_command_and_passes_only_named_env(self):
-        with mock.patch.dict(os.environ, {'ANTHROPIC_BASE_URL': 'http://x', 'SECRET_THING': 'y'}):
+        with mock.patch.dict(os.environ, {'ANTHROPIC_BASE_URL': 'http://x', 'SECRET_THING': 'y'}), \
+                mock.patch.object(guide_agents.shutil, 'which', return_value=None):
             argv = guide_agents.jailed(['claude', '-p'], {'OPENCODE_CONFIG_CONTENT': '{}'})
         self.assertEqual(argv[:2], ['ai-jail', '--exec'])
         self.assertEqual(argv[argv.index('--') + 1:], ['claude', '-p'])
@@ -482,11 +483,22 @@ class JailOptions(unittest.TestCase):
     # A local model inside ai-jail may need its key file (OpenCode at a
     # local server worked without the jail, failed in it).
     def test_jailed_puts_the_options_before_the_agent_with_home_expanded(self):
-        with mock.patch.dict(os.environ, {'HOME': '/h'}):
+        with mock.patch.dict(os.environ, {'HOME': '/h'}), \
+                mock.patch.object(guide_agents.shutil, 'which', return_value=None):
             argv = guide_agents.jailed(['opencode', 'run'], {}, ['--env', 'K', '--map', '~/k.key'])
         cut = argv.index('--')
         self.assertEqual(argv[cut - 4:cut], ['--env', 'K', '--map', '/h/k.key'])
         self.assertEqual(argv[cut + 1:], ['opencode', 'run'])
+
+    # Regression: mise fails with "Read-only file system" in the jail, so
+    # every agent installed through mise failed there; its tool runs fine.
+    def test_jailed_runs_the_tool_behind_a_mise_shim(self):
+        runner = mock.Mock(return_value=mock.Mock(stdout='/mise/installs/claude/latest/claude\n'))
+        with mock.patch.object(guide_agents.shutil, 'which', return_value='/shims/claude'), \
+                mock.patch.object(guide_agents.os.path, 'realpath', side_effect=lambda p: '/usr/bin/mise' if p == '/shims/claude' else p):
+            self.assertEqual(guide_agents.jail_binary('claude', runner), '/mise/installs/claude/latest/claude')
+        with mock.patch.object(guide_agents.shutil, 'which', return_value='/usr/bin/claude'):
+            self.assertEqual(guide_agents.jail_binary('claude', runner), 'claude')
 
     def test_jail_options_checks_each_word(self):
         self.assertEqual(guide_agents.jail_options(['--env=K', '--allow-loopback-listen', '--map', '~/a']),
@@ -569,6 +581,24 @@ class LockCheck(unittest.TestCase):
                 self.assertTrue(guide_agents.checked(codex))
             with mock.patch.object(guide_agents, 'fingerprint', lambda a: 'bin:2'):
                 self.assertFalse(guide_agents.checked(codex))
+
+    # Regression: a mise shim is a link to mise itself, so the stamp missed
+    # agent updates and differed between the shell's PATH and a terminal's.
+    def test_a_mise_shim_is_stamped_by_the_tool_it_runs(self):
+        with tempfile.TemporaryDirectory() as d:
+            tool = os.path.join(d, 'installs', 'opencode')
+            write(os.path.dirname(tool), 'opencode', 'tool')
+            calls = []
+
+            def runner(argv, **kw):
+                calls.append(argv)
+                return mock.Mock(stdout=tool + '\n')
+            self.assertEqual(guide_agents.mise_target('/usr/bin/mise', 'opencode', runner), tool)
+            self.assertEqual(calls, [['/usr/bin/mise', 'which', 'opencode']])
+            self.assertEqual(guide_agents.mise_target('/usr/bin/opencode', 'opencode', runner), '/usr/bin/opencode')
+            self.assertEqual(len(calls), 1)
+            failed = mock.Mock(side_effect=subprocess.TimeoutExpired('mise', 4))
+            self.assertEqual(guide_agents.mise_target('/usr/bin/mise', 'opencode', failed), '/usr/bin/mise')
 
     def test_a_write_fails_and_records_nothing_and_a_jail_pass_records_nothing(self):
         with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {'HOME': d}), \
