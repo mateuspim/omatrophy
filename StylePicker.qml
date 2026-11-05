@@ -1728,10 +1728,15 @@ Column {
           textFormat: Text.PlainText
           anchors.right: parent.right
           anchors.verticalCenter: guideStripTitle.verticalCenter
+          // Ends before the title: a local model's id
+          // ("provider/model-q2_0") ran over it.
+          width: Math.min(implicitWidth, parent.width - guideStripTitle.width - Commons.Style.space(12))
+          horizontalAlignment: Text.AlignRight
           opacity: 0.6
           visible: guideStrip.jobRunning
           text: (guideStrip.job.total ? Math.round(100 * guideStrip.job.done / guideStrip.job.total) : 0) + "%"
-                + (guideStrip.job.agent ? " · " + guideStrip.job.agent + (guideStrip.job.model ? " " + guideStrip.job.model : "") : "")
+                + (guideStrip.job.agent ? " · " + guideStrip.job.agent
+                   + (guideStrip.job.model ? " " + String(guideStrip.job.model).split("/").pop() : "") : "")
         }
       }
 
