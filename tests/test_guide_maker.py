@@ -198,6 +198,28 @@ class Checks(unittest.TestCase):
         out = guide_maker.verify_cites(dict(item, cites=[]), {}, [])
         self.assertEqual(out['unverified'], ['time', 'tips'])
 
+    # Regression: a local model "verified" items by quoting their own name
+    # or DLC ("End of Zoe DLC"), which is on the page but proves nothing.
+    def test_a_quote_of_the_store_text_does_not_verify(self):
+        page = {'u': {'text': 'King of the Swamp. End of Zoe DLC. Punch the boss without guns: block, then '
+                              'counter after its slam. Win a fight in End of Zoe.'}}
+        given = ('King of the Swamp', 'Win a fight in End of Zoe.', 'End of Zoe')
+
+        def verified(quote):
+            item = {'cites': [{'source': 'u', 'quote': quote}]}
+            return guide_maker.verify_cites(item, page, [], given)['cites'][0]['verified']
+        self.assertFalse(verified('King of the Swamp'))
+        self.assertFalse(verified('End of Zoe DLC'))
+        self.assertFalse(verified('Win a fight in End of Zoe.'))
+        self.assertTrue(verified('block, then counter after its slam'))
+
+    def test_search_result_pages_are_no_source(self):
+        self.assertTrue(guide_maker.search_page('https://www.bing.com/search?q=x'))
+        self.assertTrue(guide_maker.search_page('https://lite.duckduckgo.com/lite/?q=x'))
+        self.assertTrue(guide_maker.search_page('https://searx.example/search?q=x'))
+        self.assertFalse(guide_maker.search_page('https://steamcommunity.com/app/1/guides/'))
+        self.assertFalse(guide_maker.search_page('https://www.powerpyx.com/re7-trophy-guide/'))
+
     def test_slug(self):
         self.assertEqual(guide_maker.slug('DOOM: The Dark Ages™'), 'doom-the-dark-ages')
 

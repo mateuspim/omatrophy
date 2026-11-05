@@ -189,6 +189,20 @@ def words(text):
     return {w for w in WORD.findall(fold(text)) if len(w) >= 3 and w not in STOPWORDS}
 
 
+# Search engines' result pages: a model whose search tool failed fetched
+# Bing and DuckDuckGo instead (2026-11-05). Their snippets are no source.
+SEARCH_HOSTS = ('bing.com', 'duckduckgo.com', 'google.com', 'search.brave.com', 'startpage.com',
+                'yandex.com', 'search.yahoo.com', 'ecosia.org')
+
+
+def search_page(url):
+    parts = urllib.parse.urlsplit(url)
+    host = (parts.hostname or '').lower()
+    if any(host == h or host.endswith('.' + h) for h in SEARCH_HOSTS):
+        return True
+    return parts.path.rstrip('/').endswith('/search') and 'q=' in parts.query
+
+
 def site_rank(url):
     host = (urllib.parse.urlsplit(url).hostname or '').lower()
     for i, site in enumerate(SITE_HOSTS):
@@ -430,9 +444,23 @@ def check_research(text, names):
 
 # ------------------------------------------------------------ verify
 
-def verify_cites(item, sources, pieces):
+def says_more_than(quote, given):
+    """True when a folded quote has QUOTE_MIN characters of its own once the
+    store's words for the achievement (its name, description, DLC) are
+    taken out. A local model's "verified" cites on 2026-11-05 were often
+    just "King of the Swamp" or "End of Zoe DLC": on the page, but proof of
+    nothing."""
+    rest = quote
+    for words in sorted((fold(g) for g in given if g), key=len, reverse=True):
+        if len(words) >= 4:
+            rest = rest.replace(words, ' ')
+    return len(re.sub(r'[^a-z0-9]+', '', rest)) >= QUOTE_MIN - 2
+
+
+def verify_cites(item, sources, pieces, given=()):
     """Mark each cite verified when its quote is in the source it names (a
-    URL or a chunk id), or else in any source we hold; then list the
+    URL or a chunk id), or else in any source we hold, and says more than
+    `given` (the store's own text for the achievement); then list the
     item's claims as unverified when none verified."""
     by_chunk = {p['id']: p['url'] for p in pieces}
     folded = {url: fold(s.get('text', '')) for url, s in sources.items()}
@@ -442,7 +470,7 @@ def verify_cites(item, sources, pieces):
         url = by_chunk.get(c['source'], c['source'])
         # The prompt asks for 12-200 characters; a little over still checks.
         ok = False
-        if QUOTE_MIN <= len(quote) <= QUOTE_MAX * 2:
+        if QUOTE_MIN <= len(quote) <= QUOTE_MAX * 2 and says_more_than(quote, given):
             ok = quote in folded.get(url, '')
             if not ok:
                 hit = next((u for u, t in folded.items() if quote in t), None)
@@ -654,7 +682,7 @@ class Job:
         return best, errors
 
     def add_source(self, url, text, kind):
-        if text and text.strip():
+        if text and text.strip() and not search_page(url):
             self.sources[url] = {'kind': kind, 'fetched': int(self.clock()), 'text': text}
 
     def fetch_into(self, url, kind):
@@ -790,7 +818,8 @@ class Job:
             taken.add(key)
             entry = dict(prev)
             if new:
-                entry.update(verify_cites(new, self.sources, pieces))
+                entry.update(verify_cites(new, self.sources, pieces,
+                                          (a['name'], a.get('desc', ''), new.get('dlc', ''))))
             entry.update(name=a['name'], api=a['api'])
             plan_items[key] = entry
         plan = dict(old)
