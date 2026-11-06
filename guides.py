@@ -176,13 +176,18 @@ def walkthrough_steps(plan, name_to_api, done):
                       'achievements': apis,
                       'missables': [name_to_api[n] for n in s.get('missables') or [] if n in name_to_api],
                       'unverified': s.get('unverified') is True,
+                      'started': any(a in done for a in apis),
                       'done': bool(apis) and all(a in done for a in apis)})
     return steps
 
 
 def current_step(steps):
-    """The index of the first step with an achievement still open, or -1."""
-    return next((i for i, s in enumerate(steps) if s['achievements'] and not s['done']), -1)
+    """Where the player is: the first step with an achievement open, at or
+    after the last step where they unlocked one (a horse bond left open in
+    an early step mustn't pull a player back there); -1 when none is open."""
+    last = max((i for i, s in enumerate(steps) if s.get('started')), default=0)
+    open_at = [i for i, s in enumerate(steps) if s['achievements'] and not s['done']]
+    return next((i for i in open_at if i >= last), open_at[0] if open_at else -1)
 
 
 def plan_cost(plan):

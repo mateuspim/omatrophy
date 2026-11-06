@@ -23,7 +23,8 @@ Steps:
   excerpt names it; else a short plain name ("After the credits").
 - `text`: two to five short sentences: what to do there for 100%, where
   to look, what not to skip. Spoiler-light for hidden achievements.
-- `achievements`: names exactly as listed, the ones to get in this step.
+- `achievements`: names exactly as listed, the ones got in this step,
+  `[unlocked]` ones included: they show the player where they are.
 - `missables`: names from `achievements` that are lost if the player
   moves on without them.
 - `cites`: quotes backing the step, as below.

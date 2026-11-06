@@ -916,13 +916,21 @@ class Job:
             a = by_name.get(n, {})
             secret = a.get('hidden') and not a.get('unlocked')
             rows.append(table_line(n, table[n], a.get('unlocked'), '' if secret else a.get('desc', '')))
+        # Unlocked ones were never classified, but the walkthrough must place
+        # them: they say how far the player is. Without them MGSV's prologue
+        # and Hellbound steps were empty and the guide put a player past
+        # mission 13 back at step 2.
+        for a in self.achs:
+            if a['name'] not in table and a.get('unlocked'):
+                rows.append(f'- {a["name"]} [unlocked]: done' + (f' — {a["desc"]}' if a.get('desc') else ''))
+        every = set(table) | {a['name'] for a in self.achs}
         done = sum(1 for a in self.achs if a.get('unlocked'))
         open_achs = [by_name[n] for n in names if n in by_name and not by_name[n].get('unlocked')]
         picked = walkthrough_excerpts(open_achs, pieces)
         text = prompt('walkthrough', game=self.game, progress=f'{done} of {len(self.achs)} unlocked',
                       excerpts=excerpt_block(picked), table='\n'.join(rows))
         try:
-            steps, errors = self.ask('walkthrough', text, lambda t: check_walkthrough(t, set(table)),
+            steps, errors = self.ask('walkthrough', text, lambda t: check_walkthrough(t, every),
                                      lambda a, b: b or a)
         except RuntimeError as e:
             # The items and route are made by now; a walkthrough that

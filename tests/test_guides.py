@@ -107,6 +107,18 @@ class GuideAnswer(unittest.TestCase):
         self.assertEqual(guides.current_step(steps), 1)
         self.assertEqual(guides.current_step(steps[:1]), -1)
 
+    def test_current_step_follows_the_latest_unlock(self):
+        # Regression: MGSV put a player past mission 13 at step 2, where
+        # a horse bond was still open.
+        plan = {'walkthrough': [{'title': 'Prologue', 'achievements': ['awake']},
+                                {'title': 'C2W', 'achievements': ['horse']},
+                                {'title': 'Hellbound', 'achievements': ['gears']},
+                                {'title': 'Mission 16', 'achievements': ['caravan']}]}
+        ids = {n: n for n in ('awake', 'horse', 'gears', 'caravan')}
+        steps = guides.walkthrough_steps(plan, ids, {'awake', 'gears'})
+        self.assertEqual(guides.current_step(steps), 3)
+        self.assertEqual(guides.current_step(guides.walkthrough_steps(plan, ids, set())), 0)
+
     def test_next_skips_done_and_puts_missables_first(self):
         items = {'a': {'name': 'a'}, 'b': {'name': 'b', 'missable': True}, 'c': {'name': 'c'}, 'd': {'name': 'd'}}
         done = {'c'}

@@ -151,6 +151,13 @@ class Job(unittest.TestCase):
         self.assertFalse(first['unverified'])
         self.assertTrue(second['unverified'])
 
+    def test_walkthrough_is_told_the_unlocked_ones(self):
+        job = self.job()
+        seen = []
+        job.ask = lambda stage, text, check, merge: (seen.append(text) or ([], []))
+        job.walkthrough({'Last Lantern': {'phase': 'story'}}, ['Last Lantern'], [])
+        self.assertIn('- First Light [unlocked]: done — Light the first beacon', seen[0])
+
     def test_a_failed_walkthrough_keeps_the_guide(self):
         write(self.agent_dir, 'walkthrough', 'no tags')
         self.assertEqual(guide_maker.make(self.job())['state'], 'done')

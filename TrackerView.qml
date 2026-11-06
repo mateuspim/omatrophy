@@ -2236,7 +2236,8 @@ Item {
               readonly property bool here: root.currentStep === index
               // Behind the current step counts as passed, achievements or
               // not (a prologue with none never got its ✓).
-              readonly property bool passed: modelData.done || (root.currentStep > index)
+              // An earlier step with something still open keeps its number.
+              readonly property bool passed: modelData.done || (root.currentStep > index && modelData.achievements.length === 0)
               width: parent.width
               height: walkBody.height + Commons.Style.space(12)
               radius: Commons.Style.cornerRadius
