@@ -99,6 +99,15 @@ Item {
   property var stepOpen: ({})
   readonly property var walkSteps: guide && Array.isArray(guide.walkthrough) ? guide.walkthrough : []
   readonly property int currentStep: guide && guide.step >= 0 ? guide.step : -1
+  readonly property bool walked: hasGuide && walkSteps.length > 0
+  // Open trophies of the guide that no step holds, listed after the steps
+  // so none is lost track of.
+  readonly property var unplaced: {
+    if (!walked) return []
+    var placed = {}
+    walkSteps.forEach(function(s) { (s.achievements || []).forEach(function(a) { placed[a] = true }) })
+    return (guide.order || []).filter(function(api) { return !placed[api] && byApi[api] && !guideDone(api) })
+  }
   // The agent and model picker; folded away under a made guide.
   property bool makerOpen: false
   // Which Make-guide picker is unfolded: "agent", "model", "effort" or "".
@@ -495,6 +504,10 @@ Item {
 
   // A walkthrough step's achievements in one line: a hidden one stays
   // secret like its row, a missable one is marked, a done one ticked.
+  function stepDone(step) {
+    return (step.achievements || []).filter(function(api) { return guideDone(api) }).length
+  }
+
   function stepNames(step) {
     var missables = step.missables || []
     return (step.achievements || []).map(function(api) {
@@ -2187,7 +2200,7 @@ Item {
         Item {
           width: parent.width
           height: Math.max(upNextTitle.implicitHeight, upNextReveal.visible ? upNextReveal.height : 0)
-          visible: root.hasGuide && (root.guide.next || []).length > 0 && !root.appliedSearch
+          visible: root.hasGuide && (root.guide.next || []).length > 0 && !root.appliedSearch && !root.walked
           SectionLabel {
             id: upNextTitle
             anchors.verticalCenter: parent.verticalCenter
@@ -2208,7 +2221,7 @@ Item {
         }
         Column {
           width: parent.width
-          visible: root.hasGuide && !root.appliedSearch
+          visible: root.hasGuide && !root.appliedSearch && !root.walked
           spacing: Commons.Style.space(2)
           Repeater {
             model: root.hasGuide ? root.guide.next || [] : []
@@ -2216,8 +2229,34 @@ Item {
           }
         }
 
-        // The walkthrough (ADR 17): the game's chapters in play order, the
-        // current one open; a click opens another.
+        // With a walkthrough, the overview leads and the steps carry the
+        // rest: route, combos and Up next said the same things again.
+        Item {
+          width: parent.width
+          height: walkOverview.height
+          visible: root.walked && !root.appliedSearch && walkOverview.text !== ""
+          Column {
+            id: walkOverview
+            property string text: root.guide && root.guide.sections ? root.guide.sections.overview || "" : ""
+            width: parent.width
+            spacing: Commons.Style.space(4)
+            Row {
+              width: parent.width
+              SectionLabel { text: "OVERVIEW"; width: parent.width - walkReveal.width }
+              Chip {
+                id: walkReveal
+                visible: root.secretCount > 0
+                chosen: root.revealAll
+                text: root.revealAll ? "Hide secrets" : "Reveal all"
+                onClicked: root.toggleRevealAll()
+              }
+            }
+            Prose { width: parent.width; text: root.safeMarkdown(walkOverview.text) }
+          }
+        }
+
+        // The walkthrough (ADR 17): the game's chapters in play order, each
+        // with its trophies, the current one open; a click opens another.
         SectionLabel {
           visible: root.hasGuide && root.walkSteps.length > 0 && !root.appliedSearch
           text: "WALKTHROUGH" + (root.guide && root.guide.step >= 0 ? " · STEP " + (root.guide.step + 1) + " OF " + root.walkSteps.length : "")
@@ -2243,8 +2282,7 @@ Item {
               radius: Commons.Style.cornerRadius
               color: here ? Qt.alpha(Commons.Color.accent, 0.10) : walkHover.hovered ? Commons.Style.hoverFill : "transparent"
               opacity: passed && !open ? 0.5 : 1
-              HoverHandler { id: walkHover; cursorShape: Qt.PointingHandCursor }
-              TapHandler { onTapped: root.toggleStep(walkRow.index) }
+              HoverHandler { id: walkHover }
               Text {
                 textFormat: Text.PlainText
                 id: walkNumber
@@ -2269,7 +2307,19 @@ Item {
                   textFormat: Text.PlainText
                   width: parent.width
                   wrapMode: Text.Wrap
+                  rightPadding: walkCount.implicitWidth + Commons.Style.space(8)
                   text: walkRow.modelData.title
+                  // Only the title folds: a click on a trophy row finds it
+                  // in the list instead.
+                  HoverHandler { cursorShape: Qt.PointingHandCursor }
+                  TapHandler { onTapped: root.toggleStep(walkRow.index) }
+                  Caption {
+                    id: walkCount
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    visible: walkRow.modelData.achievements.length > 0
+                    text: root.stepDone(walkRow.modelData) + " / " + walkRow.modelData.achievements.length
+                  }
                   color: walkRow.here ? Commons.Color.accent : root.foreground
                   font.family: Commons.Style.font.family
                   font.pixelSize: Commons.Style.font.bodySmall
@@ -2283,9 +2333,14 @@ Item {
                 Caption {
                   textFormat: Text.PlainText
                   width: parent.width
-                  wrapMode: walkRow.open ? Text.Wrap : Text.NoWrap
-                  visible: text !== ""
+                  visible: !walkRow.open && text !== ""
                   text: root.stepNames(walkRow.modelData)
+                }
+                // Open, a step lists its trophies in full, done ones too,
+                // so every one can be followed where the game asks for it.
+                Repeater {
+                  model: walkRow.open ? walkRow.modelData.achievements : []
+                  delegate: GuideRow { required property string modelData; api: modelData }
                 }
                 Caption {
                   textFormat: Text.PlainText
@@ -2299,8 +2354,22 @@ Item {
           }
         }
 
+        SectionLabel {
+          visible: root.unplaced.length > 0 && !root.appliedSearch
+          text: "NOT IN A STEP · " + root.unplaced.length
+        }
+        Column {
+          width: parent.width
+          visible: root.unplaced.length > 0 && !root.appliedSearch
+          spacing: Commons.Style.space(2)
+          Repeater {
+            model: root.appliedSearch ? [] : root.unplaced
+            delegate: GuideRow { required property string modelData; api: modelData }
+          }
+        }
+
         Repeater {
-          model: root.hasGuide && !root.appliedSearch
+          model: root.hasGuide && !root.appliedSearch && !root.walked
                  ? [{ key: "overview", title: "OVERVIEW" }, { key: "route", title: "RECOMMENDED ROUTE" },
                     { key: "missables", title: "MISSABLES" }, { key: "combos", title: "COMBOS" }] : []
           delegate: Column {

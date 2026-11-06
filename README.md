@@ -157,10 +157,13 @@ until you hide them again.
 Anything no source backs says
 "(unverified)". With a guide, the Now tab's **Up next** follows its route.
 
-Under Up next, the **walkthrough** goes through the game's chapters or
-missions in play order, with the achievements to get in each and a ⚠ on
-the ones you lose by moving on. The step you're on (the first with an
-achievement left) is open; click another to read it
+A guide with a **walkthrough** leads with it, under a short overview: the
+game's chapters or missions in play order, each with its progress
+("1 / 3") and its trophies in full, done ones ticked, a ⚠ on the ones you
+lose by moving on. The step you're on (the first with a trophy left, at
+or after your latest unlock) is open; click a step's title to open or
+fold it. Trophies no step holds follow under **Not in a step**. Without
+a walkthrough, Up next and the route show as before
 ([ADR 17](docs/adr/0017-walkthrough-is-a-maker-stage.md)). A guide made
 before 0.7.0 has none: the tracker says "older maker", and **Make again**
 adds one.

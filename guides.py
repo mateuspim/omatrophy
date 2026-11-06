@@ -153,7 +153,11 @@ def guide_answer(store, app, achievements, folder=None):
     name_to_api = {i['name']: api for api, i in items.items()}
     order = [name_to_api[n] for n in plan.get('order', []) if n in name_to_api]
     order += [api for api in items if api not in order]
-    steps = walkthrough_steps(plan, name_to_api, done)
+    # A step names unlocked trophies too, which were never classified, so
+    # it maps through every achievement of the game.
+    every_api = {a['name']: a['api'] for a in achievements}
+    every_api.update(name_to_api)
+    steps = walkthrough_steps(plan, every_api, done)
     return {'store': store, 'app': str(app), 'file': os.path.basename(path),
             'generated': plan.get('generated', 0), 'order': order, 'items': items,
             'sections': plan.get('sections') or {}, 'notes': notes, 'ticks': ticks,

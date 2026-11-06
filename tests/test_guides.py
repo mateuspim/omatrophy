@@ -107,6 +107,17 @@ class GuideAnswer(unittest.TestCase):
         self.assertEqual(guides.current_step(steps), 1)
         self.assertEqual(guides.current_step(steps[:1]), -1)
 
+    def test_walkthrough_maps_unlocked_trophies_not_in_the_plan(self):
+        with tempfile.TemporaryDirectory() as d:
+            guides.import_guides(SAMPLES, folder=d)
+            path = guides.find_guide('steam', '1', d)
+            plan = guides.load_plan(path)
+            plan['walkthrough'] = [{'title': 'Start', 'achievements': ['First Light']}]
+            with open(guides.plan_path(path), 'w') as f:
+                json.dump(plan, f)
+            out = guides.guide_answer('steam', '1', ACHS, d)
+        self.assertEqual(out['walkthrough'][0]['achievements'], ['A1'])
+
     def test_current_step_follows_the_latest_unlock(self):
         # Regression: MGSV put a player past mission 13 at step 2, where
         # a horse bond was still open.
