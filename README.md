@@ -170,7 +170,10 @@ until their lock is checked on your machine: **Check** in
 **Settings > Guides** asks the agent to write a file and run a command, and
 turns it on if it can't (again after the agent updates). Pick the agent (or follow
 `omarchy default agent`), its model (any the agent lists, or type another)
-and effort in the tracker or in **Settings > Guides**. With
+and effort in the tracker or in **Settings > Guides**. The model list marks
+the [guide bench](docs/guide/guide-models.md)'s best pick for the agent
+with ★ (Opus for Claude Code, GPT-6.1 Terra for Codex); the agent's own
+default stays until you pick. With
 [ai-jail](https://github.com/akitaonrails/ai-jail) installed, **Sandbox**
 runs the agent inside it as well. A local model needs its server let in:
 **Jail options** under Sandbox (or `guide jail-options`) adds ai-jail

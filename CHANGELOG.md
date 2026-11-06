@@ -41,6 +41,8 @@ open; the watcher and `Tracker.qml` are unchanged, so no restart is needed.
 - The Sandbox works with ai-jail 3.x, which refused every agent: OmaTrophy
   passes the network and the agent's login itself and starts from a clean
   policy, so there is nothing to approve in `ai-jail configure`.
+- Settings > Guides marks the guide bench's best model for the picked
+  agent with ★, right under the agent's default.
 - `guide bench --no-jail` runs outside ai-jail whatever the Sandbox
   setting says.
 - Bench results for seven agent and model pairs on three games in the
