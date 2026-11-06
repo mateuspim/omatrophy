@@ -592,6 +592,19 @@ class Bench(unittest.TestCase):
             self.assertEqual(read(os.path.join(guides_dir, 'starfall-odyssey-1.md.prev')), 'mine\n')
 
 
+class JobsCommand(unittest.TestCase):
+    # Regression: `guide jobs` printed the usage, as the dispatcher didn't
+    # route it, and the tracker and panel saw no job at all.
+    def test_guide_jobs_runs_through_main(self):
+        import io, omatrophy
+        from contextlib import redirect_stdout
+        out = io.StringIO()
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {'HOME': d, 'XDG_DATA_HOME': d}), \
+                redirect_stdout(out):
+            omatrophy.main(['x', 'guide', 'jobs'])
+        self.assertEqual(json.loads(out.getvalue()), {'jobs': [], 'max': guide_maker.MAX_JOBS})
+
+
 class ModelPick(unittest.TestCase):
     def test_guide_model_saves_effort_and_endpoint_and_clears(self):
         import io, omatrophy

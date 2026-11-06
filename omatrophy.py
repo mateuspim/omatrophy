@@ -849,7 +849,8 @@ def guide(args):
         imported, skipped = guides.import_guides(args[1], replace=len(args) == 3)
         print(f'imported {imported}, skipped {skipped}')
         return
-    if args[:1] in (['make'], ['stop'], ['status'], ['agents'], ['model'], ['jail'], ['jail-options'], ['bench'], ['check']):
+    if args[:1] in (['make'], ['stop'], ['status'], ['jobs'], ['agents'], ['model'], ['jail'], ['jail-options'], ['bench'],
+                    ['check']):
         return guide_job(args)
     found = found_stores()
     if not args:
@@ -860,7 +861,7 @@ def guide(args):
         raise SystemExit(f'usage: omatrophy.py guide [{"|".join(s.id for s in found)} <game id>]\n'
                          '       omatrophy.py guide import <folder> [--replace]\n'
                          '       omatrophy.py guide make <store> <app> [--no-web] [--notify] [--jail|--no-jail] [--agent a] [--model m] [--effort e]\n'
-                         '       omatrophy.py guide stop|status|agents\n'
+                         '       omatrophy.py guide stop|status [store app] | jobs | agents\n'
                          '       omatrophy.py guide model <agent> <model> [effort] [@http://endpoint] | default\n'
                          '       omatrophy.py guide jail | jail-options <agent> [ai-jail options...]')
     print(json.dumps(guides.guide_answer(store.id, app, store.achievements(app))))
