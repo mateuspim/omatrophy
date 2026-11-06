@@ -1354,6 +1354,10 @@ def main(argv):
         demo(argv[2:] or ['unlock', 'rare', 'platinum'])
     elif cmd == 'set' and len(argv) == 4:
         set_option(argv[2], argv[3])
+    elif cmd == 'guide-key' and len(argv) <= 3:
+        # Called by Service.qml with the plugin's Guide key setting (ADR 18).
+        import guide_key
+        print(json.dumps(guide_key.sync(argv[2] if len(argv) == 3 else guide_key.DEFAULT)))
     elif cmd == 'sync':
         sync()
     elif cmd == 'steam-load' and argv[2:] in ([], ['all']):

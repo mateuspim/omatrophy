@@ -26,6 +26,18 @@
       "steam",
       "achievements",
       "trophy"
+    ],
+    "defaults": {
+      "guideKey": "SUPER + CTRL + G"
+    },
+    "schema": [
+      {
+        "key": "guideKey",
+        "type": "string",
+        "label": "Guide key",
+        "defaultValue": "SUPER + CTRL + G",
+        "description": "Key that opens the running game's guide over it and closes it again, like Steam's Shift+Tab, written like SUPER + CTRL + G. Leave empty to bind none and use your own Hyprland bind to omarchy-shell shell toggle pym.omatrophy '{\"view\":\"guide\"}' instead. A key another binding already uses is refused, with a notification."
+      }
     ]
   }
 }

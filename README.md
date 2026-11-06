@@ -167,15 +167,15 @@ adds one.
 
 ### The guide over your game
 
-Like Steam's Shift+Tab overlay: one key opens the guide of the game you're
-playing over it, and the same key (or Escape) closes it. No guide yet?
-**Make guide** is right there. OmaTrophy never edits your Hyprland config,
-so add the bind yourself: **Settings > Guides > Copy key bind** copies
-this line for `~/.config/hypr/bindings.lua`:
-
-```lua
-o.bind("SUPER + CTRL + G", "OmaTrophy guide", "omarchy-shell shell toggle pym.omatrophy '{\"view\":\"guide\"}'")
-```
+Like Steam's Shift+Tab overlay: **Super+Ctrl+G** opens the guide of the
+game you're playing over it, and the same key (or Escape) closes it. No
+guide yet? **Make guide** is right there. Change the key under **Guide
+key** in Omarchy's plugin settings for OmaTrophy; a key another binding
+already uses is refused, with a notification and a note in
+**Settings > Guides**. Leave it empty to bind none and keep your own bind
+to `omarchy-shell shell toggle pym.omatrophy '{"view":"guide"}'`.
+OmaTrophy binds the key at runtime and never edits your Hyprland config
+([ADR 18](docs/adr/0018-bind-the-guide-key-at-runtime.md)).
 
 While the guide is open it takes the keyboard, like the Steam overlay; a
 game that pauses when it loses focus pauses

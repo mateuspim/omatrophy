@@ -287,10 +287,9 @@ Column {
 
   // Asks Panel.qml to open the tracker on one game; the panel owns the
   // shell handle, this file only knows the game.
-  // The Hyprland line for the in-game guide (ADR 16); Copy key bind puts
-  // it on the clipboard.
-  readonly property string guideBind: "o.bind(\"SUPER + CTRL + G\", \"OmaTrophy guide\", \"omarchy-shell shell toggle pym.omatrophy '{\\\"view\\\":\\\"guide\\\"}'\")"
-  property bool bindCopied: false
+  // How the service's last bind of the Guide key went (guide_key.py):
+  // {key, bound, error}.
+  property var guideKeyState: ({})
 
   signal track(string store, string app, string api)
 
@@ -613,6 +612,14 @@ Column {
       if (root.games !== null) return
       try { root.games = JSON.parse(text()); root.gamesText = text().trim() } catch (e) {}
     }
+  }
+
+  FileView {
+    path: root.live ? Quickshell.env("HOME") + "/.local/state/omatrophy/guide-key.json" : ""
+    watchChanges: true
+    printErrors: false
+    onFileChanged: reload()
+    onLoaded: { try { root.guideKeyState = JSON.parse(text()) } catch (e) {} }
   }
 
   FileView {
@@ -4531,16 +4538,15 @@ Column {
         text: root.guideText()
       }
 
-      // The guide over a running game (ADR 16): a bind the owner adds,
-      // as OmaTrophy never edits their Hyprland config.
+      // The guide over a running game (ADR 18): the service binds the
+      // plugin setting and writes how that went to guide-key.json.
       SettingRow {
         label: "IN GAME"
-        PillButton {
-          label: root.bindCopied ? "Copied" : "Copy key bind"
-          onClicked: {
-            Quickshell.execDetached(["wl-copy", root.guideBind])
-            root.bindCopied = true
-          }
+        Caption {
+          textFormat: Text.PlainText
+          anchors.verticalCenter: parent ? parent.verticalCenter : undefined
+          text: root.guideKeyState.bound ? root.guideKeyState.bound : root.guideKeyState.error ? "Not bound" : "No key"
+          color: root.guideKeyState.error ? Commons.Color.accent : root.foreground
         }
       }
       Caption {
@@ -4548,9 +4554,10 @@ Column {
         width: root.width
         wrapMode: Text.WordWrap
         elide: Text.ElideNone
-        opacity: 0.4
-        text: "Open the guide over your game with a key, like Steam's Shift+Tab: paste the bind into ~/.config/hypr/bindings.lua. "
-              + "Super+Ctrl+G opens the guide of the game running now, and closes it again."
+        opacity: root.guideKeyState.error ? 0.8 : 0.4
+        text: (root.guideKeyState.error ? root.guideKeyState.error + " " : "")
+              + "The key opens the guide of the game running now over it, and closes it again, like Steam's Shift+Tab. "
+              + "Change it under Guide key in Omarchy's plugin settings for OmaTrophy."
       }
     }
 

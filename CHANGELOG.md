@@ -14,9 +14,11 @@
   missions in play order, with the achievements to get in each and the
   missable ones marked, the step you're on open (ADR 17). One more agent
   call per guide.
-- **The guide over your game**: a key (Super+Ctrl+G suggested; copy
-  the bind from Settings > Guides) opens the running game's guide over
-  it and closes it again, like Steam's Shift+Tab (ADR 16).
+- **The guide over your game**: Super+Ctrl+G opens the running game's
+  guide over it and closes it again, like Steam's Shift+Tab (ADR 16).
+  Change it under **Guide key** in Omarchy's plugin settings; a key in
+  use is refused with a notification (ADR 18). Needs one
+  `omarchy restart shell`, with no game running.
 - **Reveal all** is remembered (`reveal-hidden`) for every game and
   every open, sits next to Up next too, and Shift+Enter flips it.
 

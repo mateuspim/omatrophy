@@ -56,6 +56,7 @@ $(if $picker; then cat <<PICK
 PICK
 else cat <<SERVICE
   Trophy.Service {
+    bindsGuideKey: false
     watchCommand: ["python3", "$repo/omatrophy.py", "demo", ${args%, }]
   }
 SERVICE

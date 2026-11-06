@@ -1,6 +1,6 @@
 # 16. The in-game guide is the tracker's Guide tab on a key
 
-- Status: Accepted
+- Status: Accepted; how the key is bound superseded by [ADR 18](0018-bind-the-guide-key-at-runtime.md)
 - Date: 2026-11-06
 
 ## Context
