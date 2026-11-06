@@ -17,3 +17,6 @@ design/review/
 
 # The owner's private ids, checked by tests/test_hygiene.py; never commit
 .private-strings
+
+# ai-jail's per-project sandbox config, written on a jailed agent's first run
+.ai-jail
