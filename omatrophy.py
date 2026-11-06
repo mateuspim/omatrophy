@@ -21,7 +21,7 @@ Usage:
                                       extra ai-jail options for that agent (a local model's key file); none clears
   omatrophy.py guide check <agent> [model] [--jail]
                                       check on a real run that the agent stays locked down; a pass enables it
-  omatrophy.py guide bench <store> <app> <agent:model[:effort][@endpoint]>... [--no-web] [--jail] [--pick] [--keep]
+  omatrophy.py guide bench <store> <app> <agent:model[:effort][@endpoint]>... [--no-web] [--jail|--no-jail] [--pick] [--keep]
                                       make one game's guide with each, side by side, and rank them
   omatrophy.py set guide-agent default|claude|...   set guide-web on|off   set guide-jail on|off
   omatrophy.py set position <where>   top-center, top-left or top-right (applies live)
@@ -908,7 +908,7 @@ def guide_job(args):
                          '       omatrophy.py guide model <agent> <model> [effort] [@http://endpoint] | default\n'
                          '       omatrophy.py guide jail | jail-options <agent> [ai-jail options...]\n'
                          '       omatrophy.py guide bench <store> <app> <agent:model[:effort][@endpoint]>... '
-                         '[--no-web] [--jail] [--pick] [--keep]\n'
+                         '[--no-web] [--jail|--no-jail] [--pick] [--keep]\n'
                          '       omatrophy.py guide check <agent> [model] [--jail]')
 
 
@@ -1029,7 +1029,7 @@ def guide_bench(store_id, app, words, cfg):
     side by side, and rank them (guide_bench.py)."""
     import guide_agents, guide_bench as bench
     flags = {w for w in words if w.startswith('--')}
-    unknown = flags - {'--no-web', '--jail', '--pick', '--keep'}
+    unknown = flags - {'--no-web', '--jail', '--no-jail', '--pick', '--keep'}
     if unknown:
         raise SystemExit(f'omatrophy: guide bench: unknown option {sorted(unknown)[0]}')
     entries = [bench.parse_entry(w) for w in words if not w.startswith('--')]
@@ -1037,7 +1037,7 @@ def guide_bench(store_id, app, words, cfg):
         raise SystemExit('omatrophy: guide bench: name at least one agent:model, e.g. claude:sonnet claude:opus:high')
     for e in entries:
         guide_agents.resolve(e['agent'])
-    jail = use_jail(True if '--jail' in flags else None, cfg)
+    jail = use_jail(True if '--jail' in flags else False if '--no-jail' in flags else None, cfg)
     web = '--no-web' not in flags and cfg.get('guide-web', True) is not False
     store, achs, minutes = guide_target(store_id, app)
     run_dir, results = bench.bench(store.id, app, store.game_name(app), achs, entries, web=web, jail=jail,

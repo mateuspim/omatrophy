@@ -571,6 +571,26 @@ class SandboxWithoutJail(unittest.TestCase):
             self.assertTrue(omatrophy.use_jail(None, {'guide-jail': True}, say=said.append))
         self.assertEqual(len(said), 1)
 
+    # The bench followed the saved Sandbox with no way out, so ai-jail 3.1
+    # (which refused every agent) blocked benching unless the setting changed.
+    def test_bench_no_jail_overrides_the_saved_setting(self):
+        import omatrophy, guide_bench
+        store = mock.Mock(id='steam')
+        seen = {}
+
+        def fake_bench(*a, **kw):
+            seen.update(kw)
+            return '/x', [{'state': 'done', 'agent': 'claude', 'model': 'haiku', 'effort': '', 'endpoint': ''}]
+        with mock.patch.object(guide_agents, 'jail_installed', return_value=True), \
+                mock.patch.object(guide_agents, 'resolve'), \
+                mock.patch.object(omatrophy, 'guide_target', return_value=(store, [], 60)), \
+                mock.patch.object(guide_bench, 'bench', side_effect=fake_bench), \
+                mock.patch.object(guide_bench, 'table', return_value=''), mock.patch('builtins.print'):
+            omatrophy.guide_bench('steam', '1', ['claude:haiku', '--no-jail'], {'guide-jail': True})
+            self.assertFalse(seen['jail'])
+            omatrophy.guide_bench('steam', '1', ['claude:haiku'], {'guide-jail': True})
+            self.assertTrue(seen['jail'])
+
     def test_jail_version_reads_the_number_or_nothing(self):
         answer = lambda out: (lambda argv, **kw: mock.Mock(stdout=out))
         with mock.patch.object(guide_agents, 'jail_installed', return_value=True):
