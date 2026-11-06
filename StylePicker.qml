@@ -304,12 +304,49 @@ Column {
   property var defaultKeyCheck: ({})
   property var draftKeyCheck: ({})
   property bool keyEditing: false
+  // Why the last key press was not taken, shown under the recorder.
+  property string keyHint: ""
   property string keyDraft: ""
   // The field holds a key other than the installed one (same key, written
   // another way, counts as the same).
   readonly property bool keyChanged: {
     var draft = String(keyDraft).toUpperCase().replace(/\s+/g, "")
     return draft !== "" && draft !== guideKeyInstalled.toUpperCase().replace(/\s+/g, "")
+  }
+
+  // A key press as Hyprland's key spec ("SUPER + ALT + G"): null for a
+  // modifier alone (still waiting), "" for one guide_key.py would refuse
+  // (no modifier, or a key it can't name).
+  function recordedKey(event) {
+    var k = event.key
+    if ([Qt.Key_Shift, Qt.Key_Control, Qt.Key_Alt, Qt.Key_Meta, Qt.Key_Super_L, Qt.Key_Super_R, Qt.Key_AltGr,
+         Qt.Key_Hyper_L, Qt.Key_Hyper_R].indexOf(k) >= 0) return null
+    var mods = []
+    if (event.modifiers & Qt.MetaModifier) mods.push("SUPER")
+    if (event.modifiers & Qt.ControlModifier) mods.push("CTRL")
+    if (event.modifiers & Qt.AltModifier) mods.push("ALT")
+    if (event.modifiers & Qt.ShiftModifier) mods.push("SHIFT")
+    var name = ""
+    if (k >= Qt.Key_A && k <= Qt.Key_Z) name = String.fromCharCode(k)
+    else if (k >= Qt.Key_0 && k <= Qt.Key_9) name = String.fromCharCode(k)
+    else if (k >= Qt.Key_F1 && k <= Qt.Key_F35) name = "F" + (k - Qt.Key_F1 + 1)
+    else {
+      var named = {}
+      named[Qt.Key_Space] = "SPACE"; named[Qt.Key_Tab] = "TAB"; named[Qt.Key_Backspace] = "BACKSPACE"
+      named[Qt.Key_Delete] = "DELETE"; named[Qt.Key_Insert] = "INSERT"; named[Qt.Key_Home] = "HOME"
+      named[Qt.Key_End] = "END"; named[Qt.Key_PageUp] = "PRIOR"; named[Qt.Key_PageDown] = "NEXT"
+      named[Qt.Key_Left] = "LEFT"; named[Qt.Key_Right] = "RIGHT"; named[Qt.Key_Up] = "UP"; named[Qt.Key_Down] = "DOWN"
+      named[Qt.Key_Comma] = "COMMA"; named[Qt.Key_Period] = "PERIOD"; named[Qt.Key_Slash] = "SLASH"
+      named[Qt.Key_Backslash] = "BACKSLASH"; named[Qt.Key_Semicolon] = "SEMICOLON"; named[Qt.Key_Apostrophe] = "APOSTROPHE"
+      named[Qt.Key_Minus] = "MINUS"; named[Qt.Key_Equal] = "EQUAL"; named[Qt.Key_QuoteLeft] = "GRAVE"
+      named[Qt.Key_BracketLeft] = "BRACKETLEFT"; named[Qt.Key_BracketRight] = "BRACKETRIGHT"
+      named[Qt.Key_Print] = "PRINT"; named[Qt.Key_Pause] = "PAUSE"
+      name = named[k] || ""
+    }
+    if (!name) return ""
+    if (!mods.length && name.charAt(0) !== "F") return ""
+    if (!mods.length && name.length === 1) return ""
+    return mods.concat([name]).join(" + ")
   }
 
   function keyLabel(spec) {
@@ -4645,7 +4682,7 @@ Column {
           PillButton {
             visible: !root.keyEditing && (root.guideKeyInstalled !== "" || root.defaultKeyCheck.taken !== "")
             label: root.guideKeyInstalled !== "" ? "Change" : "Pick a key"
-            onClicked: { root.keyEditing = true; root.keyDraft = root.guideKeyInstalled || "" }
+            onClicked: { root.keyEditing = true; root.keyDraft = root.guideKeyInstalled || ""; root.keyHint = ""; root.draftKeyCheck = ({}) }
           }
           PillButton {
             visible: root.guideKeyInstalled !== "" && !root.keyEditing
@@ -4675,30 +4712,49 @@ Column {
           color: Qt.alpha(root.foreground, 0.03)
           border.width: 1
           border.color: Qt.alpha(root.foreground, keyField.activeFocus ? 0.3 : 0.08)
-          TextInput {
+          // Records a key press, not typed text: the owner typed a word
+          // once, and Hyprland refused it.
+          Item {
             id: keyField
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.leftMargin: Commons.Style.space(12)
-            anchors.rightMargin: Commons.Style.space(12)
-            anchors.verticalCenter: parent.verticalCenter
-            clip: true
-            color: root.foreground
-            selectionColor: Qt.alpha(Commons.Color.accent, 0.4)
-            font.family: Commons.Style.font.family
-            font.pixelSize: Commons.Style.font.bodySmall
-            text: root.keyDraft
-            onTextEdited: { root.keyDraft = text; root.draftKeyCheck = ({}) }
-            onAccepted: if (root.keyChanged) root.tryGuideKey(text)
-            Keys.onEscapePressed: { root.keyEditing = false; focus = false }
+            anchors.fill: parent
+            focus: root.keyEditing
+            onVisibleChanged: if (visible) forceActiveFocus()
+            Keys.onPressed: function(event) {
+              event.accepted = true
+              if (event.key === Qt.Key_Escape) { root.keyEditing = false; return }
+              if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && !event.modifiers && root.keyChanged) {
+                root.tryGuideKey(root.keyDraft)
+                return
+              }
+              var spec = root.recordedKey(event)
+              if (spec === null) return  // a modifier alone: wait for the key
+              root.draftKeyCheck = ({})
+              root.keyHint = spec === "" ? "Hold Super, Ctrl, Alt or Shift with a letter, digit or F-key." : ""
+              if (spec !== "") root.keyDraft = spec
+            }
+            TapHandler { onTapped: keyField.forceActiveFocus() }
             Text {
               textFormat: Text.PlainText
+              anchors.left: parent.left
+              anchors.leftMargin: Commons.Style.space(12)
               anchors.verticalCenter: parent.verticalCenter
-              visible: !keyField.text
-              text: "Like SUPER + ALT + G"
+              text: root.keyDraft ? root.keyLabel(root.keyDraft) : "Press the keys…"
               color: root.foreground
-              opacity: 0.4
-              font: keyField.font
+              opacity: root.keyDraft ? 1 : 0.4
+              font.family: Commons.Style.font.family
+              font.pixelSize: Commons.Style.font.bodySmall
+              font.bold: !!root.keyDraft
+            }
+            Text {
+              textFormat: Text.PlainText
+              anchors.right: parent.right
+              anchors.rightMargin: Commons.Style.space(12)
+              anchors.verticalCenter: parent.verticalCenter
+              visible: keyField.activeFocus
+              text: "recording"
+              color: Commons.Color.accent
+              font.family: Commons.Style.font.family
+              font.pixelSize: Commons.Style.font.caption
             }
           }
         }
@@ -4723,8 +4779,9 @@ Column {
         elide: Text.ElideNone
         visible: text !== ""
         color: Commons.Color.accent
-        text: root.keyEditing && root.draftKeyCheck.key !== undefined
-              ? (!root.draftKeyCheck.valid ? "⚠ \"" + root.keyDraft + "\" is not a key. Write it like SUPER + ALT + G."
+        text: root.keyEditing && root.keyHint ? "⚠ " + root.keyHint
+              : root.keyEditing && root.draftKeyCheck.key !== undefined
+              ? (!root.draftKeyCheck.valid ? "⚠ " + root.keyLabel(root.keyDraft) + " can't be used; press another."
                  : root.draftKeyCheck.taken ? "⚠ " + root.keyLabel(root.draftKeyCheck.key) + " is already used by " + root.draftKeyCheck.taken + "." : "")
               : (root.guideKeyInstalled !== "" && root.guideKeyState.error ? root.guideKeyState.error : "")
       }

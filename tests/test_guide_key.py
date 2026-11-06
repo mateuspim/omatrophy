@@ -14,6 +14,12 @@ class GuideKey(unittest.TestCase):
         self.assertEqual(guide_key.parse('')['spec'], '')
         self.assertIsNone(guide_key.parse('SUPER + HYPER + G'))
         self.assertIsNone(guide_key.parse('SUPER + G"); os.exit()'))
+        # Regression: any word passed, and Hyprland refused it.
+        self.assertIsNone(guide_key.parse('dsadsadsa'))
+        self.assertIsNone(guide_key.parse('SUPER + dsadsadsa'))
+        self.assertIsNone(guide_key.parse('G'))  # no modifier
+        self.assertEqual(guide_key.parse('super + space')['spec'], 'SUPER + SPACE')
+        self.assertEqual(guide_key.parse('f13')['spec'], 'F13')
 
     def test_binds_a_free_key(self):
         steps, result = guide_key.plan('SUPER + CTRL + G', [GROUP])
@@ -67,6 +73,12 @@ class GuideKey(unittest.TestCase):
                 self.assertEqual(json.load(f)['guide-key'], '')
             with self.assertRaises(SystemExit):
                 omatrophy.set_option('guide-key', 'SUPER + ')
+
+    def test_a_refused_bind_reads_plainly(self):
+        run = lambda *a: '[]' if a[0] == '-j' else 'error: return hl.bind(...):1: Unknown keysym'
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {'XDG_STATE_HOME': d}):
+            error = guide_key.sync('SUPER + PAUSE', run)['error']
+        self.assertEqual(error, 'Hyprland did not accept SUPER + PAUSE as a key; pick another.')
 
     def test_sync_without_hyprland(self):
         with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {'XDG_STATE_HOME': d}):

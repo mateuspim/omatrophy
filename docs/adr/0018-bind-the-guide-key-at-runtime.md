@@ -23,9 +23,10 @@ the owner installs one in **Settings > Guides**:
 
 - With the default (`SUPER + CTRL + G`) free, **Install Super+Ctrl+G**.
 - With it taken, a warning names the bind that has it, and **Pick a key**
-  opens a field; **Install** checks the typed key first
-  (`omatrophy.py guide-key check <key>`) and says what holds it, if
-  anything.
+  records the next key press (modifiers and a letter, digit, F-key or a
+  named key; typed text once let "dsadsadsa" reach `hl.bind`).
+  **Install** checks the key first (`omatrophy.py guide-key check
+  <key>`) and says what holds it, if anything.
 - Installed, the key shows with **Change** and **Remove**.
 
 `Service.qml` reads `guide-key` and runs `omatrophy.py guide-key <key>`

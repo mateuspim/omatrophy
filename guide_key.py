@@ -11,7 +11,13 @@ COMMAND = """omarchy-shell shell toggle pym.omatrophy '{"view":"guide"}'"""
 # Hyprland's modifier names and mask bits.
 MODIFIERS = {'SHIFT': 1, 'CAPS': 2, 'CTRL': 4, 'CONTROL': 4, 'ALT': 8, 'MOD2': 16, 'MOD3': 32,
              'SUPER': 64, 'WIN': 64, 'LOGO': 64, 'MOD4': 64, 'MOD5': 128}
-KEY = re.compile(r'^(code:\d{1,3}|[A-Za-z0-9_]{1,32})$')
+# Key names Hyprland knows (xkb keysyms) that Settings > Guides can record,
+# besides a letter, a digit, F1-F35 and code:N. Anything else is refused
+# here: "dsadsadsa" once reached hl.bind and the owner saw its Lua error.
+NAMED = {'SPACE', 'TAB', 'RETURN', 'BACKSPACE', 'DELETE', 'INSERT', 'HOME', 'END', 'PRIOR', 'NEXT',
+         'LEFT', 'RIGHT', 'UP', 'DOWN', 'COMMA', 'PERIOD', 'SLASH', 'BACKSLASH', 'SEMICOLON', 'APOSTROPHE',
+         'MINUS', 'EQUAL', 'GRAVE', 'BRACKETLEFT', 'BRACKETRIGHT', 'PRINT', 'PAUSE', 'SCROLL_LOCK'}
+KEY = re.compile(r'^(code:\d{1,3}|[A-Za-z0-9]|F([1-9]|[12]\d|3[0-5]))$', re.I)
 HYPRCTL_SECONDS = 4
 
 
@@ -25,7 +31,11 @@ def parse(text):
         return {'spec': '', 'modmask': 0, 'key': ''}
     parts = [p.strip() for p in value.split('+')]
     key = parts.pop()
-    if not KEY.match(key):
+    if not (KEY.match(key) or key.upper() in NAMED):
+        return None
+    # A bare key would take it from every app and game (an F-key alone is
+    # allowed: few apps use F13-F35, and the owner chose it).
+    if not parts and not re.match(r'^F\d+$', key, re.I):
         return None
     mask, names = 0, []
     for p in parts:
@@ -34,7 +44,7 @@ def parse(text):
             return None
         mask |= MODIFIERS[name]
         names.append(name)
-    key = key.upper() if len(key) == 1 else key
+    key = key.upper() if (len(key) == 1 or key.upper() in NAMED or re.match(r'^F\d+$', key, re.I)) else key
     return {'spec': ' + '.join(names + [key]), 'modmask': mask, 'key': key}
 
 
@@ -83,7 +93,7 @@ def plan(text, binds):
     parsed = parse(text)
     if parsed is None:
         return [], {'key': str(text), 'bound': '',
-                    'error': f'"{text}" is not a key. Write it like {DEFAULT}, or leave it empty for no key.'}
+                    'error': f'"{text}" is not a key: a modifier (SUPER, CTRL, ALT, SHIFT) and a key, like {DEFAULT}.'}
     held = ours(binds)
     here = [h for h in held if same_key({'modmask': h['modmask'], 'key': h['key']}, parsed)]
     steps = [unbind_lua(h['spec']) for h in held if h not in here]
@@ -141,7 +151,8 @@ def sync(text, run=hyprctl):
         for lua in steps:
             reply = (run('eval', lua) or '').strip()
             if reply != 'ok' and 'hl.bind(' in lua:
-                result = dict(result, bound='', error=f'Cannot bind {result["key"]}: {reply or "no answer from Hyprland"}')
+                # Hyprland's reply quotes the Lua; the owner needs only this.
+                result = dict(result, bound='', error=f'Hyprland did not accept {result["key"]} as a key; pick another.')
     path = state_path()
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, 'w', encoding='utf-8') as f:
