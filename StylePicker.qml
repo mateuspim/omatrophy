@@ -1214,6 +1214,8 @@ Column {
         width: parent.width
         text: picker.title
         color: root.foreground
+        wrapMode: Text.Wrap
+        maximumLineCount: 2
         elide: Text.ElideRight
         font.family: Commons.Style.font.family
         font.pixelSize: Commons.Style.font.body
@@ -1306,6 +1308,8 @@ Column {
               width: parent.width
               text: prow.modelData.name
               color: root.foreground
+              wrapMode: Text.Wrap
+              maximumLineCount: 2
               elide: Text.ElideRight
               font.family: Commons.Style.font.family
               font.pixelSize: Commons.Style.font.bodySmall
@@ -1710,6 +1714,8 @@ Column {
             font.family: Commons.Style.font.family
             font.pixelSize: Commons.Style.font.bodySmall
             font.bold: true
+            wrapMode: Text.Wrap
+            maximumLineCount: 2
             elide: Text.ElideRight
           }
           Caption {
@@ -1947,6 +1953,9 @@ Column {
                 width: parent.width
                 text: guideStrip.job.game || ("App " + (guideStrip.job.app || ""))
                 color: root.foreground
+                wrapMode: Text.Wrap
+                // The strip is narrow beside Stop and Open.
+                maximumLineCount: 3
                 elide: Text.ElideRight
                 font.family: Commons.Style.font.family
                 font.pixelSize: Commons.Style.font.bodySmall
@@ -1956,6 +1965,8 @@ Column {
                 textFormat: Text.PlainText
                 width: parent.width
                 text: guideStrip.job.line || ""
+                wrapMode: Text.Wrap
+                maximumLineCount: 2
                 opacity: 0.6
               }
             }
@@ -2291,6 +2302,8 @@ Column {
                 font.family: Commons.Style.font.family
                 font.pixelSize: Commons.Style.font.heading
                 font.bold: true
+                wrapMode: Text.Wrap
+                maximumLineCount: 2
                 elide: Text.ElideRight
               }
               Caption {
@@ -2401,6 +2414,8 @@ Column {
                   color: root.foreground
                   font.family: Commons.Style.font.family
                   font.pixelSize: Commons.Style.font.bodySmall
+                  wrapMode: Text.Wrap
+                  maximumLineCount: 2
                   elide: Text.ElideRight
                 }
                 Caption {
@@ -2487,7 +2502,8 @@ Column {
         transform: Translate { y: recentCard.rise }
         FadeIn { item: recentCard; order: recentCard.index }
         width: root.width
-        height: Commons.Style.space(64)
+        // Grows for a two-line name; the art keeps its size.
+        height: Math.max(Commons.Style.space(64), recentBody.implicitHeight + Commons.Style.space(12))
         radius: Commons.Style.cornerRadius
         color: recentHit.containsMouse ? Commons.Style.hoverFill
                : (platinum ? Qt.alpha(root.metalColors.platinum, 0.05) : "transparent")
@@ -2508,7 +2524,7 @@ Column {
           id: recentArt
           x: Commons.Style.space(8)
           anchors.verticalCenter: parent.verticalCenter
-          height: parent.height - Commons.Style.space(8)
+          height: Commons.Style.space(56)
           width: Math.round(height * 460 / 215)
           source: recentCard.modelData.header || ""
           label: recentCard.modelData.game
@@ -2526,6 +2542,7 @@ Column {
         }
 
         Column {
+          id: recentBody
           anchors.left: recentArt.right
           anchors.leftMargin: Commons.Style.space(10)
           anchors.right: parent.right
@@ -2541,6 +2558,8 @@ Column {
             font.family: Commons.Style.font.family
             font.pixelSize: Commons.Style.font.body
             font.bold: true
+            wrapMode: Text.Wrap
+            maximumLineCount: 2
             elide: Text.ElideRight
           }
           Row {
@@ -2668,10 +2687,14 @@ Column {
               color: root.foreground
               font.family: Commons.Style.font.family
               font.pixelSize: Commons.Style.font.bodySmall
+              wrapMode: Text.Wrap
+              maximumLineCount: 2
               elide: Text.ElideRight
             }
             Caption {
               width: parent.width
+              wrapMode: Text.Wrap
+              maximumLineCount: 2
               elide: Text.ElideRight
               text: rareRow.modelData.game + " · " + root.day(rareRow.modelData.time)
             }
@@ -2983,7 +3006,7 @@ Column {
             id: pickRow
             required property var modelData
             width: pickerBody.width
-            height: Commons.Style.space(40)
+            height: Math.max(Commons.Style.space(40), pickName.implicitHeight + Commons.Style.space(12))
             radius: Commons.Style.cornerRadius
             color: pickHit.containsMouse ? Commons.Style.hoverFill : "transparent"
             Accessible.role: Accessible.Button
@@ -2992,13 +3015,14 @@ Column {
               id: pickArt
               x: Commons.Style.space(4)
               anchors.verticalCenter: parent.verticalCenter
-              height: parent.height - Commons.Style.space(8)
+              height: Commons.Style.space(32)
               width: Math.round(height * 460 / 215)
               source: pickRow.modelData.header || ""
               label: ""
             }
             Text {
               textFormat: Text.PlainText
+              id: pickName
               anchors.left: pickArt.right
               anchors.leftMargin: Commons.Style.space(10)
               anchors.right: pickCount.left
@@ -3008,6 +3032,8 @@ Column {
               color: root.foreground
               font.family: Commons.Style.font.family
               font.pixelSize: Commons.Style.font.bodySmall
+              wrapMode: Text.Wrap
+              maximumLineCount: 2
               elide: Text.ElideRight
             }
             Caption {
@@ -3082,6 +3108,8 @@ Column {
               font.family: Commons.Style.font.family
               font.pixelSize: Commons.Style.font.body
               font.bold: true
+              wrapMode: Text.Wrap
+              maximumLineCount: 2
               elide: Text.ElideRight
             }
             Row {
@@ -3649,7 +3677,7 @@ Column {
         FadeIn { item: gameRow; order: gameRow.index }
         readonly property bool hiddenGame: root.isHidden(modelData)
         width: root.width
-        height: Commons.Style.space(46)
+        height: Math.max(Commons.Style.space(46), gameBody.implicitHeight + Commons.Style.space(10))
         // A hidden game dims its art, name and bar, but not its Show link.
         readonly property real dim: hiddenGame ? 0.45 : 1
         Accessible.role: Accessible.Button
@@ -3673,7 +3701,7 @@ Column {
           id: gameArt
           x: Commons.Style.space(8)
           anchors.verticalCenter: parent.verticalCenter
-          height: parent.height - Commons.Style.space(8)
+          height: Commons.Style.space(38)
           width: Math.round(height * 460 / 215)
           source: gameRow.modelData.header || ""
           opacity: gameRow.dim
@@ -3690,6 +3718,7 @@ Column {
           height: 16
         }
         Column {
+          id: gameBody
           anchors.left: gameArt.right
           anchors.leftMargin: Commons.Style.space(10)
           anchors.right: parent.right
@@ -3710,6 +3739,8 @@ Column {
               font.family: Commons.Style.font.family
               font.pixelSize: Commons.Style.font.bodySmall
               font.bold: true
+              wrapMode: Text.Wrap
+              maximumLineCount: 2
               elide: Text.ElideRight
             }
             // Hide or show this game; only on hover, or always for a
@@ -4311,6 +4342,8 @@ Column {
                   text: agentRow.a.name + (agentRow.a.default ? "  ·  Omarchy's pick" : "")
                   color: root.foreground
                   opacity: agentRow.usable ? 1 : 0.6
+                  wrapMode: Text.Wrap
+                  maximumLineCount: 2
                   elide: Text.ElideRight
                   font.family: Commons.Style.font.family
                   font.pixelSize: Commons.Style.font.bodySmall
@@ -4499,6 +4532,8 @@ Column {
                   width: parent.width
                   text: modelRow.m.name
                   color: modelRow.m.custom ? Commons.Color.accent : root.foreground
+                  wrapMode: Text.Wrap
+                  maximumLineCount: 2
                   elide: Text.ElideRight
                   font.family: Commons.Style.font.family
                   font.pixelSize: Commons.Style.font.bodySmall
