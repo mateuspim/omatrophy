@@ -38,6 +38,9 @@ open; the watcher and `Tracker.qml` are unchanged, so no restart is needed.
   a lock check follows the agent's own binary, not mise's.
 - A quote that only repeats the achievement's name, description or DLC no
   longer counts as verified, and search result pages are no source.
+- The Sandbox works with ai-jail 3.x, which refused every agent: OmaTrophy
+  passes the network and the agent's login itself and starts from a clean
+  policy, so there is nothing to approve in `ai-jail configure`.
 - `guide bench --no-jail` runs outside ai-jail whatever the Sandbox
   setting says.
 - Bench results for seven agent and model pairs on three games in the

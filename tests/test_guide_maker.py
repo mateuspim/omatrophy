@@ -512,6 +512,31 @@ class JailOptions(unittest.TestCase):
         self.assertEqual(argv[cut - 4:cut], ['--env', 'K', '--map', '/h/k.key'])
         self.assertEqual(argv[cut + 1:], ['opencode', 'run'])
 
+    # Regression: ai-jail 3.1 refused claude and codex ("--network and
+    # --allow-host ... are mutually exclusive") and left agents logged out.
+    def test_jailed_on_3x_starts_clean_with_agent_state_and_the_harness(self):
+        with mock.patch.object(guide_agents.shutil, 'which', return_value=None):
+            argv = guide_agents.jailed(['claude', '-p'], {}, harness='claude', version='3.1.0')
+            cut = argv.index('--')
+            for flag in ('--clean', '--agent-state', '--network'):
+                self.assertIn(flag, argv[:cut])
+            self.assertEqual(argv[argv.index('--harness') + 1], 'claude')
+            self.assertEqual(argv[cut + 1:], ['claude', '-p'])
+            unknown = guide_agents.jailed(['hermes'], {}, harness='hermes', version='3.1.0')
+            self.assertNotIn('--harness', unknown)
+
+    def test_jailed_on_2x_keeps_the_old_argv(self):
+        with mock.patch.object(guide_agents.shutil, 'which', return_value=None):
+            for version in ('2.15.0', ''):
+                argv = guide_agents.jailed(['claude', '-p'], {}, harness='claude', version=version)
+                for flag in ('--clean', '--agent-state', '--harness'):
+                    self.assertNotIn(flag, argv)
+
+    def test_jail_major(self):
+        self.assertEqual(guide_agents.jail_major('3.1.0'), 3)
+        self.assertEqual(guide_agents.jail_major('2.15.0'), 2)
+        self.assertEqual(guide_agents.jail_major(''), 0)
+
     # Regression: mise fails with "Read-only file system" in the jail, so
     # every agent installed through mise failed there; its tool runs fine.
     def test_jailed_runs_the_tool_behind_a_mise_shim(self):

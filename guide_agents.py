@@ -395,7 +395,19 @@ def jail_binary(name, runner=subprocess.run):
     return target if target != real else name
 
 
-def jailed(argv, extra_env, options=()):
+# Agents ai-jail knows by name (its presets). On 3.x OmaTrophy declares
+# the one it starts, so ai-jail mounts that agent's login state even when
+# the binary is a resolved path, and refuses a mismatch.
+JAIL_HARNESSES = ('claude', 'codex', 'opencode', 'crush', 'gemini', 'grok', 'pi')
+
+
+def jail_major(version):
+    """The major number of an ai-jail version ("3.1.0" -> 3), 0 when unknown."""
+    found = re.match(r'(\d+)', version or '')
+    return int(found.group(1)) if found else 0
+
+
+def jailed(argv, extra_env, options=(), harness='', version=None):
     """`argv` run inside ai-jail (bubblewrap, Landlock, seccomp): the agent
     sees only the job's empty folder read-write, its own state dirs and
     the network, whatever its own flags let it do. A second fence around
@@ -403,9 +415,21 @@ def jailed(argv, extra_env, options=()):
     its own lock was checked. `--exec` runs it directly, stdin and stdout
     piped as without the jail; nothing is saved to a project .ai-jail.
     `options` are the owner's extra jail options for this agent
-    (`guide-jail-options`), checked by jail_options()."""
+    (`guide-jail-options`), checked by jail_options(). `version` is the
+    installed ai-jail's (None: ask it)."""
+    version = jail_version() if version is None else version
     out = ['ai-jail', '--exec', '--no-status-bar', '--no-save-config', '--no-display', '--no-gpu',
            '--no-audio', '--no-docker', '--no-ssh', '--network']
+    if jail_major(version) >= 3:
+        # ai-jail 3.x (2026-11-06): with no terminal, a first run in a
+        # folder applies its "For developers" preset, which adds filtered
+        # egress to the agent's API host; next to our --network that
+        # fails ("--network and --allow-host ... are mutually exclusive")
+        # and agent state stays off, so the agent is logged out. The job
+        # folder is a fresh temp folder with no policy worth reading:
+        # --clean starts from the flags alone, and --agent-state is the
+        # login that 2.x mounted by default.
+        out += ['--clean', '--agent-state'] + (['--harness', harness] if harness in JAIL_HARNESSES else [])
     for name in sorted(set(JAIL_ENV) | set(extra_env)):
         if name in os.environ or name in extra_env:
             out += ['--env', name]
@@ -670,7 +694,7 @@ def run(adapter, prompt, web=False, model='', effort='', stopped=lambda: False, 
         extra = dict(env or {}, **extra)
         env = dict(os.environ, **extra)
         if jail:
-            argv = jailed(argv, extra, saved_jail_options(adapter.id))
+            argv = jailed(argv, extra, saved_jail_options(adapter.id), harness=adapter.id)
         out_path, err_path = os.path.join(folder, '.stdout'), os.path.join(folder, '.stderr')
         with open(out_path, 'wb') as out, open(err_path, 'wb') as err:
             try:

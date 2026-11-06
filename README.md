@@ -179,6 +179,10 @@ it reads. The jail keeps the network on (the agent searches the web), so a
 server on `127.0.0.1` is reachable without `--forward-port`, which ai-jail
 refuses next to it. **Check in ai-jail** runs the lock check there to see
 that the agent still answers, and `guide jail` says what is installed.
+ai-jail 2.x and 3.x both work, with nothing to approve in
+`ai-jail configure`: on 3.x OmaTrophy passes the access itself (the
+network and the agent's login), and the job's folder is a new one each
+run, so no saved ai-jail policy applies to it.
 [ai-jail](https://github.com/akitaonrails/ai-jail) is
 [Akita](https://github.com/akitaonrails)'s work; OmaTrophy only calls it.
 

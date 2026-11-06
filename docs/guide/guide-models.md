@@ -14,8 +14,9 @@ games.
   with Qwen3.8 Flash Next at a 2-bit quant on a local server, its web
   search through a self-hosted SearXNG. Effort medium, except Haiku and
   Luna at their default.
-- Web research on, outside ai-jail (ai-jail 3.1.0 refuses the way
-  OmaTrophy starts agents; every agent's own lock check passed), nothing
+- Web research on, outside ai-jail (ai-jail 3.1.0, out that day, refused
+  the way OmaTrophy started agents then; every agent's own lock check
+  passed), nothing
   picked or kept. No game was running.
 - Games, only their open achievements:
   - METAL GEAR SOLID V: GROUND ZEROES, 13 open (small)
