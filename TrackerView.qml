@@ -115,6 +115,9 @@ Item {
   readonly property bool hasGuide: !!guide && !!guide.items && (Object.keys(guide.items).length > 0 || !!guide.notes)
   readonly property bool making: job.state === "running"
   readonly property bool jobHere: !!game && job.store === game.store && String(job.app) === String(game.app)
+  // A make for this game. One for another game only holds Make back (one
+  // job at a time): its progress card showed over another game's Guide tab.
+  readonly property bool makingHere: making && jobHere
   readonly property var runnable: agents.filter(function(a) { return a.installed && a.supported })
   readonly property var pickedRow: agents.find(function(a) { return a.agent === pickAgent }) || null
   readonly property var phases: ["missable", "story", "quick", "challenge", "grind", "collect", "online"]
@@ -379,6 +382,7 @@ Item {
     if (job.web) out.push({ key: "research", label: "Search the web for guides" })
     out.push({ key: "classify", label: "Classify " + (job.open || "the open") + " achievements" })
     out.push({ key: "route", label: "Plan the route and write the notes" })
+    out.push({ key: "walkthrough", label: "Walk through the game, step by step" })
     out.push({ key: "verify", label: "Check every quote against its page" })
     return out
   }
@@ -1846,10 +1850,21 @@ Item {
         width: guidePane.width
         spacing: Commons.Style.space(12)
 
-        // The make job, this game's or another's, while it runs.
+        // Another game's make: one line, so this game's guide stays.
+        Caption {
+          textFormat: Text.PlainText
+          width: parent.width
+          visible: root.making && !root.jobHere
+          wrapMode: Text.Wrap
+          elide: Text.ElideNone
+          text: "Making the guide for " + (root.job.game || root.job.app || "another game") + " (" + (root.job.line || "running")
+                + "). One guide at a time: Make guide waits until it's done."
+        }
+
+        // This game's make job, while it runs.
         Rectangle {
           width: parent.width
-          visible: root.making
+          visible: root.makingHere
           height: jobBody.height + Commons.Style.space(24)
           radius: Commons.Style.cornerRadius
           color: Qt.alpha(Commons.Color.accent, 0.08)
@@ -1866,7 +1881,11 @@ Item {
               height: stopButton.height
               SectionLabel {
                 anchors.verticalCenter: parent.verticalCenter
-                text: root.jobHere ? "MAKING THIS GAME'S GUIDE" : "MAKING A GUIDE · " + (root.job.game || root.job.app || "")
+                anchors.left: parent.left
+                anchors.right: stopButton.left
+                anchors.rightMargin: Commons.Style.space(10)
+                elide: Text.ElideRight
+                text: "MAKING THIS GAME'S GUIDE"
                 color: Commons.Color.accent
                 opacity: 1
               }
@@ -1967,7 +1986,7 @@ Item {
         // What made the guide, and Make again; or the picker itself.
         Item {
           width: parent.width
-          visible: root.hasGuide && !root.makerOpen && !root.making
+          visible: root.hasGuide && !root.makerOpen && !root.makingHere
           // The chip is taller than the caption; sized to the caption,
           // the pane's clip cut the chip's top off.
           height: Math.max(madeText.implicitHeight, againButton.visible ? againButton.height : 0) + Commons.Style.space(4)
@@ -1994,7 +2013,7 @@ Item {
         Item {
           width: parent.width
           height: guidePane.height
-          visible: root.complete && !root.hasGuide && !root.making && root.guide !== null
+          visible: root.complete && !root.hasGuide && !root.makingHere && root.guide !== null
           Column {
             anchors.centerIn: parent
             width: Math.min(parent.width, Commons.Style.space(420))
@@ -2029,7 +2048,7 @@ Item {
         Rectangle {
           id: maker
           width: parent.width
-          visible: root.makerOpen && !root.making && root.guide !== null && !root.complete
+          visible: root.makerOpen && !root.makingHere && root.guide !== null && !root.complete
           height: makerBody.height + Commons.Style.space(24)
           radius: Commons.Style.cornerRadius
           color: Qt.alpha(root.foreground, 0.04)
@@ -2182,7 +2201,8 @@ Item {
               visible: root.runnable.length > 0
               spacing: Commons.Style.space(10)
               ActionButton {
-                text: root.hasGuide ? "Make it again" : "Make guide"
+                text: root.making ? "Waiting for the other guide" : root.hasGuide ? "Make it again" : "Make guide"
+                accent: !root.making
                 onClicked: root.makeGuide()
               }
               ActionButton {
