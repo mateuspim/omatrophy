@@ -148,7 +148,8 @@ an overview and the recommended route, then every open achievement by
 phase (missable first, then story, quick, challenge, grind, collectibles,
 online), each with its time, difficulty, counter, where the point of no
 return is, a tip and what it combines with. A hidden achievement keeps its
-name and tip secret until you hover it. Anything no source backs says
+name and tip secret until you hover it, or **Reveal all** shows every one.
+Anything no source backs says
 "(unverified)". With a guide, the Now tab's **Up next** follows its route.
 
 No guide yet? **Make guide** asks your coding agent to write one. OmaTrophy
@@ -158,15 +159,28 @@ agent searches the web if you let it, classifies the achievements in small
 batches and plans the route, and OmaTrophy checks each quote against the
 page it came from. It takes a few minutes and keeps going if you close the
 tracker; **Stop** leaves the old guide as it was. A cloud agent bills your
-account (the guide records the cost it reports).
+account (the guide records the cost it reports). A game you already have at
+100% gets no **Make guide**: there is nothing left to plan.
 
 The agent runs headless in an empty folder with no shell and no file
 tools, only web search and fetch when it researches
 ([ADR 14](docs/adr/0014-generate-guides-through-the-users-agent.md)). Claude
-Code is checked to stay locked down that way; Codex and OpenCode are
-listed as "not supported yet" until they are. Pick the agent (or follow
+Code is checked to stay locked down that way. Codex and OpenCode stay off
+until their lock is checked on your machine: **Check** in
+**Settings > Guides** asks the agent to write a file and run a command, and
+turns it on if it can't (again after the agent updates). Pick the agent (or follow
 `omarchy default agent`), its model (any the agent lists, or type another)
-and effort in the tracker or in **Settings > Guides**.
+and effort in the tracker or in **Settings > Guides**. With
+[ai-jail](https://github.com/akitaonrails/ai-jail) installed, **Sandbox**
+runs the agent inside it as well. A local model needs its server let in:
+**Jail options** under Sandbox (or `guide jail-options`) adds ai-jail
+options for the picked agent, such as `--map ~/path/to/key` for a key file
+it reads. The jail keeps the network on (the agent searches the web), so a
+server on `127.0.0.1` is reachable without `--forward-port`, which ai-jail
+refuses next to it. **Check in ai-jail** runs the lock check there to see
+that the agent still answers, and `guide jail` says what is installed.
+[ai-jail](https://github.com/akitaonrails/ai-jail) is
+[Akita](https://github.com/akitaonrails)'s work; OmaTrophy only calls it.
 
 Guides from another folder of `<slug>-<appid>.md` files (with their
 `.plan.json`) come in with `guide import`; the folder is only read.
@@ -175,21 +189,39 @@ Guides from another folder of `<slug>-<appid>.md` files (with their
 omatrophy.py guide import ~/path/to/guides     # copy guides in (--replace overwrites)
 omatrophy.py set guide-agent claude            # or default: follow omarchy default agent
 omatrophy.py guide model claude sonnet medium  # that agent's model and effort; `default` clears
+omatrophy.py guide jail                        # is ai-jail installed, the sandbox on, each agent's options
+omatrophy.py guide jail-options opencode --map ~/path/to/key  # extra ai-jail options; none clears
 omatrophy.py guide make steam 620              # make one; --no-web, --model, --effort for this run
 omatrophy.py guide status                      # the running job, as JSON; guide stop ends it
 omatrophy.py guide steam 620                   # the guide, as JSON
+```
+
+Which model writes the best guide? `guide bench` makes one game's guide
+with each, side by side, and ranks them by what OmaTrophy can check
+(quotes verified, achievements covered, fields filled), with time and
+cost. `--pick` makes the winner your default; `--keep` keeps its guide.
+A model on your own machine takes part through Claude Code pointed at a
+local Anthropic-compatible server:
+
+```bash
+omatrophy.py guide bench steam 620 claude:haiku claude:sonnet:medium \
+  claude:my-local-model@http://127.0.0.1:8080 --pick
 ```
 
 Format and stages: [docs/specs/guides.md](docs/specs/guides.md).
 
 ## Settings
 
-The panel's **Settings** tab holds the trophy style, then position, glass
+The panel's **Settings** tab opens on an **Overview**: one line per
+section saying what it is set to; click one, or pick a section above it.
+**Toasts** holds the trophy style, then position, glass
 and sound as rows of choices, and **Try it** tiles that show a toast of
 each tier with your settings. Each choice applies to the next toast.
 **Now tab** picks which sections the Now tab shows. **Guides** picks the
-agent that makes 100% guides, its model and effort, and whether it may
-search the web. Under
+agent that makes 100% guides and its model, each from a list that unfolds
+in place (every installed agent with its state; every model the agent
+lists, searchable, or any model id you type) and its effort, then whether
+it may search the web. In
 **Stores**, a card per store says whether OmaTrophy found it and how many
 games it has, or what to do when it didn't. In Steam's card, **Profile**
 fills in games this machine never ran from your public Steam profile (off

@@ -15,8 +15,15 @@ Usage:
                                       copy guide files in from another folder (read-only on it)
   omatrophy.py guide make <store> <app> [--no-web] [--agent a] [--model m] [--effort e]
                                       make a guide through your agent (ADR 14); guide stop|status|agents
-  omatrophy.py guide model <agent> <model> [effort]|default
-  omatrophy.py set guide-agent default|claude|...   set guide-web on|off
+  omatrophy.py guide model <agent> <model> [effort] [@http://endpoint]|default
+  omatrophy.py guide jail             is ai-jail installed, is the sandbox on, each agent's jail options
+  omatrophy.py guide jail-options <agent> [--map <file> --env NAME ...]
+                                      extra ai-jail options for that agent (a local model's key file); none clears
+  omatrophy.py guide check <agent> [model] [--jail]
+                                      check on a real run that the agent stays locked down; a pass enables it
+  omatrophy.py guide bench <store> <app> <agent:model[:effort][@endpoint]>... [--no-web] [--jail] [--pick] [--keep]
+                                      make one game's guide with each, side by side, and rank them
+  omatrophy.py set guide-agent default|claude|...   set guide-web on|off   set guide-jail on|off
   omatrophy.py set position <where>   top-center, top-left or top-right (applies live)
   omatrophy.py set glass <look>       clear, frosted or solid toast background
   omatrophy.py set sound on|off|omatrophy|classic
@@ -694,18 +701,20 @@ def now(recent_n=3, rarest_n=8, nearest_n=4):
 
 def games():
     """Every game with achievements as a slim card, for the Games tab. Names
-    not cached yet are looked up eight at a time, so a first open of a large
-    library takes seconds, not minutes; later opens read the cache."""
+    and store headers not cached yet are looked up eight at a time, so a
+    first open of a large library takes seconds, not minutes; later opens
+    read the cache."""
     found = found_stores()
     lib = library(found)
     played = {(s.id, g): t for s in found for t, g in s.recent()}
     hidden = hidden_games()
     with ThreadPoolExecutor(8) as pool:
         names = list(pool.map(lambda item: item[0].game_name(item[1]), lib))
-    return [dict(progress_row(s, g, achs), game=name, header=s.art(g)['header'],
+        headers = list(pool.map(lambda item: item[0].art(item[1])['header'], lib))
+    return [dict(progress_row(s, g, achs), game=name, header=header,
                  platinum=platinum_time(achs), played=played.get((s.id, g), 0),
                  hidden=game_key(s.id, g) in hidden)
-            for (s, g, achs), name in zip(lib, names)]
+            for (s, g, achs), name, header in zip(lib, names, headers)]
 
 
 # Fields of a panel or tracker answer that hold an image URL.
@@ -840,7 +849,7 @@ def guide(args):
         imported, skipped = guides.import_guides(args[1], replace=len(args) == 3)
         print(f'imported {imported}, skipped {skipped}')
         return
-    if args[:1] in (['make'], ['stop'], ['status'], ['agents'], ['model']):
+    if args[:1] in (['make'], ['stop'], ['status'], ['agents'], ['model'], ['jail'], ['jail-options'], ['bench'], ['check']):
         return guide_job(args)
     found = found_stores()
     if not args:
@@ -850,9 +859,10 @@ def guide(args):
     else:
         raise SystemExit(f'usage: omatrophy.py guide [{"|".join(s.id for s in found)} <game id>]\n'
                          '       omatrophy.py guide import <folder> [--replace]\n'
-                         '       omatrophy.py guide make <store> <app> [--no-web] [--agent a] [--model m] [--effort e]\n'
+                         '       omatrophy.py guide make <store> <app> [--no-web] [--notify] [--jail|--no-jail] [--agent a] [--model m] [--effort e]\n'
                          '       omatrophy.py guide stop|status|agents\n'
-                         '       omatrophy.py guide model <agent> <model> [effort] | default')
+                         '       omatrophy.py guide model <agent> <model> [effort] [@http://endpoint] | default\n'
+                         '       omatrophy.py guide jail | jail-options <agent> [ai-jail options...]')
     print(json.dumps(guides.guide_answer(store.id, app, store.achievements(app))))
 
 
@@ -869,20 +879,185 @@ def guide_job(args):
         print(json.dumps(guide_maker.status()))
     elif cmd == 'agents':
         print(json.dumps(guide_agents.listing(cfg)))
-    elif cmd == 'model' and len(args) in (3, 4) and args[1] in guide_agents.BY_ID:
+    elif cmd == 'model' and 3 <= len(args) <= 5 and args[1] in guide_agents.BY_ID:
         models = guide_agents.picks(cfg)
+        # `@http://...` names a local endpoint (claude: ANTHROPIC_BASE_URL).
+        endpoint = next((a[1:] for a in args[3:] if a.startswith('@')), '')
+        effort = next((a for a in args[3:] if not a.startswith('@')), '')
+        if endpoint:
+            guide_agents.endpoint_env(guide_agents.BY_ID[args[1]], endpoint)
         if args[2] == 'default':
             models.pop(args[1], None)
         else:
-            models[args[1]] = {'model': args[2], 'effort': args[3] if len(args) == 4 else ''}
+            models[args[1]] = {'model': args[2], 'effort': effort, 'endpoint': endpoint}
         cfg['guide-models'] = models
         write_json(config_path(), cfg, indent=2)
-        print(f'{args[1]}: {args[2]}' + (f' ({args[3]})' if len(args) == 4 else ''))
+        print(f'{args[1]}: {args[2]}' + (f' ({effort})' if effort else '') + (f' at {endpoint}' if endpoint else ''))
+    elif cmd == 'jail' and len(args) == 1:
+        guide_jail(cfg)
+    elif cmd == 'jail-options' and len(args) >= 2 and args[1] in guide_agents.BY_ID:
+        guide_jail_options(args[1], args[2:], cfg)
     elif cmd == 'make' and len(args) >= 3:
         guide_make(args[1], args[2], args[3:], cfg)
+    elif cmd == 'bench' and len(args) >= 4:
+        guide_bench(args[1], args[2], args[3:], cfg)
+    elif cmd == 'check' and 2 <= len(args) <= 4 and args[1] in guide_agents.BY_ID:
+        guide_check(args[1], args[2:])
     else:
         raise SystemExit('usage: omatrophy.py guide make <store> <app> [--no-web] [--agent a] [--model m] [--effort e]\n'
-                         '       omatrophy.py guide model <agent> <model> [effort] | default')
+                         '       omatrophy.py guide model <agent> <model> [effort] [@http://endpoint] | default\n'
+                         '       omatrophy.py guide jail | jail-options <agent> [ai-jail options...]\n'
+                         '       omatrophy.py guide bench <store> <app> <agent:model[:effort][@endpoint]>... '
+                         '[--no-web] [--jail] [--pick] [--keep]\n'
+                         '       omatrophy.py guide check <agent> [model] [--jail]')
+
+
+def use_jail(asked, cfg, say=print):
+    """Whether a guide job runs inside ai-jail. `asked` is the run's
+    --jail/--no-jail (None: the setting). An explicit --jail without
+    ai-jail fails; the saved setting with ai-jail gone (removed, or a
+    config copied from another machine) counts as off and says so, so a
+    make still runs behind the agent's own lock."""
+    import guide_agents
+    jail = cfg.get('guide-jail') is True if asked is None else asked
+    if not jail or guide_agents.jail_installed():
+        return jail
+    if asked:
+        raise SystemExit(f'omatrophy: guide: ai-jail not found; install it ({guide_agents.JAIL_HOME}), '
+                         'or leave out --jail')
+    say(f'note: sandbox is on but ai-jail is not installed, so the agent runs without it '
+        f'(its own lock still applies); get it at {guide_agents.JAIL_HOME}')
+    return False
+
+
+def guide_jail(cfg):
+    """`guide jail`: is ai-jail here, is the sandbox on, and what each agent
+    adds to it; exits non-zero when ai-jail isn't installed."""
+    import shlex, shutil, guide_agents
+    version = guide_agents.jail_version()
+    if not guide_agents.jail_installed():
+        raise SystemExit(f'omatrophy: guide: ai-jail not found; install it ({guide_agents.JAIL_HOME}) '
+                         'to run the agent inside it')
+    print(f'ai-jail {version or "(version unknown)"} at {shutil.which("ai-jail")}, by Akita: {guide_agents.JAIL_HOME}')
+    print('sandbox: ' + ('on' if cfg.get('guide-jail') is True else 'off (omatrophy.py set guide-jail on)'))
+    for a in guide_agents.ADAPTERS:
+        options = guide_agents.saved_jail_options(a.id, cfg)
+        if options:
+            print(f'{a.id}: ' + ' '.join(shlex.quote(o) for o in options))
+    print('check an agent in it: omatrophy.py guide check <agent> [model] --jail')
+
+
+def guide_jail_options(agent, words, cfg):
+    """`guide jail-options <agent> [options...]`: the extra ai-jail options
+    that agent runs with when the sandbox is on, such as a local model's
+    `--map` of its key file; none clears them. One string from the panel is
+    split like a shell would."""
+    import shlex, guide_agents
+    if len(words) == 1 and ' ' in words[0].strip():
+        try:
+            words = shlex.split(words[0])
+        except ValueError as e:
+            raise SystemExit(f'omatrophy: guide jail-options: could not read {words[0]!r} ({e}); check the quotes')
+    words = [w for w in words if w.strip()]
+    options = guide_agents.jail_options(words)
+    found = cfg.get('guide-jail-options')
+    saved = dict(found) if isinstance(found, dict) else {}
+    if options:
+        saved[agent] = options
+    else:
+        saved.pop(agent, None)
+    cfg['guide-jail-options'] = saved
+    write_json(config_path(), cfg, indent=2)
+    print(f'{agent} in ai-jail: ' + (' '.join(shlex.quote(o) for o in options) if options else 'no extra options'))
+
+
+def guide_check(agent, words):
+    """`guide check <agent> [model] [--jail]`: the lock check on a real run;
+    a pass (without --jail) lets that agent make guides. The panel follows
+    it through guide/check.json."""
+    import guide_agents
+    adapter = guide_agents.BY_ID[agent]
+    jail = '--jail' in words
+    model = next((w for w in words if not w.startswith('--')), '')
+    if not adapter.installed():
+        raise SystemExit(f'omatrophy: guide check: {agent} not found; install it first')
+    if not guide_agents.headless(adapter):
+        raise SystemExit(f'omatrophy: guide check: OmaTrophy has no headless command for {agent} yet, so there is '
+                         'nothing to check (docs/specs/guides.md, Agent adapters)')
+    if jail and not guide_agents.jail_installed():
+        raise SystemExit('omatrophy: guide check: ai-jail not found')
+    path = guide_agents.check_status_path()
+    lines = []
+
+    def say(line):
+        lines.append(line)
+        print(line, flush=True)
+        write_json(path, {'agent': agent, 'jail': jail, 'state': 'running', 'lines': lines, 'time': int(time.time()),
+                          'pid': os.getpid()})
+
+    say(f'checking {agent}' + (f' ({model})' if model else '') + ': asking it to write a file and run a command')
+    try:
+        result = guide_agents.check_lock(adapter, model=model, jail=jail, say=say)
+    except BaseException:
+        write_json(path, {'agent': agent, 'jail': jail, 'state': 'failed', 'lines': lines + ['interrupted'],
+                          'time': int(time.time())})
+        raise
+    verdict = ('PASS: ' + (f'{agent} runs inside ai-jail' if jail else f'{agent} can make guides now')) if result['passed'] \
+        else f'FAIL: {agent} stays off'
+    say(verdict)
+    write_json(path, {'agent': agent, 'jail': jail, 'state': 'passed' if result['passed'] else 'failed', 'lines': lines,
+                      'time': int(time.time()), 'runs': result['runs']})
+    if not result['passed']:
+        raise SystemExit(1)
+
+
+def guide_target(store_id, app):
+    """(store, achievements with rarity, minutes played) for a guide job."""
+    found = found_stores()
+    store = next((s for s in found if s.id == store_id), None)
+    if not store:
+        raise SystemExit(f'usage: omatrophy.py guide make|bench {"|".join(s.id for s in found)} <game id> ...')
+    pcts = store.percents(app)
+    achs = [dict(a, percent=pcts.get(a['api'])) for a in store.achievements(app)]
+    if not achs:
+        raise SystemExit(f'{store.name} has no achievements cached for {app}; launch it once in {store.name}')
+    return store, achs, library_playtime([store]).get((store.id, app), {}).get('total', 0)
+
+
+def guide_bench(store_id, app, words, cfg):
+    """`guide bench`: make one game's guide with each agent:model given,
+    side by side, and rank them (guide_bench.py)."""
+    import guide_agents, guide_bench as bench
+    flags = {w for w in words if w.startswith('--')}
+    unknown = flags - {'--no-web', '--jail', '--pick', '--keep'}
+    if unknown:
+        raise SystemExit(f'omatrophy: guide bench: unknown option {sorted(unknown)[0]}')
+    entries = [bench.parse_entry(w) for w in words if not w.startswith('--')]
+    if not entries:
+        raise SystemExit('omatrophy: guide bench: name at least one agent:model, e.g. claude:sonnet claude:opus:high')
+    for e in entries:
+        guide_agents.resolve(e['agent'])
+    jail = use_jail(True if '--jail' in flags else None, cfg)
+    web = '--no-web' not in flags and cfg.get('guide-web', True) is not False
+    store, achs, minutes = guide_target(store_id, app)
+    run_dir, results = bench.bench(store.id, app, store.game_name(app), achs, entries, web=web, jail=jail,
+                                   minutes=minutes)
+    print()
+    print(bench.table(results))
+    print(f'\nresults: {run_dir}/results.json')
+    best = next((r for r in results if r['state'] == 'done'), None)
+    if not best:
+        raise SystemExit('omatrophy: guide bench: no entry made a guide; see the lines above')
+    if '--pick' in flags:
+        cfg['guide-agent'] = best['agent']
+        models = guide_agents.picks(cfg)
+        models[best['agent']] = {'model': best['model'], 'effort': best['effort'], 'endpoint': best['endpoint']}
+        cfg['guide-models'] = models
+        write_json(config_path(), cfg, indent=2)
+        print(f'default now: {best["entry"]}')
+    if '--keep' in flags:
+        bench.keep(best)
+        print(f'kept {best["entry"]}\'s guide for this game (the old one is .prev)')
 
 
 def guide_make(store_id, app, flags, cfg):
@@ -891,27 +1066,33 @@ def guide_make(store_id, app, flags, cfg):
     while i < len(flags):
         if flags[i] == '--no-web':
             web, i = False, i + 1
+        elif flags[i] == '--notify':
+            opts['notify'], i = True, i + 1
+        elif flags[i] in ('--jail', '--no-jail'):
+            opts['jail'], i = flags[i] == '--jail', i + 1
         elif flags[i] in ('--agent', '--model', '--effort') and i + 1 < len(flags):
             opts[flags[i][2:]], i = flags[i + 1], i + 2
         else:
             raise SystemExit(f'omatrophy: guide make: unknown option {flags[i]}')
     adapter = guide_agents.resolve(opts.get('agent', cfg.get('guide-agent') or ''))
+    jail = use_jail(opts.get('jail'), cfg)
     pick = guide_agents.picks(cfg).get(adapter.id, {})
     if guide_maker.busy():
         raise SystemExit('omatrophy: guide: another guide is being made; stop it with: omatrophy.py guide stop')
-    found = found_stores()
-    store = next((s for s in found if s.id == store_id), None)
-    if not store:
-        raise SystemExit(f'usage: omatrophy.py guide make {"|".join(s.id for s in found)} <game id>')
-    pcts = store.percents(app)
-    achs = [dict(a, percent=pcts.get(a['api'])) for a in store.achievements(app)]
-    if not achs:
-        raise SystemExit(f'{store.name} has no achievements cached for {app}; launch it once in {store.name}')
-    minutes = library_playtime([store]).get((store.id, app), {}).get('total', 0)
+    store, achs, minutes = guide_target(store_id, app)
+    # Nothing open: a make only spent the agent's tokens on filler.
+    if all(a.get('unlocked') for a in achs):
+        raise SystemExit(f'omatrophy: guide: {store.game_name(app)} is already at 100%; there is nothing left for '
+                         'a guide to plan')
     job = guide_maker.Job(store.id, app, store.game_name(app), achs, adapter, model=opts.get('model', pick.get('model', '')),
-                          effort=opts.get('effort', pick.get('effort', '')), web=web, minutes=minutes,
+                          effort=opts.get('effort', pick.get('effort', '')), web=web, minutes=minutes, jail=jail,
+                          header=store.art(app)['header'],
+                          # The saved endpoint goes with the saved model (the tracker
+                          # passes --model too); another model is a cloud one.
+                          env=guide_agents.endpoint_env(adapter, pick.get('endpoint', '')
+                                                        if opts.get('model', pick.get('model')) == pick.get('model') else ''),
                           say=lambda line: print(line, flush=True))
-    if guide_maker.make(job)['state'] == 'failed':
+    if guide_maker.make(job, announce=opts.get('notify', False))['state'] == 'failed':
         raise SystemExit(1)
 
 
@@ -928,13 +1109,15 @@ SETTINGS = {'position': ('top-center', 'top-left', 'top-right'),
             # The panel's last picks, so the next open shows the same view.
             'games-sort': ('recent', 'closest', 'name'),
             'rarest': ('ever', 'month', 'platinum'),
+            'settings-section': ('overview', 'toasts', 'now', 'guides', 'stores'),
             'community': ('on', 'off'),
-            'guide-web': ('on', 'off')}
+            'guide-web': ('on', 'off'),
+            'guide-jail': ('on', 'off')}
 # The Now tab's sections, each shown unless switched off in Settings.
 NOW_SECTIONS = ('metals', 'recent', 'rarest', 'shelf')
 SETTINGS.update({f'now-{name}': ('on', 'off') for name in NOW_SECTIONS})
 # Settings stored as true/false rather than the word given.
-SWITCHES = {'community', 'guide-web'} | {f'now-{name}' for name in NOW_SECTIONS}
+SWITCHES = {'community', 'guide-web', 'guide-jail'} | {f'now-{name}' for name in NOW_SECTIONS}
 
 
 def set_option(key, value):

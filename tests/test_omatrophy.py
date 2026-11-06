@@ -12,6 +12,21 @@ from unittest import mock
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 import omatrophy  # noqa: E402
 from stores import steam, steam_community  # noqa: E402
+from stores import base as stores_base  # noqa: E402
+
+
+# Tests never touch the network: every store fetch goes through
+# base.OPENER (patching urllib.request.urlopen alone missed it, and a games
+# test once fetched real store headers). A test that wants a fetch patches
+# OPENER.open itself, which wins inside its own block.
+def setUpModule():
+    global NO_NETWORK
+    NO_NETWORK = mock.patch.object(stores_base.OPENER, 'open', side_effect=AssertionError('network in a test'))
+    NO_NETWORK.start()
+
+
+def tearDownModule():
+    NO_NETWORK.stop()
 
 APP = '123450'
 UID = '42'
@@ -274,7 +289,9 @@ class CheckApp(unittest.TestCase):
         offline = [mock.patch.object(steam.Steam, 'percent', return_value=22.7),
                    mock.patch.object(steam.Steam, 'game_name', return_value='Sample Game'),
                    mock.patch.object(omatrophy, 'cached', side_effect=lambda url, name: url),
-                   mock.patch.object(steam, 'cached', side_effect=lambda url, name: url)]
+                   mock.patch.object(steam, 'cached', side_effect=lambda url, name: url),
+                   # Its miss file would land in the real cache.
+                   mock.patch.object(steam.Steam, 'store_header', return_value='')]
         for p in offline:
             p.start()
             self.addCleanup(p.stop)
@@ -475,6 +492,53 @@ class GameName(unittest.TestCase):
             steam.Steam.game_name(None, APP)
             steam.Steam.game_name(None, APP)
         self.assertEqual(http.call_count, 2)
+
+
+class StoreHeader(unittest.TestCase):
+    # Newer apps keep their header under a hashed store path: the old
+    # apps/<id>/header.jpg is a 404, and the Games row showed no poster.
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.cache = tmp.name
+        patch = mock.patch.object(steam, 'CACHE', tmp.name)
+        patch.start()
+        self.addCleanup(patch.stop)
+        self.url = f'https://shared.example/store_item_assets/steam/apps/{APP}/abc/header.jpg'
+
+    def answer(self, url):
+        return {APP: {'success': True, 'data': {'name': 'N', 'header_image': url}}}
+
+    def test_the_store_header_is_saved_once(self):
+        saved = lambda url, name: open(f'{self.cache}/{name}', 'w').close() or f'file://{self.cache}/{name}'
+        os.makedirs(f'{self.cache}/art')
+        with mock.patch.object(steam, 'http_json', return_value=self.answer(self.url)) as http, \
+                mock.patch.object(steam, 'cached', side_effect=saved) as fetch:
+            first = steam.Steam.store_header(None, APP)
+            self.assertEqual(steam.Steam.store_header(None, APP), first)
+        self.assertEqual(first, f'file://{self.cache}/art/{APP}_header.jpg')
+        self.assertEqual((http.call_count, fetch.call_args[0][0]), (1, self.url))
+
+    def test_a_failed_lookup_waits_a_day(self):
+        with mock.patch.object(steam, 'http_json', side_effect=OSError('offline')) as http:
+            self.assertEqual(steam.Steam.store_header(None, APP), '')
+            self.assertEqual(steam.Steam.store_header(None, APP), '')
+        self.assertEqual(http.call_count, 1)
+        later = time.time() + steam.NAME_MISS_SECONDS + 1
+        with mock.patch.object(steam.time, 'time', return_value=later), \
+                mock.patch.object(steam, 'http_json', return_value=self.answer('not a url')) as http:
+            self.assertEqual(steam.Steam.store_header(None, APP), '')
+        self.assertEqual(http.call_count, 1)
+
+    def test_art_prefers_the_library_then_the_store_then_the_old_path(self):
+        st = steam.Steam.__new__(steam.Steam)
+        st.root = self.cache
+        with mock.patch.object(steam, 'cached', side_effect=lambda url, name: url), \
+                mock.patch.object(steam.Steam, 'store_header', return_value=''):
+            self.assertTrue(st.art(APP)['header'].endswith(f'/{APP}/header.jpg'))
+        with mock.patch.object(steam, 'cached', side_effect=lambda url, name: url), \
+                mock.patch.object(steam.Steam, 'store_header', return_value='file:///s.jpg'):
+            self.assertEqual(st.art(APP)['header'], 'file:///s.jpg')
 
 
 def ach(api, unlocked=False, t=0, **kw):

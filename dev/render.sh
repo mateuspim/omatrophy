@@ -9,9 +9,10 @@
 #   dev/render.sh games out.png          the Games tab
 #   dev/render.sh loading out.png        the Now tab's skeleton, before data
 #   dev/render.sh tracker-loading out.png
-#   dev/render.sh settings out.png       its Settings tab
+#   dev/render.sh settings out.png       its Settings tab (settings-toasts, -now, -guides, -stores: one section)
 #   dev/render.sh tracker out.png        the achievement tracker
-#   dev/render.sh guide out.png          its Guide view (guide-making: a make running; guide-empty: none yet)
+#   dev/render.sh guide out.png          its Guide view (guide-making: a make running; guide-empty: none yet;
+#                                        guide-failed: the last make failed)
 #   dev/render.sh gold out.png           a toast: bronze, silver, gold, platinum
 #   dev/render.sh --live tracker out.png the views read your real stores
 #
@@ -23,7 +24,7 @@ set -euo pipefail
 repo=$(cd "$(dirname "$0")/.." && pwd)
 live=false
 if [[ ${1:-} == --live ]]; then live=true; shift; fi
-[[ $# -eq 2 ]] || { sed -n '5,17p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+[[ $# -eq 2 ]] || { sed -n '5,18p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 target=$1
 out=$(realpath -m "$2")
 theme=$HOME/.local/state/omarchy/current/theme
@@ -41,17 +42,21 @@ ln -s /usr/share/omarchy/shell/Commons "$dir/Commons"
 ln -s /usr/share/omarchy/shell/Ui "$dir/Ui"
 
 case $target in
-  now|idle|empty|profile|settings|games|loading)
+  now|idle|empty|profile|settings|settings-*|games|loading)
     w=460 h=900 at=2500
-    [[ $target == settings ]] && h=1400
+    section=overview; [[ $target == settings-* ]] && { section=${target#settings-}; target=settings; }
     tab=now; [[ $target == settings || $target == games || $target == profile ]] && tab=$target
     data=now.json; [[ $target == idle || $target == empty ]] && data=$target.json; [[ $target == games ]] && data=games.json
     feed="item.cabinet = JSON.parse(sample.text())"
     [[ $target == games ]] && feed="item.games = JSON.parse(sample.text())"
     [[ $target == loading ]] && feed=""
+    if [[ $target == now ]]; then
+      extra="FileView { id: jobSample; path: \"$repo/dev/samples/guide-job.json\"; blockLoading: true }"
+      feed="$feed; item.guideJob = JSON.parse(jobSample.text())"
+    fi
     if [[ $target == settings ]]; then
       extra="FileView { id: agentSample; path: \"$repo/dev/samples/agents.json\"; blockLoading: true }"
-      feed="$feed; item.guideAgents = JSON.parse(agentSample.text()); item.guideModels = ({ claude: { model: \"sonnet\", effort: \"medium\" } })"
+      feed="$feed; item.guideAgents = JSON.parse(agentSample.text()); item.guideModels = ({ claude: { model: \"sonnet\", effort: \"medium\" } }); item.guideJail = true; item.settingsSection = \"$section\""
     fi
     view="Loader {
         x: 20; y: 20; width: 420
@@ -76,10 +81,11 @@ case $target in
         }
       }"
     data=game.json ;;
-  guide|guide-making|guide-empty)
-    w=1000 h=900 at=3000
-    guide="JSON.parse(guideSample.text())"; [[ $target == guide-empty ]] && guide="({})"
+  guide|guide-making|guide-empty|guide-failed)
+    w=1300 h=960 at=3000
+    guide="JSON.parse(guideSample.text())"; [[ $target == guide-empty || $target == guide-making || $target == guide-failed ]] && guide="({})"
     job="({})"; [[ $target == guide-making ]] && job="JSON.parse(jobSample.text())"
+    [[ $target == guide-failed ]] && job="Object.assign(JSON.parse(jobSample.text()), { state: 'failed', line: 'failed: route: opencode: the agent could not reach its model server inside the sandbox; the old guide is unchanged' })"
     extra="FileView { id: guideSample; path: \"$repo/dev/samples/guide.json\"; blockLoading: true }
   FileView { id: agentSample; path: \"$repo/dev/samples/agents.json\"; blockLoading: true }
   FileView { id: jobSample; path: \"$repo/dev/samples/guide-job.json\"; blockLoading: true }"
@@ -87,7 +93,7 @@ case $target in
         anchors.centerIn: parent
         source: \"file:$repo/TrackerView.qml\"
         onLoaded: {
-          item.maxWidth = 960; item.maxHeight = 860
+          item.maxWidth = 1260; item.maxHeight = 920
           item.game = JSON.parse(sample.text())
           item.agents = JSON.parse(agentSample.text())
           item.choosePick()

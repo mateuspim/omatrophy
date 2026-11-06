@@ -1,4 +1,4 @@
-import json, os, sys, tempfile, unittest
+import json, os, re, sys, tempfile, unittest
 from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -102,6 +102,17 @@ class Job(unittest.TestCase):
         self.assertEqual(answer['next'][0], 'L')
         self.assertEqual(answer['agent']['name'], 'fake')
 
+    def test_announce_says_done_and_failed_and_status_names_the_work(self):
+        said = []
+        with mock.patch.object(guide_maker, 'notify', lambda summary, body: said.append(summary)):
+            guide_maker.make(self.job(), announce=True)
+            write(self.agent_dir, 'items', 'nothing useful')
+            guide_maker.make(self.job(), announce=True)
+            guide_maker.make(self.job())
+        self.assertEqual(said, ['Guide ready: Starfall Odyssey', 'Guide failed: Starfall Odyssey'])
+        found = guide_maker.status(self.guides)
+        self.assertEqual((found['open'], found['web']), (3, False))
+
     def test_bad_answer_is_asked_again_once(self):
         write(self.agent_dir, 'items', 'no tags at all')
         write(self.agent_dir, 'items.retry', ITEMS)
@@ -152,6 +163,7 @@ class Checks(unittest.TestCase):
         self.assertEqual(item['combine_with'], ['B'])
         self.assertEqual(len(errors), 2)
         self.assertEqual(guide_maker.check_item({'name': 'Z'}, {'A'})[0], None)
+        self.assertEqual(guide_maker.check_item({'name': 'A', 'difficulty': ' 3 '}, {'A'})[0]['difficulty'], 3)
 
     def test_check_route(self):
         route, errors = guide_maker.check_route('<route>{"order": ["A", "Z", "A"], "sections": {}}</route>', {'A'})
@@ -215,6 +227,15 @@ class Agents(unittest.TestCase):
         self.assertIn('WebFetch', argv)
         self.assertNotIn('Bash', argv)
 
+    def test_opencode_runs_its_own_server_with_the_lock(self):
+        argv, _, env = guide_agents.OpenCode().command('/x', False, 'local/qwen', '')
+        self.assertIn('--standalone', argv)
+        lock = json.loads(env['OPENCODE_CONFIG_CONTENT'])
+        self.assertEqual((lock['permission']['bash'], lock['permission']['edit']), ('deny', 'deny'))
+        self.assertFalse(lock['tools']['bash'])
+        self.assertEqual(lock['permission']['webfetch'], 'deny')
+        self.assertIn('--standalone', guide_agents.OpenCode.models_command)
+
     def test_no_adapter_ever_auto_approves(self):
         for a in guide_agents.ADAPTERS:
             try:
@@ -240,6 +261,17 @@ class Agents(unittest.TestCase):
         self.assertEqual(out['links'], ['https://b/c'])
         self.assertEqual(out['usage'], {'input': 7, 'output': 2, 'cost_usd': 0.5})
 
+    def test_jailed_wraps_the_command_and_passes_only_named_env(self):
+        with mock.patch.dict(os.environ, {'ANTHROPIC_BASE_URL': 'http://x', 'SECRET_THING': 'y'}):
+            argv = guide_agents.jailed(['claude', '-p'], {'OPENCODE_CONFIG_CONTENT': '{}'})
+        self.assertEqual(argv[:2], ['ai-jail', '--exec'])
+        self.assertEqual(argv[argv.index('--') + 1:], ['claude', '-p'])
+        envs = [argv[i + 1] for i, a in enumerate(argv) if a == '--env']
+        self.assertIn('ANTHROPIC_BASE_URL', envs)
+        self.assertIn('OPENCODE_CONFIG_CONTENT', envs)
+        self.assertNotIn('SECRET_THING', ' '.join(argv))
+        self.assertNotIn('--docker', argv)
+
     def test_codex_models_cache(self):
         with tempfile.TemporaryDirectory() as d:
             write(d, 'models_cache.json', json.dumps({'models': [
@@ -259,7 +291,8 @@ class Agents(unittest.TestCase):
             with self.assertRaisesRegex(SystemExit, 'not an agent'):
                 guide_agents.resolve('vim')
             with mock.patch.object(guide_agents.Codex, 'installed', lambda self: True):
-                with self.assertRaisesRegex(SystemExit, "can't run locked down yet; pick claude"):
+                with self.assertRaisesRegex(SystemExit, "can't run locked down yet; check it in Settings > Guides "
+                                                        r"\(or: omatrophy.py guide check codex\), or pick claude"):
                     guide_agents.resolve('codex')
 
     def test_listing_marks_default_and_picks(self):
@@ -288,3 +321,242 @@ class Agents(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class Bench(unittest.TestCase):
+    def test_parse_entry(self):
+        import guide_bench
+        self.assertEqual(guide_bench.parse_entry('claude:sonnet:high'),
+                         {'agent': 'claude', 'model': 'sonnet', 'effort': 'high', 'endpoint': ''})
+        self.assertEqual(guide_bench.parse_entry('opencode:local/qwen3:8b')['model'], 'local/qwen3:8b')
+        self.assertEqual(guide_bench.parse_entry('claude:qwen@http://127.0.0.1:8080')['endpoint'], 'http://127.0.0.1:8080')
+        self.assertEqual(guide_bench.parse_entry('claude')['model'], '')
+        with self.assertRaises(SystemExit):
+            guide_bench.parse_entry('Claude Sonnet')
+
+    def test_metrics_and_score(self):
+        import guide_bench
+        plan = {'order': ['A', 'B'], 'sections': {'overview': 'x', 'route': 'y'}, 'items': {
+            'A': {'api': 'a', 'name': 'A', 'phase': 'quick', 'difficulty': 1, 'time': '5 min', 'tips': 't',
+                  'cites': [{'verified': True}]},
+            'B': {'api': 'b', 'name': 'B', 'phase': 'grind', 'cites': [{'verified': False}], 'unverified': ['tips']}}}
+        m = guide_bench.metrics(plan, {'a', 'b', 'c', 'd'})
+        self.assertEqual((m['coverage'], m['verified'], m['complete'], m['route'], m['sections']),
+                         (0.5, 0.5, 0.625, 0.5, 0.5))
+        self.assertEqual(guide_bench.score(m), 35 * 0.5 + 25 * 0.5 + 20 * 0.625 + 10 * 0.5 + 10 * 0.5)
+
+    def test_ranked_ties_go_to_the_cheaper_then_faster(self):
+        import guide_bench
+        rows = [{'entry': 'a', 'score': 80, 'cost_usd': None, 'seconds': 10},
+                {'entry': 'b', 'score': 80, 'cost_usd': 0.5, 'seconds': 90},
+                {'entry': 'c', 'score': 80, 'cost_usd': 0.5, 'seconds': 30},
+                {'entry': 'd', 'score': 90, 'cost_usd': 3.0, 'seconds': 300}]
+        self.assertEqual([r['entry'] for r in guide_bench.ranked(rows)], ['d', 'c', 'b', 'a'])
+
+    def test_endpoint_is_claude_only(self):
+        self.assertEqual(guide_agents.endpoint_env(guide_agents.Claude(), 'http://x'), {'ANTHROPIC_BASE_URL': 'http://x'})
+        self.assertEqual(guide_agents.endpoint_env(guide_agents.Codex(), ''), {})
+        with self.assertRaisesRegex(SystemExit, 'claude only'):
+            guide_agents.endpoint_env(guide_agents.Codex(), 'http://x')
+
+    def test_bench_runs_each_entry_apart_and_keeps_the_winner(self):
+        import guide_bench
+        with tempfile.TemporaryDirectory() as d:
+            good, bad = os.path.join(d, 'good'), os.path.join(d, 'bad')
+            for folder, items in ((good, ITEMS), (bad, 'no tags')):
+                write(folder, 'fake.py', FAKE)
+                write(folder, 'items', items)
+                write(folder, 'route', ROUTE)
+            guides_dir = os.path.join(d, 'guides')
+            write(guides_dir, 'starfall-odyssey-1.md', 'mine\n')
+            # The owner's saved page: every entry must read it.
+            write(guides_dir, 'sources/starfall-odyssey-1/notes.txt', 'You must carry the lantern before chapter four ends.')
+            said = []
+            run_dir, results = guide_bench.bench(
+                'steam', '1', 'Starfall Odyssey', [dict(a) for a in ACHS],
+                [guide_bench.parse_entry('fakebad:m1'), guide_bench.parse_entry('fakegood:m2:high')],
+                web=False, folder=guides_dir, say=said.append,
+                adapters={'fakegood': FakeAgent(good), 'fakebad': FakeAgent(bad)},
+                list_guides=lambda app: [], fetch=lambda url: None)
+            self.assertEqual([(r['entry'], r['state']) for r in results],
+                             [('fakegood:m2:high', 'done'), ('fakebad:m1', 'failed')])
+            self.assertGreater(results[0]['score'], 50)
+            self.assertEqual(results[0]['metrics']['cited'], 1)
+            self.assertEqual(read(os.path.join(guides_dir, 'starfall-odyssey-1.md')), 'mine\n')
+            saved = json.loads(read(os.path.join(run_dir, 'results.json')))
+            self.assertEqual(saved['results'][0]['entry'], 'fakegood:m2:high')
+            self.assertIn('fakegood:m2:high', guide_bench.table(results))
+            guide_bench.keep(results[0], guides_dir)
+            self.assertIn('Short and gentle.', read(os.path.join(guides_dir, 'starfall-odyssey-1.md')))
+            self.assertEqual(read(os.path.join(guides_dir, 'starfall-odyssey-1.md.prev')), 'mine\n')
+
+
+class ModelPick(unittest.TestCase):
+    def test_guide_model_saves_effort_and_endpoint_and_clears(self):
+        import io, omatrophy
+        from contextlib import redirect_stdout
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {'HOME': d}), redirect_stdout(io.StringIO()):
+            omatrophy.main(['x', 'guide', 'model', 'claude', 'qwen', 'high', '@http://127.0.0.1:8080'])
+            cfg = json.loads(read(os.path.join(d, '.config/omatrophy/config.json')))
+            self.assertEqual(cfg['guide-models']['claude'],
+                             {'model': 'qwen', 'effort': 'high', 'endpoint': 'http://127.0.0.1:8080'})
+            omatrophy.main(['x', 'guide', 'model', 'claude', 'default'])
+            cfg = json.loads(read(os.path.join(d, '.config/omatrophy/config.json')))
+            self.assertNotIn('claude', cfg['guide-models'])
+            with self.assertRaises(SystemExit):
+                omatrophy.main(['x', 'guide', 'model', 'codex', 'm', '@http://x'])
+
+
+class RouteTable(unittest.TestCase):
+    # A local model left `dlc` empty and the route, seeing only names,
+    # folded "Get the true ending in Daughters" into the main story.
+    def test_rows_carry_the_description_but_a_locked_hidden_one_keeps_its_secret(self):
+        item = {'phase': 'story', 'difficulty': 2, 'dlc': ''}
+        self.assertTrue(guide_maker.table_line('One', item, False, 'Get the true ending in Daughters.')
+                        .endswith('— Get the true ending in Daughters.'))
+        self.assertNotIn('—', guide_maker.table_line('One', item, False))
+
+    def test_the_route_prompt_gets_descriptions(self):
+        seen = {}
+        job = guide_maker.Job('steam', '1', 'Game', [dict(a) for a in ACHS], guide_agents.BY_ID['claude'])
+        job.ask = lambda stage, text, check, merge: (seen.setdefault('text', text), None)[1:] + ([],)
+        items = {a['name']: {'phase': 'story', 'difficulty': 1} for a in ACHS}
+        job.route(items)
+        self.assertIn('Carry the lantern to the end', seen['text'])
+        self.assertNotIn('Quiet Hours: story; difficulty 1; time ? —', seen['text'])
+
+
+class JobStatus(unittest.TestCase):
+    # The panel's strip built the store's old header URL itself, a 404 for
+    # newer apps; the job now passes on the poster OmaTrophy found.
+    def test_status_carries_the_header(self):
+        with tempfile.TemporaryDirectory() as d:
+            job = guide_maker.Job('steam', '1', 'Game', [dict(a) for a in ACHS], guide_agents.BY_ID['claude'],
+                                  folder=d, header='file:///art/1_header.jpg')
+            job.report('gather')
+            status = json.loads(read(guide_maker.status_path(d)))
+        self.assertEqual(status['header'], 'file:///art/1_header.jpg')
+
+
+class CompleteGame(unittest.TestCase):
+    # A make on a platinum game sent the agent nothing to classify and
+    # wrote a page of filler on the owner's tokens.
+    def test_a_game_at_100_percent_is_refused(self):
+        import omatrophy
+        store = mock.Mock(id='steam')
+        store.game_name.return_value = 'Done Game'
+        done = [dict(a, unlocked=True) for a in ACHS]
+        with mock.patch.object(omatrophy, 'guide_target', return_value=(store, done, 60)), \
+                mock.patch.object(guide_agents, 'resolve', return_value=guide_agents.BY_ID['claude']), \
+                mock.patch.object(guide_maker, 'busy', return_value=False), \
+                mock.patch.object(guide_maker, 'make', side_effect=AssertionError('made')):
+            with self.assertRaises(SystemExit) as e:
+                omatrophy.guide_make('steam', '1', [], {})
+        self.assertIn('100%', str(e.exception))
+
+
+class JailOptions(unittest.TestCase):
+    # A local model inside ai-jail may need its key file (OpenCode at a
+    # local server worked without the jail, failed in it).
+    def test_jailed_puts_the_options_before_the_agent_with_home_expanded(self):
+        with mock.patch.dict(os.environ, {'HOME': '/h'}):
+            argv = guide_agents.jailed(['opencode', 'run'], {}, ['--env', 'K', '--map', '~/k.key'])
+        cut = argv.index('--')
+        self.assertEqual(argv[cut - 4:cut], ['--env', 'K', '--map', '/h/k.key'])
+        self.assertEqual(argv[cut + 1:], ['opencode', 'run'])
+
+    def test_jail_options_checks_each_word(self):
+        self.assertEqual(guide_agents.jail_options(['--env=K', '--allow-loopback-listen', '--map', '~/a']),
+                         ['--env', 'K', '--allow-loopback-listen', '--map', '~/a'])
+        for bad in (['--no-network'], ['--forward-port', '8080'], ['--allow-host', 'x.org'], ['--map'], ['--map', '--rw-map', 'a'], ['8080'],
+                    ['--', 'sh']):
+            with self.assertRaises(SystemExit, msg=bad):
+                guide_agents.jail_options(bad)
+
+    def test_a_bad_hand_edit_reads_as_no_options(self):
+        # ai-jail refuses --forward-port next to our --network: a saved one
+        # is dropped, the rest kept.
+        cfg = {'guide-jail-options': {'opencode': ['--forward-port', '8080', '--map', '~/k', '--allow-host=x'],
+                                      'claude': ['--no-landlock'],
+                                      'codex': '--map x'}}
+        self.assertEqual(guide_agents.saved_jail_options('opencode', cfg), ['--map', '~/k'])
+        self.assertEqual(guide_agents.saved_jail_options('claude', cfg), [])
+        self.assertEqual(guide_agents.saved_jail_options('codex', cfg), [])
+        self.assertEqual(guide_agents.saved_jail_options('opencode', {}), [])
+
+    def test_cli_saves_one_panel_string_and_clears(self):
+        import io, omatrophy
+        from contextlib import redirect_stdout
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {'HOME': d}), redirect_stdout(io.StringIO()):
+            path = os.path.join(d, '.config/omatrophy/config.json')
+            omatrophy.main(['x', 'guide', 'jail-options', 'opencode', '--env K --map "~/my keys/a.key"'])
+            self.assertEqual(json.loads(read(path))['guide-jail-options']['opencode'],
+                             ['--env', 'K', '--map', '~/my keys/a.key'])
+            self.assertEqual(guide_agents.saved_jail_options('opencode'),
+                             ['--env', 'K', '--map', '~/my keys/a.key'])
+            omatrophy.main(['x', 'guide', 'jail-options', 'opencode', ''])
+            self.assertNotIn('opencode', json.loads(read(path))['guide-jail-options'])
+            with self.assertRaises(SystemExit):
+                omatrophy.main(['x', 'guide', 'jail-options', 'opencode', '--rw-map', '/', '--no-network'])
+
+
+class SandboxWithoutJail(unittest.TestCase):
+    def test_the_saved_setting_without_ai_jail_counts_as_off_and_says_so(self):
+        import omatrophy
+        said = []
+        with mock.patch.object(guide_agents, 'jail_installed', return_value=False):
+            self.assertFalse(omatrophy.use_jail(None, {'guide-jail': True}, say=said.append))
+            self.assertIn('akitaonrails/ai-jail', said[0])
+            self.assertFalse(omatrophy.use_jail(False, {'guide-jail': True}, say=said.append))
+            with self.assertRaises(SystemExit):
+                omatrophy.use_jail(True, {}, say=said.append)
+        with mock.patch.object(guide_agents, 'jail_installed', return_value=True):
+            self.assertTrue(omatrophy.use_jail(None, {'guide-jail': True}, say=said.append))
+        self.assertEqual(len(said), 1)
+
+    def test_jail_version_reads_the_number_or_nothing(self):
+        answer = lambda out: (lambda argv, **kw: mock.Mock(stdout=out))
+        with mock.patch.object(guide_agents, 'jail_installed', return_value=True):
+            self.assertEqual(guide_agents.jail_version(answer('ai-jail 2.15.0\n')), '2.15.0')
+            self.assertEqual(guide_agents.jail_version(answer('')), '')
+            def slow(argv, **kw):
+                raise guide_agents.subprocess.TimeoutExpired(argv, 4)
+            self.assertEqual(guide_agents.jail_version(slow), '')
+        with mock.patch.object(guide_agents, 'jail_installed', return_value=False):
+            self.assertEqual(guide_agents.jail_version(answer('ai-jail 2.15.0')), '')
+
+
+class LockCheck(unittest.TestCase):
+    def fake_run(self, writes):
+        def runner(adapter, prompt, web=False, model='', timeout=0, jail=False):
+            path = re.search(r'Create the file (\S+) ', prompt).group(1)
+            if writes:
+                write(os.path.dirname(path), os.path.basename(path), 'hello')
+            return {'ok': True, 'text': 'I have no tools.', 'error': ''}
+        return runner
+
+    def test_a_pass_is_recorded_for_this_binary_and_an_update_relocks(self):
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {'HOME': d}):
+            codex = guide_agents.Codex()
+            with mock.patch.object(guide_agents, 'fingerprint', lambda a: 'bin:1'):
+                self.assertFalse(guide_agents.checked(codex))
+                out = guide_agents.check_lock(codex, runner=self.fake_run(False), say=lambda l: None)
+                self.assertTrue(out['passed'])
+                self.assertEqual(len(out['runs']), 2)
+                self.assertTrue(guide_agents.checked(codex))
+            with mock.patch.object(guide_agents, 'fingerprint', lambda a: 'bin:2'):
+                self.assertFalse(guide_agents.checked(codex))
+
+    def test_a_write_fails_and_records_nothing_and_a_jail_pass_records_nothing(self):
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {'HOME': d}), \
+                mock.patch.object(guide_agents, 'fingerprint', lambda a: 'bin:1'):
+            codex = guide_agents.Codex()
+            out = guide_agents.check_lock(codex, runner=self.fake_run(True), say=lambda l: None)
+            self.assertFalse(out['passed'])
+            self.assertEqual(out['runs'][0]['wrote'], ['wrote-0.txt'])
+            guide_agents.check_lock(codex, runner=self.fake_run(False), jail=True, say=lambda l: None)
+            self.assertFalse(guide_agents.checked(codex))
+
+    def test_headless(self):
+        self.assertTrue(guide_agents.headless(guide_agents.Codex()))
+        self.assertFalse(guide_agents.headless(guide_agents.BY_ID['gemini']))

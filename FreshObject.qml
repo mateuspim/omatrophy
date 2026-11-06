@@ -33,14 +33,27 @@ Item {
     source.waitForJob()
     // A sibling URL that is never a file, so the engine compiles this text
     // instead of reusing a cached type for the real one. Relative paths in
-    // the file resolve as before; errors name it `<name>.live.qml`.
-    var live = String(url).replace(/\.qml$/, ".live.qml")
+    // the file resolve as before; errors name it `<name>.live-<hash>.qml`.
+    // The URL carries a hash of the text: the engine keeps the inline
+    // components (`component X: ...`) of the first text it built at a URL,
+    // so an edit that adds one failed as "X is not a type" until a restart
+    // (seen 2026-11-04 on Quickshell 0.3.2, Qt 6.12). Unchanged text keeps
+    // its URL, so reopening doesn't pile up types.
+    var text = source.text()
+    var live = String(url).replace(/\.qml$/, ".live-" + hash(text) + ".qml")
     try {
-      root.item = Qt.createQmlObject(source.text(), root, live)
+      root.item = Qt.createQmlObject(text, root, live)
     } catch (e) {
       console.warn("omatrophy: " + name + " failed to build, fix it and reopen:", JSON.stringify(e.qmlErrors || String(e)))
     }
     return root.item
+  }
+
+  // A short hex hash of a file's text (djb2), enough to tell edits apart.
+  function hash(text) {
+    var h = 5381
+    for (var i = 0; i < text.length; i++) h = ((h * 33) ^ text.charCodeAt(i)) >>> 0
+    return h.toString(16)
   }
 
   function clear() {

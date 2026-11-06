@@ -10,7 +10,7 @@ Only the owner starts a job (`guide make` or the tracker's button), never
 the watcher. Nothing is written until the last stage passes, so a stopped
 or failed job leaves the old guide as it was.
 """
-import html, html.parser, json, os, re, signal, sys, tempfile, time, urllib.error, urllib.parse, urllib.request
+import html, html.parser, json, os, re, signal, subprocess, sys, tempfile, time, urllib.error, urllib.parse, urllib.request
 
 import guide_agents, guides
 from stores.base import read_json, write_json
@@ -339,10 +339,13 @@ def check_item(raw, names):
     else:
         errors.append(f'{name}: phase must be one of {", ".join(guides.PHASES)}')
     diff = raw.get('difficulty')
+    # A weak model writes numbers as text ("3"); that is still a number.
+    if isinstance(diff, str) and re.fullmatch(r'\s*\d+(\.\d+)?\s*', diff):
+        diff = float(diff)
     if isinstance(diff, (int, float)) and not isinstance(diff, bool) and 1 <= diff <= 5:
         item['difficulty'] = int(round(diff))
     elif diff is not None:
-        errors.append(f'{name}: difficulty must be 1-5')
+        errors.append(f'{name}: difficulty must be a number 1-5 (got {json.dumps(diff)[:30]})')
     if isinstance(raw.get('time'), str) and raw['time'].strip():
         item['time'] = raw['time'].strip()
     mins = raw.get('minutes')
@@ -477,7 +480,11 @@ def ach_line(a):
     return f'- {a["name"]}{flags}: {desc}{pct}'
 
 
-def table_line(name, item, unlocked):
+def table_line(name, item, unlocked, desc=''):
+    """One route-table row. The store's description goes last: it often
+    names the mode or DLC ("in Jack's 55th Birthday"), and a weak model
+    that left `dlc` empty in classify folded such DLC items into the main
+    story when the route saw only names."""
     parts = [item.get('phase', '?'), f'difficulty {item.get("difficulty", "?")}', item.get('time') or 'time ?']
     if item.get('missable'):
         parts.append('MISSABLE' + (f' ({item["missable_note"]})' if item.get('missable_note') else ''))
@@ -487,7 +494,7 @@ def table_line(name, item, unlocked):
         parts.append('combines with ' + ', '.join(item['combine_with']))
     if item.get('dlc'):
         parts.append(f'DLC {item["dlc"]}')
-    return f'- {name}{" [unlocked]" if unlocked else ""}: ' + '; '.join(parts)
+    return f'- {name}{" [unlocked]" if unlocked else ""}: ' + '; '.join(parts) + (f' — {desc}' if desc else '')
 
 
 def excerpt_block(pieces):
@@ -575,7 +582,8 @@ class Job:
     """One make: holds the status, the usage and the sources as it goes."""
 
     def __init__(self, store, app, game, achievements, adapter, model='', effort='', web=True, folder=None,
-                 fetch=None, list_guides=None, say=None, clock=time.time, minutes=0):
+                 fetch=None, list_guides=None, say=None, clock=time.time, minutes=0, jail=False, env=None, source_root=None,
+                 header=''):
         self.store, self.app, self.game, self.achs = store, str(app), game, achievements
         self.adapter, self.model, self.effort = adapter, model, effort
         self.web = web and adapter.web
@@ -585,6 +593,15 @@ class Job:
         self.say = say or (lambda line: None)
         self.clock = clock
         self.minutes = minutes
+        self.jail = jail
+        # The game's poster as OmaTrophy found it, for the panel's strip:
+        # building the store URL there gave a 404 for newer apps.
+        self.header = header
+        # Extra environment for the agent (a bench entry's local endpoint).
+        self.env = env or {}
+        # Where saved pages and earlier sources are read: a bench run writes
+        # in its own folder but reads the owner's.
+        self.source_root = source_root or self.folder
         self.usage, self.sources, self.fetched, self.links = [], {}, 0, []
         self.done, self.total, self.stage = 0, 0, ''
         self.started = int(clock())
@@ -594,7 +611,9 @@ class Job:
         write_json(status_path(self.folder), {
             'state': state, 'store': self.store, 'app': self.app, 'game': self.game, 'stage': self.stage,
             'done': self.done, 'total': self.total, 'line': line, 'started': self.started,
-            'time': int(self.clock()), 'agent': self.adapter.id, 'model': self.model, 'pid': os.getpid()})
+            'time': int(self.clock()), 'agent': self.adapter.id, 'model': self.model, 'pid': os.getpid(),
+            'web': self.web, 'jail': self.jail, 'header': self.header,
+            'open': sum(1 for a in self.achs if not a.get('unlocked'))})
         if line:
             self.say(line)
 
@@ -615,7 +634,8 @@ class Job:
                 text = (text + '\n\nYour last answer had these problems:\n' + '\n'.join(f'- {e}' for e in errors[:20])
                         + '\nAnswer again in full, inside the tags.')
             found = guide_agents.run(self.adapter, text, web=self.web and stage == 'research', model=self.model,
-                                     effort=self.effort, stopped=lambda: stop_requested(self.folder))
+                                     effort=self.effort, stopped=lambda: stop_requested(self.folder), jail=self.jail,
+                                     env=self.env)
             self.usage.append({'engine': self.adapter.id, 'model': self.model, 'stage': stage,
                                'input': found['usage'].get('input', 0), 'output': found['usage'].get('output', 0),
                                'cost_usd': found['usage'].get('cost_usd'), 'seconds': found['seconds'],
@@ -646,8 +666,10 @@ class Job:
             self.add_source(url, text, kind)
 
     def gather(self, name):
-        self.sources.update(kept_sources(os.path.join(self.folder, name + '.sources.json'), self.clock()))
-        self.sources.update(saved_sources(os.path.join(self.folder, 'sources', name)))
+        root = self.source_root
+        stem = guide_name(self.store, self.app, self.game, root) if root != self.folder else name
+        self.sources.update(kept_sources(os.path.join(root, stem + '.sources.json'), self.clock()))
+        self.sources.update(saved_sources(os.path.join(root, 'sources', stem)))
         if self.store == 'steam':
             for url in self.list_guides(self.app):
                 self.fetch_into(url, 'steam-guide')
@@ -696,7 +718,10 @@ class Job:
         rows = []
         for a in self.achs:
             if a['name'] in items:
-                rows.append(table_line(a['name'], items[a['name']], a.get('unlocked')))
+                # A locked hidden one keeps its secret, as in classify.
+                secret = a.get('hidden') and not a.get('unlocked')
+                rows.append(table_line(a['name'], items[a['name']], a.get('unlocked'),
+                                       '' if secret else a.get('desc', '')))
         played = f', {self.minutes // 60} h played' if self.minutes else ''
         text = prompt('route', game=self.game, progress=f'{done} of {len(self.achs)} unlocked{played}',
                       table='\n'.join(rows))
@@ -770,7 +795,7 @@ class Job:
             plan_items[key] = entry
         plan = dict(old)
         plan.update({'format': 2, 'generated': int(self.clock()),
-                     'agent': {'name': self.adapter.id, 'model': self.model, 'effort': self.effort,
+                     'agent': {'name': self.adapter.id, 'model': self.model, 'effort': self.effort, 'jail': self.jail,
                                'stages': stage_counts(self.usage)},
                      'order': route['order'] or list(items), 'items': plan_items,
                      'sections': route['sections'] or old.get('sections') or {},
@@ -790,8 +815,20 @@ def stage_counts(usage):
     return out
 
 
-def make(job):
-    """Run a Job to its end and report how it ended: {state, line}."""
+def notify(summary, body):
+    """A desktop notification, for a make started from the tracker: the
+    owner may have closed it long ago. Quietly nothing without notify-send."""
+    try:
+        subprocess.run(['notify-send', '-a', 'OmaTrophy', summary, body], timeout=4,
+                       stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
+def make(job, announce=False):
+    """Run a Job to its end and report how it ended: {state, line}. With
+    `announce`, a notification says it finished or failed (not a stop:
+    the owner asked for that)."""
     for sig in (signal.SIGTERM, signal.SIGHUP):
         signal.signal(sig, lambda *_: sys.exit(1))
     try:
@@ -802,6 +839,8 @@ def make(job):
         return {'state': 'stopped'}
     except (RuntimeError, OSError) as e:
         job.report(f'failed: {e}', 'failed')
+        if announce:
+            notify(f'Guide failed: {job.game}', str(e))
         return {'state': 'failed', 'error': str(e)}
     except BaseException:
         job.report('failed: the job was interrupted; the old guide is unchanged', 'failed')
@@ -811,6 +850,9 @@ def make(job):
     cost = sum(u['cost_usd'] or 0 for u in job.usage if isinstance(u.get('cost_usd'), (int, float)))
     tail = f' (${cost:.2f})' if cost else ''
     job.report(f'done: {len(items)} items, {verified} verified{tail}', 'done')
+    if announce:
+        notify(f'Guide ready: {job.game}', f'{len(items)} achievements, {verified} checked against their source. '
+               'Open the tracker\'s Guide tab.')
     for p in problems[:5]:
         job.say(f'note: {p}')
     return {'state': 'done', 'name': name}

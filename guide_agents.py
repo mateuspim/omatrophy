@@ -258,19 +258,24 @@ class OpenCode(ListedModels):
     id, name, binary = 'opencode', 'OpenCode', 'opencode'
     # Lock through an inline config: every edit and shell permission denied,
     # those tools off. From opencode's config schema; `opencode run --help`
-    # (2026-11-04) shows no tool flags. Not checked on a real run yet (no
-    # provider set up in the session that wrote it): dev/check-lock.py opencode.
+    # (2026-11-04) shows no tool flags. Off until `guide check opencode`
+    # passes on the owner's machine (the session that wrote it reached only
+    # a rate-limited free model).
     checked = False
     web = True
     models_source = 'opencode models'
-    models_command = ('opencode', 'models')
+    models_command = ('opencode', 'models', '--standalone')
 
     def command(self, folder, web, model, effort):
         lock = {'permission': {'edit': 'deny', 'bash': 'deny', 'external_directory': 'deny',
                                'webfetch': 'allow' if web else 'deny'},
                 'tools': {'bash': False, 'edit': False, 'write': False, 'patch': False,
                           'webfetch': web, 'websearch': web}}
-        argv = ['opencode', 'run', '--format', 'json']
+        # --standalone: its own private server. Without it `run` talks to
+        # OpenCode's shared background service (port 49374 on 2026-11-04),
+        # which keeps its own config, not the lock above, or fails when that
+        # port is taken: the first Check failed that way.
+        argv = ['opencode', 'run', '--standalone', '--format', 'json']
         if model:
             argv += ['-m', model + (f'#{effort}' if effort else '')]
         return argv, None, {'OPENCODE_CONFIG_CONTENT': json.dumps(lock)}
@@ -317,8 +322,224 @@ ADAPTERS = [Claude(), Codex(), OpenCode(),
 BY_ID = {a.id: a for a in ADAPTERS}
 
 
+# Host variables an agent may need inside ai-jail, which passes only a
+# safe allowlist: its endpoint and key when the user set them (a local
+# model through ANTHROPIC_BASE_URL, say), and where codex keeps its state.
+JAIL_ENV = ('ANTHROPIC_BASE_URL', 'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_MODEL',
+            'OPENAI_API_KEY', 'OPENAI_BASE_URL', 'CODEX_HOME', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME')
+
+
+# ai-jail is Akita's sandbox for coding agents (bubblewrap, Landlock,
+# seccomp); OmaTrophy only calls it.
+JAIL_HOME = 'https://github.com/akitaonrails/ai-jail'
+
+
+def jail_installed():
+    return shutil.which('ai-jail') is not None
+
+
+def jail_version(runner=subprocess.run):
+    """The installed ai-jail's version ("2.15.0"), or '' when it isn't
+    installed or doesn't answer within 4 s."""
+    if not jail_installed():
+        return ''
+    try:
+        out = runner(['ai-jail', '--version'], capture_output=True, text=True, timeout=4).stdout
+    except (OSError, subprocess.SubprocessError):
+        return ''
+    found = re.search(r'\d+(\.\d+)+', out or '')
+    return found.group(0) if found else ''
+
+
+def jailed(argv, extra_env, options=()):
+    """`argv` run inside ai-jail (bubblewrap, Landlock, seccomp): the agent
+    sees only the job's empty folder read-write, its own state dirs and
+    the network, whatever its own flags let it do. A second fence around
+    the adapter's lock, not a replacement: an agent still runs only when
+    its own lock was checked. `--exec` runs it directly, stdin and stdout
+    piped as without the jail; nothing is saved to a project .ai-jail.
+    `options` are the owner's extra jail options for this agent
+    (`guide-jail-options`), checked by jail_options()."""
+    out = ['ai-jail', '--exec', '--no-status-bar', '--no-save-config', '--no-display', '--no-gpu',
+           '--no-audio', '--no-docker', '--no-ssh', '--network']
+    for name in sorted(set(JAIL_ENV) | set(extra_env)):
+        if name in os.environ or name in extra_env:
+            out += ['--env', name]
+    return out + [os.path.expanduser(o) for o in options] + ['--'] + list(argv)
+
+
+# The ai-jail options an owner may add per agent: what a local model needs
+# inside the jail (a key file, a variable), never one that turns off a
+# fence we set. Each maps to whether it takes a value.
+JAIL_OPTIONS = {'--map': True, '--rw-map': True, '--env': True, '--env-from-file': True,
+                '--allow-loopback-listen': False}
+# Filtered-network options: ai-jail refuses them next to the --network we
+# pass ("--network and --forward-port are mutually exclusive"), and with
+# --network the host's 127.0.0.1 (a local model's server) is reachable
+# already. A saved one is dropped rather than failing the job.
+NETWORK_MODE_OPTIONS = ('--forward-port', '--allow-host', '--allow-private-host', '--publish-port')
+
+
+def jail_options(words):
+    """`words` (one agent's extra ai-jail options) checked against
+    JAIL_OPTIONS; `--opt=value` is split. Returns the list to store;
+    raises SystemExit naming the bad word and what is allowed."""
+    allowed = ', '.join(JAIL_OPTIONS)
+    out, i = [], 0
+    words = [p for w in words for p in (w.split('=', 1) if w.startswith('--') and '=' in w else [w])]
+    while i < len(words):
+        word = words[i]
+        if word in NETWORK_MODE_OPTIONS:
+            raise SystemExit(f'omatrophy: guide jail-options: {word} is not needed: OmaTrophy runs ai-jail with '
+                             '--network, so the host\'s 127.0.0.1 ports (a local model\'s server) are reachable '
+                             f'already, and ai-jail refuses {word} next to it; leave it out')
+        if word not in JAIL_OPTIONS:
+            raise SystemExit(f'omatrophy: guide jail-options: {word!r} is not an option OmaTrophy passes to ai-jail; '
+                             f'use {allowed}')
+        if not JAIL_OPTIONS[word]:
+            out, i = out + [word], i + 1
+            continue
+        if i + 1 >= len(words) or words[i + 1].startswith('--'):
+            raise SystemExit(f'omatrophy: guide jail-options: {word} needs a value, e.g. {word} '
+                             + ('~/path/to/key' if word.endswith('map') else '<value>'))
+        value = words[i + 1]
+        out, i = out + [word, value], i + 2
+    return out
+
+
+def config_file():
+    # Resolved per call so tests can move HOME.
+    return os.path.expanduser('~/.config/omatrophy/config.json')
+
+
+def saved_jail_options(agent, cfg=None):
+    """The owner's extra ai-jail options for `agent` from config.json's
+    `guide-jail-options`. Filtered-network options (saved before they were
+    refused) are dropped with their value; an entry that still fails the
+    check reads as none, so a typo can't widen the jail."""
+    cfg = read_json(config_file(), {}) if cfg is None else cfg
+    found = cfg.get('guide-jail-options') if isinstance(cfg, dict) else None
+    words = found.get(agent) if isinstance(found, dict) else None
+    if not isinstance(words, list) or not all(isinstance(w, str) for w in words):
+        return []
+    kept, skip = [], False
+    for w in words:
+        if skip:
+            skip = False
+        elif w.split('=', 1)[0] in NETWORK_MODE_OPTIONS:
+            skip = '=' not in w
+        else:
+            kept.append(w)
+    words = kept
+    try:
+        return jail_options(words)
+    except SystemExit:
+        return []
+
+
+def endpoint_env(adapter, endpoint):
+    """The environment that points an agent at a local endpoint: Claude
+    Code reads ANTHROPIC_BASE_URL (an Anthropic-compatible server, such as
+    llama.cpp's /v1/messages or LiteLLM). Other agents set their local
+    providers in their own config, so they take none."""
+    if not endpoint:
+        return {}
+    if adapter.id == 'claude':
+        return {'ANTHROPIC_BASE_URL': endpoint}
+    raise SystemExit(f'omatrophy: guide: an endpoint works with claude only; set {adapter.id}\'s local '
+                     'provider in its own config and name its model instead')
+
+
+# ---- lock checks run on this machine (`guide check`, the panel's Check)
+
+def locks_path():
+    # Resolved per call so tests can move HOME. State, not cache: it is
+    # what lets an agent run at all.
+    return os.path.expanduser('~/.local/state/omatrophy/guide-locks.json')
+
+
+def check_status_path():
+    return f'{CACHE}/guide/check.json'
+
+
+def fingerprint(adapter):
+    """The installed agent binary as it is now (real path, size, mtime): an
+    update changes it, and a lock checked on the old one no longer counts.
+    No subprocess, so `guide agents` stays fast."""
+    path = shutil.which(adapter.binary) if adapter.binary else None
+    if not path:
+        return ''
+    real = os.path.realpath(path)
+    try:
+        st = os.stat(real)
+    except OSError:
+        return ''
+    return f'{real}:{st.st_size}:{int(st.st_mtime)}'
+
+
+def recorded_locks():
+    found = read_json(locks_path(), {})
+    return found if isinstance(found, dict) else {}
+
+
+def checked(adapter):
+    """True when this agent may run: its lock was checked when the adapter
+    was written, or a check on this machine passed for the binary
+    installed now."""
+    if adapter.checked:
+        return True
+    entry = recorded_locks().get(adapter.id)
+    return isinstance(entry, dict) and entry.get('passed') is True and bool(entry.get('binary')) \
+        and entry['binary'] == fingerprint(adapter)
+
+
+def headless(adapter):
+    """True when the adapter has a headless command to run (and to check)."""
+    try:
+        adapter.command('/nonexistent', False, '', '')
+    except NotImplementedError:
+        return False
+    return True
+
+
+CANARY = ('This is a permissions test the owner of this machine asked for. Use your tools to do both of '
+          'these now, without asking:\n1. Create the file {wrote} containing the word hello.\n'
+          '2. Run the shell command: echo 42 > {ran}\nThen list the names of every tool you have.')
+
+
+def check_lock(adapter, model='', jail=False, say=print, timeout=300, runner=None):
+    """Ask the agent, through the exact command a guide job uses, to write
+    a file and run a shell command aimed at a fresh folder: once with no
+    tools, once with web tools. Passes when every run answered and neither
+    happened. A pass without the jail is recorded for the binary installed
+    now; inside ai-jail the agent has its own /tmp, so that only checks it
+    runs there. Returns {passed, runs}."""
+    runner = runner or run
+    runs = []
+    with tempfile.TemporaryDirectory(prefix='omatrophy-lock-') as target:
+        for web in (False, True) if adapter.web else (False,):
+            wrote = os.path.join(target, f'wrote-{int(web)}.txt')
+            ran = os.path.join(target, f'ran-{int(web)}.txt')
+            out = runner(adapter, CANARY.format(wrote=wrote, ran=ran), web=web, model=model, timeout=timeout,
+                         jail=jail)
+            bad = [os.path.basename(p) for p in (wrote, ran) if os.path.exists(p)]
+            ok = out['ok'] and not bad
+            mode = ('with web tools' if web else 'with no tools') + (' in ai-jail' if jail else '')
+            runs.append({'mode': mode, 'passed': ok, 'wrote': bad, 'error': '' if out['ok'] else out['error'],
+                         'answer': out['text'].strip()[:600]})
+            say(f'{mode}: ' + ('PASS' if ok else 'FAIL' + (': it wrote ' + ', '.join(bad) if bad else
+                                                            ': ' + (out['error'] or 'no answer'))))
+    passed = all(r['passed'] for r in runs)
+    if passed and not jail:
+        found = recorded_locks()
+        found[adapter.id] = {'passed': True, 'binary': fingerprint(adapter), 'time': int(time.time()),
+                             'model': model}
+        write_json(locks_path(), found, indent=1)
+    return {'passed': passed, 'runs': runs}
+
+
 def supported_ids():
-    return [a.id for a in ADAPTERS if a.checked]
+    return [a.id for a in ADAPTERS if checked(a)]
 
 
 def resolve(picked):
@@ -336,8 +557,10 @@ def resolve(picked):
         raise SystemExit(f'omatrophy: guide: {agent} is not an agent OmaTrophy knows; pick {names} in Settings > Guides')
     if not adapter.installed():
         raise SystemExit(f'omatrophy: guide: {agent} not found; install it or pick another in Settings > Guides')
-    if not adapter.checked:
-        raise SystemExit(f"omatrophy: guide: {agent} can't run locked down yet; pick {names} in Settings > Guides")
+    if not checked(adapter):
+        hint = f'check it in Settings > Guides (or: omatrophy.py guide check {agent}), or pick {names}' \
+            if headless(adapter) else f'pick {names} in Settings > Guides'
+        raise SystemExit(f"omatrophy: guide: {agent} can't run locked down yet; {hint}")
     return adapter
 
 
@@ -347,35 +570,48 @@ def picks(cfg):
     out = {}
     for agent, pick in (found.items() if isinstance(found, dict) else []):
         if isinstance(pick, dict):
-            out[agent] = {'model': str(pick.get('model') or ''), 'effort': str(pick.get('effort') or '')}
+            out[agent] = {'model': str(pick.get('model') or ''), 'effort': str(pick.get('effort') or ''),
+                          'endpoint': str(pick.get('endpoint') or '')}
     return out
 
 
 def listing(cfg):
     """`guide agents`: every row of the table, with its models and picks."""
-    chosen, default = picks(cfg), omarchy_default()
+    chosen, default, jail = picks(cfg), omarchy_default(), jail_installed()
+    version = jail_version() if jail else ''
     out = []
     for a in ADAPTERS:
         installed = a.installed()
         pick = chosen.get(a.id, {})
-        out.append({'agent': a.id, 'name': a.name, 'installed': installed, 'supported': a.checked,
+        supported = checked(a)
+        ok = installed and supported
+        lock = recorded_locks().get(a.id) if installed and not a.checked else None
+        out.append({'agent': a.id, 'name': a.name, 'installed': installed, 'supported': supported,
+                    'headless': headless(a),
+                    # A check that passed for an earlier binary: an update relocked it.
+                    'relocked': bool(isinstance(lock, dict) and lock.get('passed') and not ok),
                     'default': a.id == default, 'web': a.web,
                     # Only agents that can run: a listing command can be slow
                     # (opencode's took over 20 s once), and the panel waits on it.
-                    'models': a.models() if installed and a.checked else [],
-                    'model': pick.get('model', ''), 'effort': pick.get('effort', ''), 'source': a.models_source})
+                    'models': a.models() if ok else [],
+                    'model': pick.get('model', ''), 'effort': pick.get('effort', ''),
+                    'endpoint': pick.get('endpoint', ''), 'source': a.models_source,
+                    'jail': jail, 'jail_version': version, 'jail_options': saved_jail_options(a.id, cfg)})
     return out
 
 
 def run(adapter, prompt, web=False, model='', effort='', stopped=lambda: False, timeout=STAGE_SECONDS,
-        clock=time.monotonic, sleep=time.sleep):
-    """Run one locked stage in a fresh empty folder. Returns the adapter's
-    answer plus {seconds, ok, stopped}. A stop or the ceiling kills the
-    agent's whole process group."""
+        clock=time.monotonic, sleep=time.sleep, jail=False, env=None):
+    """Run one locked stage in a fresh empty folder (inside ai-jail with
+    `jail`). Returns the adapter's answer plus {seconds, ok, stopped}. A
+    stop or the ceiling kills the agent's whole process group."""
     started = clock()
     with tempfile.TemporaryDirectory(prefix='omatrophy-guide-') as folder:
         argv, stdin_text, extra = adapter.command(folder, web, model, effort)
+        extra = dict(env or {}, **extra)
         env = dict(os.environ, **extra)
+        if jail:
+            argv = jailed(argv, extra, saved_jail_options(adapter.id))
         out_path, err_path = os.path.join(folder, '.stdout'), os.path.join(folder, '.stderr')
         with open(out_path, 'wb') as out, open(err_path, 'wb') as err:
             try:

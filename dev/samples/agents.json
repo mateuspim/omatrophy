@@ -54,7 +54,12 @@
   ],
   "model": "sonnet",
   "effort": "medium",
-  "source": "built-in aliases"
+  "source": "built-in aliases",
+  "jail": true,
+  "jail_version": "2.15.0",
+  "jail_options": [],
+  "headless": true,
+  "relocked": false
  },
  {
   "agent": "codex",
@@ -66,18 +71,62 @@
   "models": [],
   "model": "",
   "effort": "",
-  "source": ""
+  "source": "",
+  "jail": true,
+  "jail_version": "2.15.0",
+  "jail_options": [],
+  "headless": true,
+  "relocked": false
  },
  {
   "agent": "opencode",
   "name": "OpenCode",
-  "installed": false,
+  "installed": true,
   "supported": false,
   "default": false,
   "web": true,
   "models": [],
   "model": "",
   "effort": "",
-  "source": ""
+  "source": "",
+  "jail": true,
+  "jail_version": "2.15.0",
+  "jail_options": [],
+  "headless": true,
+  "relocked": false
+ },
+ {
+  "agent": "gemini",
+  "name": "Gemini",
+  "installed": true,
+  "supported": false,
+  "default": false,
+  "web": false,
+  "models": [],
+  "model": "",
+  "effort": "",
+  "source": "",
+  "jail": true,
+  "jail_version": "2.15.0",
+  "jail_options": [],
+  "headless": false,
+  "relocked": false
+ },
+ {
+  "agent": "pi",
+  "name": "Pi",
+  "installed": false,
+  "supported": false,
+  "default": false,
+  "web": false,
+  "models": [],
+  "model": "",
+  "effort": "",
+  "source": "",
+  "jail": true,
+  "jail_version": "2.15.0",
+  "jail_options": [],
+  "headless": false,
+  "relocked": false
  }
 ]

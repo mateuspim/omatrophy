@@ -33,7 +33,11 @@ For each achievement to classify, give:
   else null.
 - `combine_with`: names of achievements best done in the same run.
 - `tips`: one or two plain sentences.
-- `dlc`: the DLC's name, or "" for the base game.
+- `dlc`: the DLC or separate mode the achievement belongs to, or "" for
+  the base game. The store's description often names it: "Feed Jack every
+  type of food in Jack's 55th Birthday" belongs to `Jack's 55th Birthday`,
+  not to the main story. Use the name as the description or a source
+  writes it.
 - `cites`: `[{"source": "<chunk id or URL>", "quote": "<verbatim>"}]`.
 - `unverified`: the fields above that no quote backs.
 

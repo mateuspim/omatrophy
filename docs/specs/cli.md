@@ -15,14 +15,16 @@ installed.
 | `game [store app]` | Prints [one game's every achievement](#game) for the tracker. Without arguments: the game running now, else the one played last. Exits non-zero, with what to do, when the game has no cached achievements. |
 | `guide [store app]`, `guide import <folder> [--replace]` | One game's 100% guide as JSON for the tracker, or copy guides in from another folder ([guides](guides.md#command-line)). |
 | `guide make <store> <app> [--no-web] [--agent a] [--model m] [--effort e]`, `guide stop`, `guide status` | Make a guide through your agent (ADR 14), stop it, or read its progress ([guides](guides.md#the-make-job)). |
-| `guide agents`, `guide model <agent> <model> [effort]\|default` | The agents, their models and your picks; set or clear one agent's pick. |
-| `set guide-agent default\|<agent>`, `set guide-web on\|off` | Which agent makes guides, and whether it may search the web. |
+| `guide agents`, `guide model <agent> <model> [effort] [@endpoint]\|default` | The agents, their models and your picks; set or clear one agent's pick. |
+| `guide jail-options <agent> [options...]` | Extra ai-jail options for that agent, such as a local model's key file (`--map`); none clears. `guide jail` says whether ai-jail is installed and what each agent adds ([guides](guides.md#command-line)). |
+| `guide bench <store> <app> <agent:model[:effort][@endpoint]>... [--pick] [--keep]` | Make one game's guide with each entry and rank them ([benchmark](guides.md#benchmark)). |
+| `set guide-agent default\|<agent>`, `set guide-web on\|off`, `set guide-jail on\|off` | Which agent makes guides, whether it may search the web, and whether it runs inside ai-jail. |
 | `set position top-center\|top-left\|top-right` | Where cards appear. |
 | `set sound on\|off\|omatrophy\|classic` | The chime: on, off, or which set (which also turns it on). |
 | `set icons omarchy\|vector\|painted` | Trophy art set. |
 | `set glass clear\|frosted\|solid` | How see-through toasts are. |
 | `set tracker-sort recent\|rarity\|name\|game` | The tracker's sort; the tracker writes it when you change it. |
-| `set games-sort recent\|closest\|name`, `set rarest ever\|month\|platinum` | The panel's last Games sort and rarest list; the panel writes them when you pick one, so the next open shows the same view. |
+| `set games-sort recent\|closest\|name`, `set rarest ever\|month\|platinum`, `set settings-section overview\|toasts\|now\|guides\|stores` | The panel's last Games sort and rarest list; the panel writes them when you pick one, so the next open shows the same view. |
 | `set now-metals\|now-recent\|now-rarest\|now-shelf on\|off` | Shows or hides that section of the panel's Now tab. |
 | `set community on\|off` | The opt-in backfill of games that never ran on this machine from your public Steam profile ([ADR 11](../adr/0011-backfill-from-the-community-profile.md)). With it on, the watcher fetches in the background after `ready`. |
 | `sync` | Runs that backfill now, one line per game (`steam: 3/444 1903340: 55 achievements`), at most the run's page budget (15 to start; halved after a 429, five more after a run that used it all, between 5 and 30), ending `paused: N fetched, M left for later runs` when more are due, `done: N fetched` when it got them all; `stopped at <app>: <error>` after any error (a 429 rate limit, offline, private profile), and the next run picks up where it stopped. Ends `next automatic run in N min` (`stopped early; ...` after an error): the watcher runs the same backfill every hour, after a failed run (here or in the watcher) 4 h then 8 h, and keeps that time across restarts. Exits non-zero while `community` is off. |

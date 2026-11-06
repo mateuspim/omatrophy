@@ -108,7 +108,7 @@ Column {
   property bool gamesRead: false
   onTabChanged: {
     if (tab === "games" && !gamesRead && live) { gamesRead = true; gamesReader.running = true }
-    if (tab === "settings" && live && !guideAgentsReader.running) { guideAgentsReader.running = true; guideJobReader.running = true }
+    if (tab === "settings" && live && !guideAgentsReader.running && guideAgents.length === 0) guideAgentsReader.running = true
   }
 
   // Settings > Guides (ADR 14): `guide agents` lists the agents and their
@@ -117,10 +117,48 @@ Column {
   property string guideAgent: ""
   property var guideModels: ({})
   property bool guideWeb: true
+  // The Settings tab's section; remembered as `settings-section`.
+  property string settingsSection: "overview"
+  readonly property var settingsSections: [
+    { value: "overview", label: "Overview" },
+    { value: "toasts", label: "Toasts" },
+    { value: "now", label: "Now tab" },
+    { value: "guides", label: "Guides" },
+    { value: "stores", label: "Stores" }
+  ]
+  property bool guideJail: false
+  // What `guide jail-options` last said, under the Jail options field.
+  property string jailOptionsNote: ""
+  readonly property bool jailInstalled: guideAgents.some(function(a) { return a.jail })
+  readonly property string jailVersion: jailInstalled ? (guideAgents[0].jail_version || "") : ""
+  // A jail check for the picked agent, running or just ended, shows under
+  // its Jail options field.
+  readonly property bool jailCheckShown: guideCheck.jail === true && guideRow !== null && guideCheck.agent === guideRow.agent
+  readonly property bool jailChecking: jailCheckShown && guideCheck.state === "running"
   property var guideJob: ({})
+  // Which guide picker is unfolded in Settings: "", "agent" or "model".
+  property string guideMenu: ""
+  property string guideModelSearch: ""
+  // `guide check`'s progress, from guide/check.json, while a Check runs.
+  property var guideCheck: ({})
   // The agent a make uses now: the one picked, else Omarchy's default.
   readonly property var guideRow: guideAgents.find(function(a) { return guideAgent ? a.agent === guideAgent : a.default }) || null
   readonly property var guidePick: guideRow ? guideModels[guideRow.agent] || {} : {}
+
+  // The options as one line to edit: a value with a space is quoted, so
+  // the CLI's shell-style split gives the same list back.
+  function jailOptionsText(row) {
+    return ((row && row.jail_options) || []).map(function(o) { return /\s/.test(o) ? '"' + o + '"' : o }).join(" ")
+  }
+
+  function saveJailOptions(text) {
+    if (!guideRow || text.trim() === jailOptionsText(guideRow)) return
+    jailOptionsNote = ""
+    // New options: an earlier jail check's result no longer applies.
+    if (jailCheckShown && !jailChecking) guideCheck = ({})
+    jailOptionsSaver.command = ["python3", helperPath, "guide", "jail-options", guideRow.agent, text.trim()]
+    jailOptionsSaver.running = true
+  }
 
   function setGuideModel(model, effort) {
     if (!guideRow) return
@@ -130,6 +168,92 @@ Column {
     guideModels = picks
     var args = ["python3", helperPath, "guide", "model", guideRow.agent, model || "default"]
     runner.exec(model && effort ? args.concat([effort]) : args)
+  }
+
+  // One line of what a Settings section is set to, for the Overview.
+  function settingsSummary(section) {
+    if (section === "toasts") {
+      var style = styles.find(function(st) { return st.id === iconSet })
+      return [(style ? style.name : iconSet) + " trophies",
+              { "top-left": "top left", "top-center": "top centre", "top-right": "top right" }[position] || position,
+              glass + " glass", sound ? (chimes === "classic" ? "classic chimes" : "OmaTrophy chimes") : "silent"].join(" · ")
+    }
+    if (section === "now") {
+      var shown = nowSections.filter(function(n) { return nowShows[n.value] !== false }).map(function(n) { return n.label.toLowerCase() })
+      return shown.length ? "Shows " + shown.join(", ") : "Only the game you're playing"
+    }
+    if (section === "guides") {
+      if (!guideRow) return guideAgents.length ? "No agent picked" : "Agent: " + (guideAgent || "Omarchy default")
+      var model = guidePick.model ? guidePick.model + (guidePick.effort ? " " + guidePick.effort : "") : "its default model"
+      return [guideRow.name + (guideAgent ? "" : " (default)"), model, guideWeb ? "web search" : "saved pages only"]
+               .concat(guideJail && jailInstalled ? ["in ai-jail"] : []).join(" · ")
+    }
+    if (section === "stores") {
+      if (!cabinet || !cabinet.stores) return "…"
+      return cabinet.stores.map(function(st) { return st.name + (st.found ? " " + st.games + " games" : " not found") }).join(" · ")
+             + (community ? " · profile fill-in on" : "")
+    }
+    return ""
+  }
+
+  // A lock check runs detached (two short agent runs); its file says how
+  // it goes, and `guide agents` is read again when it ends.
+  function checkAgent(agent) {
+    if (guideCheck.state === "running") return
+    guideCheck = { agent: agent, state: "running", lines: ["Starting " + agent + "…"] }
+    Quickshell.execDetached(["python3", helperPath, "guide", "check", agent])
+  }
+
+  // The same check run inside ai-jail with the agent's jail options and
+  // model: does it still answer there (a local model's server reachable)?
+  // It enables nothing; the lock check above does that.
+  function checkJail() {
+    if (guideCheck.state === "running" || !guideRow) return
+    guideCheck = { agent: guideRow.agent, jail: true, state: "running", lines: ["Starting " + guideRow.name + " in ai-jail…"] }
+    var args = ["python3", helperPath, "guide", "check", guideRow.agent]
+    Quickshell.execDetached(args.concat(guidePick.model ? [guidePick.model, "--jail"] : ["--jail"]))
+  }
+
+  // The model picker's rows: the agent's default, every listed model the
+  // search matches, and the search itself as a model id when no row has it.
+  function modelChoices() {
+    var q = guideModelSearch.trim()
+    var low = q.toLowerCase()
+    var rows = []
+    if (!q) rows.push({ id: "", name: "Agent's default", detail: (guideRow ? guideRow.name : "The agent") + " picks it" })
+    var models = guideRow ? guideRow.models : []
+    models.forEach(function(m) {
+      if (low && m.id.toLowerCase().indexOf(low) < 0 && m.name.toLowerCase().indexOf(low) < 0) return
+      var bits = []
+      if (m.name.toLowerCase() !== m.id.toLowerCase()) bits.push(m.id)
+      if (m.efforts && m.efforts.length) bits.push(m.efforts.join(" · "))
+      rows.push({ id: m.id, name: m.name, detail: bits.join("  ·  ") })
+    })
+    if (q && !models.some(function(m) { return m.id === q }))
+      rows.push({ id: q, name: "Use “" + q + "”", detail: "A model id the list doesn't have: a full id, an alias, or provider/model", custom: true })
+    return rows
+  }
+
+  function chooseModel(row) {
+    setGuideModel(row.id, row.id ? guidePick.effort : "")
+    guideMenu = ""
+    guideModelSearch = ""
+    guideModelField.focus = false
+  }
+
+  function effortName(e) {
+    return e === "xhigh" ? "Extra high" : e.charAt(0).toUpperCase() + e.slice(1)
+  }
+
+  // What an effort level trades, in a few words (for the picker).
+  function effortNote(e) {
+    return ({ "": "Whatever the model uses on its own",
+              minimal: "Least thinking: fastest and cheapest",
+              low: "Quick: fine for short games",
+              medium: "Balanced: a good default for most guides",
+              high: "Thinks longer: slower, costs more",
+              xhigh: "Thinks much longer: for big or tricky games",
+              max: "Thinks the most: slowest and costliest" })[e] || ""
   }
 
   function guideEfforts() {
@@ -160,6 +284,7 @@ Column {
     if (key === "glass") glass = value
     if (key === "community") community = value === "on"
     if (key === "guide-web") guideWeb = value === "on"
+    if (key === "guide-jail") guideJail = value === "on"
     if (key === "guide-agent") guideAgent = value === "default" ? "" : value
     if (key.indexOf("now-") === 0) {
       var shows = Object.assign({}, nowShows)
@@ -434,8 +559,10 @@ Column {
       root.guideAgent = typeof c["guide-agent"] === "string" ? c["guide-agent"] : ""
       root.guideModels = c["guide-models"] && typeof c["guide-models"] === "object" ? c["guide-models"] : {}
       root.guideWeb = c["guide-web"] !== false
+      root.guideJail = c["guide-jail"] === true
       if (c["games-sort"]) root.sort = c["games-sort"]
       if (c.rarest) root.rarestRange = c.rarest
+      if (root.settingsSections.some(function(x) { return x.value === c["settings-section"] })) root.settingsSection = c["settings-section"]
       var shows = {}
       root.nowSections.forEach(function(n) { shows[n.value] = c["now-" + n.value] !== false })
       root.nowShows = shows
@@ -518,6 +645,24 @@ Column {
 
   Process { id: runner }
 
+  // A guide being made runs out of sight once its tracker closes; the strip
+  // under the tabs follows it with a light poll.
+  Timer {
+    interval: 2000
+    repeat: true
+    running: root.live && root.guideJob.state === "running"
+    onTriggered: if (!guideJobReader.running) guideJobReader.running = true
+  }
+
+  // Saves the picked agent's extra ai-jail options; the CLI checks them,
+  // and its answer (or what it refused) shows under the field.
+  Process {
+    id: jailOptionsSaver
+    stdout: StdioCollector { onStreamFinished: if (text.trim()) root.jailOptionsNote = text.trim() }
+    stderr: StdioCollector { onStreamFinished: if (text.trim()) root.jailOptionsNote = text.trim().replace(/^omatrophy: guide jail-options: /, "") }
+    onExited: guideAgentsReader.running = true
+  }
+
   Process {
     id: guideAgentsReader
     command: ["python3", root.helperPath, "guide", "agents"]
@@ -526,8 +671,31 @@ Column {
     }
   }
 
+  FileView {
+    id: guideCheckFile
+    path: root.live ? Quickshell.env("HOME") + "/.cache/omatrophy/guide/check.json" : ""
+    printErrors: false
+    onLoaded: {
+      var was = root.guideCheck
+      var now = {}
+      try { now = JSON.parse(text()) } catch (e) { return }
+      // An old result from before this Check started doesn't count.
+      if (was.state === "running" && was.agent && now.agent !== was.agent) return
+      root.guideCheck = now
+      if (was.state === "running" && now.state !== "running") guideAgentsReader.running = true
+    }
+  }
+
+  Timer {
+    interval: 1000
+    repeat: true
+    running: root.live && root.guideCheck.state === "running"
+    onTriggered: guideCheckFile.reload()
+  }
+
   Process {
     id: guideJobReader
+    running: root.live
     command: ["python3", root.helperPath, "guide", "status"]
     stdout: StdioCollector {
       onStreamFinished: { try { root.guideJob = JSON.parse(text) || {} } catch (e) {} }
@@ -868,6 +1036,144 @@ Column {
       hoverEnabled: true
       cursorShape: Qt.PointingHandCursor
       onClicked: pill.clicked()
+    }
+  }
+
+  // A field that shows a choice and unfolds its list below (the guide's
+  // agent and model): the choice, a line about it, and a chevron.
+  component PickerField: Rectangle {
+    id: picker
+    property string title: ""
+    property string detail: ""
+    property bool open: false
+    signal toggled()
+    width: root.width
+    height: pickerText.implicitHeight + Commons.Style.space(18)
+    radius: Commons.Style.cornerRadius
+    color: pickerHit.containsMouse ? Commons.Style.hoverFill : Qt.alpha(root.foreground, 0.04)
+    border.width: 1
+    border.color: open ? Qt.alpha(Commons.Color.accent, 0.6) : Qt.alpha(root.foreground, pickerHit.containsMouse ? 0.25 : 0.12)
+    Accessible.role: Accessible.ComboBox
+    Accessible.name: title + (detail ? ", " + detail : "")
+    Behavior on color { ColorAnimation { duration: 120 } }
+    Column {
+      id: pickerText
+      x: Commons.Style.space(12)
+      anchors.verticalCenter: parent.verticalCenter
+      width: parent.width - Commons.Style.space(48)
+      spacing: Commons.Style.space(1)
+      Text {
+        textFormat: Text.PlainText
+        width: parent.width
+        text: picker.title
+        color: root.foreground
+        elide: Text.ElideRight
+        font.family: Commons.Style.font.family
+        font.pixelSize: Commons.Style.font.body
+        font.bold: true
+      }
+      Caption {
+        width: parent.width
+        visible: text !== ""
+        text: picker.detail
+        opacity: 0.5
+      }
+    }
+    Text {
+      textFormat: Text.PlainText
+      anchors.right: parent.right
+      anchors.rightMargin: Commons.Style.space(14)
+      anchors.verticalCenter: parent.verticalCenter
+      text: "▾"
+      color: picker.open ? Commons.Color.accent : root.foreground
+      opacity: picker.open ? 1 : 0.5
+      rotation: picker.open ? 180 : 0
+      font.pixelSize: Commons.Style.font.title * 1.4
+      Behavior on rotation { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+    }
+    MouseArea {
+      id: pickerHit
+      anchors.fill: parent
+      hoverEnabled: true
+      cursorShape: Qt.PointingHandCursor
+      onClicked: picker.toggled()
+    }
+  }
+
+  // The list a PickerField unfolds: one row per choice, a dot on the
+  // current one, a line under each name.
+  component PickerList: Rectangle {
+    id: plist
+    property var rows: []
+    property string current: ""
+    signal picked(string value)
+    width: root.width
+    height: plistRows.height + Commons.Style.space(8)
+    radius: Commons.Style.cornerRadius
+    color: Qt.alpha(root.foreground, 0.03)
+    border.width: 1
+    border.color: Qt.alpha(root.foreground, 0.08)
+    Column {
+      id: plistRows
+      y: Commons.Style.space(4)
+      width: parent.width
+      Repeater {
+        model: plist.visible ? plist.rows : []
+        delegate: Rectangle {
+          id: prow
+          required property var modelData
+          readonly property bool chosen: plist.current === modelData.value
+          width: plistRows.width
+          height: prowName.implicitHeight + (prowDetail.visible ? prowDetail.implicitHeight : 0) + Commons.Style.space(14)
+          color: prowHit.containsMouse ? Commons.Style.hoverFill : "transparent"
+          Accessible.role: Accessible.RadioButton
+          Accessible.name: modelData.name
+          Accessible.checked: chosen
+          MouseArea {
+            id: prowHit
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: plist.picked(prow.modelData.value)
+          }
+          Text {
+            textFormat: Text.PlainText
+            id: prowDot
+            x: Commons.Style.space(12)
+            anchors.verticalCenter: parent.verticalCenter
+            text: prow.chosen ? "◉" : "○"
+            color: prow.chosen ? Commons.Color.accent : root.foreground
+            opacity: prow.chosen ? 1 : 0.5
+            font.pixelSize: Commons.Style.font.body
+          }
+          Column {
+            anchors.left: prowDot.right
+            anchors.leftMargin: Commons.Style.space(10)
+            anchors.right: parent.right
+            anchors.rightMargin: Commons.Style.space(12)
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: Commons.Style.space(1)
+            Text {
+              textFormat: Text.PlainText
+              id: prowName
+              width: parent.width
+              text: prow.modelData.name
+              color: root.foreground
+              elide: Text.ElideRight
+              font.family: Commons.Style.font.family
+              font.pixelSize: Commons.Style.font.bodySmall
+              font.bold: prow.chosen
+            }
+            Caption {
+              id: prowDetail
+              width: parent.width
+              visible: text !== ""
+              opacity: 0.5
+              text: prow.modelData.detail || ""
+            }
+          }
+        }
+      }
     }
   }
 
@@ -1397,6 +1703,140 @@ Column {
           anchors.verticalCenter: parent.verticalCenter
           label: "Peek"
           onClicked: root.peekSteam()
+        }
+      }
+    }
+  }
+
+  // A 100% guide being made (or just made, for a quarter of an hour), on
+  // every tab: the job runs detached, so this is where it shows once its
+  // tracker is closed. Open goes to the game's tracker.
+  Rectangle {
+    id: guideStrip
+    readonly property var job: root.guideJob
+    readonly property bool jobRunning: job.state === "running"
+    readonly property bool justEnded: (job.state === "done" || job.state === "failed")
+                                   && Date.now() / 1000 - (job.time || 0) < 900
+    width: root.width
+    height: visible ? guideStripBody.height + Commons.Style.space(20) : 0
+    // Not `running`/`recent`: this file has an id `recent`, and ids win over
+    // a component's own properties.
+    visible: jobRunning || justEnded
+    radius: Commons.Style.cornerRadius
+    color: Qt.alpha(Commons.Color.accent, 0.05)
+    border.width: 1
+    border.color: Qt.alpha(Commons.Color.accent, 0.22)
+
+    Column {
+      id: guideStripBody
+      x: Commons.Style.space(10)
+      y: Commons.Style.space(10)
+      width: parent.width - Commons.Style.space(20)
+      spacing: Commons.Style.space(8)
+
+      Item {
+        width: parent.width
+        height: guideStripTitle.implicitHeight
+        MiniLabel {
+          id: guideStripTitle
+          text: guideStrip.jobRunning ? "MAKING A 100% GUIDE" : guideStrip.job.state === "done" ? "GUIDE READY" : "GUIDE FAILED"
+          color: Commons.Color.accent
+        }
+        Caption {
+          textFormat: Text.PlainText
+          anchors.right: parent.right
+          anchors.verticalCenter: guideStripTitle.verticalCenter
+          // Ends before the title: a local model's id
+          // ("provider/model-q2_0") ran over it.
+          width: Math.min(implicitWidth, parent.width - guideStripTitle.width - Commons.Style.space(12))
+          horizontalAlignment: Text.AlignRight
+          opacity: 0.6
+          visible: guideStrip.jobRunning
+          text: (guideStrip.job.total ? Math.round(100 * guideStrip.job.done / guideStrip.job.total) : 0) + "%"
+                + (guideStrip.job.agent ? " · " + guideStrip.job.agent
+                   + (guideStrip.job.model ? " " + String(guideStrip.job.model).split("/").pop() : "") : "")
+        }
+      }
+
+      Item {
+        width: parent.width
+        height: Math.max(guideArt.height, guideStripText.height)
+        Rectangle {
+          id: guideArt
+          width: Commons.Style.space(92)
+          height: Commons.Style.space(43)
+          radius: 4
+          color: Qt.alpha(root.foreground, 0.06)
+          clip: true
+          Image {
+            anchors.fill: parent
+            fillMode: Image.PreserveAspectCrop
+            asynchronous: true
+            // The job's own poster first: the store URL built here is a 404
+            // for newer apps (2025 on).
+            source: guideStrip.job.header ? guideStrip.job.header
+                    : guideStrip.job.store === "steam" && /^\d+$/.test(String(guideStrip.job.app || ""))
+                    ? "https://cdn.fastly.steamstatic.com/steam/apps/" + guideStrip.job.app + "/header.jpg" : ""
+            opacity: status === Image.Ready ? 1 : 0
+          }
+        }
+        Column {
+          id: guideStripText
+          anchors.left: guideArt.right
+          anchors.leftMargin: Commons.Style.space(10)
+          anchors.right: guideStripButtons.left
+          anchors.rightMargin: Commons.Style.space(8)
+          anchors.verticalCenter: parent.verticalCenter
+          spacing: Commons.Style.space(2)
+          Text {
+            textFormat: Text.PlainText
+            width: parent.width
+            text: guideStrip.job.game || ("App " + (guideStrip.job.app || ""))
+            color: root.foreground
+            elide: Text.ElideRight
+            font.family: Commons.Style.font.family
+            font.pixelSize: Commons.Style.font.bodySmall
+            font.bold: true
+          }
+          Caption {
+            textFormat: Text.PlainText
+            width: parent.width
+            text: guideStrip.job.line || ""
+            opacity: 0.6
+          }
+        }
+        Row {
+          id: guideStripButtons
+          anchors.right: parent.right
+          anchors.verticalCenter: parent.verticalCenter
+          spacing: Commons.Style.space(4)
+          PillButton {
+            label: "Stop"
+            visible: guideStrip.jobRunning
+            onClicked: {
+              runner.exec(["python3", root.helperPath, "guide", "stop"])
+              root.guideJob = Object.assign({}, root.guideJob, { line: "stopping…" })
+            }
+          }
+          PillButton {
+            label: "Open"
+            onClicked: root.track(String(guideStrip.job.store), String(guideStrip.job.app), "")
+          }
+        }
+      }
+
+      Rectangle {
+        visible: guideStrip.jobRunning
+        width: parent.width
+        height: 4
+        radius: 2
+        color: Qt.alpha(root.foreground, 0.08)
+        Rectangle {
+          width: guideStrip.job.total ? parent.width * Math.min(1, (guideStrip.job.done + 0.5) / guideStrip.job.total) : 0
+          height: parent.height
+          radius: parent.radius
+          color: Commons.Color.accent
+          Behavior on width { NumberAnimation { duration: 400; easing.type: Easing.OutCubic } }
         }
       }
     }
@@ -3282,246 +3722,334 @@ Column {
     width: root.width
     spacing: root.spacing
 
-    // ------------------------------------------------ toasts
+    // Sections, so a setting is found without scrolling past the rest;
+    // Overview gathers what each one is set to, one line each.
+    Chips {
+      options: root.settingsSections
+      value: root.settingsSection
+      onPicked: value => root.remember("settings-section", "settingsSection", value)
+    }
 
-    PanelSectionHeader { text: "TOASTS"; foreground: root.foreground }
-
-    Row {
-      id: styleCards
-      spacing: Commons.Style.space(6)
-      readonly property real cardWidth: (root.width - spacing * (root.styles.length - 1)) / root.styles.length
-      Repeater {
-        model: root.styles
-        // A card per style: its gold trophy and name. The chosen one carries
-        // the accent edge.
-        delegate: Rectangle {
-          id: styleCard
-          required property var modelData
-          readonly property bool chosen: root.iconSet === modelData.id
-          width: styleCards.cardWidth
-          height: Commons.Style.space(78)
-          radius: Commons.Style.cornerRadius
-          color: chosen ? Commons.Style.selectedFill : (pick.containsMouse ? Commons.Style.hoverFill : Qt.alpha(root.foreground, 0.04))
-          border.width: 1
-          border.color: chosen ? Commons.Color.accent : Qt.alpha(root.foreground, 0.12)
-          Accessible.role: Accessible.Button
-          Accessible.name: modelData.name + " trophies" + (chosen ? ", in use" : "")
-
-          MouseArea {
-            id: pick
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: root.set("icons", styleCard.modelData.id)
-          }
-          // The chosen style's tick, in the corner like a radio mark.
-          Rectangle {
-            visible: styleCard.chosen
-            anchors.right: parent.right
-            anchors.top: parent.top
-            anchors.margins: Commons.Style.space(5)
-            width: 14
-            height: 14
-            radius: 7
-            color: Commons.Color.accent
-            Text {
-              textFormat: Text.PlainText
-              anchors.centerIn: parent
-              text: "✓"
-              color: Commons.Color.popups.background
-              font.pixelSize: 10
-              font.bold: true
+    Rectangle {
+      width: root.width
+      visible: root.settingsSection === "overview"
+      height: overviewRows.height + Commons.Style.space(8)
+      radius: Commons.Style.cornerRadius
+      color: Qt.alpha(root.foreground, 0.03)
+      border.width: 1
+      border.color: Qt.alpha(root.foreground, 0.08)
+      Column {
+        id: overviewRows
+        y: Commons.Style.space(4)
+        width: parent.width
+        Repeater {
+          model: root.settingsSections.slice(1)
+          delegate: Rectangle {
+            id: overviewRow
+            required property var modelData
+            required property int index
+            width: overviewRows.width
+            height: overviewText.implicitHeight + Commons.Style.space(18)
+            color: overviewHit.containsMouse ? Commons.Style.hoverFill : "transparent"
+            Accessible.role: Accessible.Button
+            Accessible.name: modelData.label + ": " + root.settingsSummary(modelData.value)
+            Rectangle {
+              visible: overviewRow.index > 0
+              x: Commons.Style.space(12)
+              width: parent.width - Commons.Style.space(24)
+              height: 1
+              color: Qt.alpha(root.foreground, 0.06)
             }
-          }
-          // The whole set, gold raised in the middle, so each card shows
-          // what every tier will look like.
-          Column {
-            anchors.centerIn: parent
-            spacing: Commons.Style.space(6)
-            Row {
-              anchors.horizontalCenter: parent.horizontalCenter
-              spacing: -4
-              Repeater {
-                model: ["bronze", "gold", "silver"]
-                delegate: Thumb {
-                  required property string modelData
-                  required property int index
-                  anchors.bottom: parent.bottom
-                  style: styleCard.modelData.id
-                  metal: modelData
-                  width: index === 1 ? 34 : 24
-                  height: width
-                  opacity: index === 1 || styleCard.chosen || pick.containsMouse ? 1 : 0.7
-                }
-              }
+            MiniLabel {
+              id: overviewLabel
+              x: Commons.Style.space(12)
+              width: Commons.Style.space(78)
+              anchors.verticalCenter: parent.verticalCenter
+              text: overviewRow.modelData.label.toUpperCase()
             }
             Text {
               textFormat: Text.PlainText
-              anchors.horizontalCenter: parent.horizontalCenter
-              text: styleCard.modelData.name
+              id: overviewText
+              anchors.left: overviewLabel.right
+              anchors.right: overviewArrow.left
+              anchors.rightMargin: Commons.Style.space(8)
+              anchors.verticalCenter: parent.verticalCenter
+              text: root.settingsSummary(overviewRow.modelData.value)
               color: root.foreground
+              opacity: 0.85
+              wrapMode: Text.WordWrap
               font.family: Commons.Style.font.family
               font.pixelSize: Commons.Style.font.caption
-              font.bold: styleCard.chosen
+            }
+            Text {
+              textFormat: Text.PlainText
+              id: overviewArrow
+              anchors.right: parent.right
+              anchors.rightMargin: Commons.Style.space(12)
+              anchors.verticalCenter: parent.verticalCenter
+              text: "›"
+              color: root.foreground
+              opacity: overviewHit.containsMouse ? 0.8 : 0.35
+              font.pixelSize: Commons.Style.font.title
+            }
+            MouseArea {
+              id: overviewHit
+              anchors.fill: parent
+              hoverEnabled: true
+              cursorShape: Qt.PointingHandCursor
+              onClicked: root.remember("settings-section", "settingsSection", overviewRow.modelData.value)
             }
           }
         }
       }
     }
 
-    // Every toast setting is the same kind of control, a row of chips,
-    // so the tab reads at a glance. (A screen drawing for position and a
-    // slider for glass looked nice but each needed learning.)
-    SettingRow {
-      label: "POSITION"
-      Chips {
-        options: [
-          { value: "top-left", label: "Left" },
-          { value: "top-center", label: "Center" },
-          { value: "top-right", label: "Right" }
-        ]
-        value: root.position
-        onPicked: value => root.set("position", value)
-      }
-    }
+    // ------------------------------------------------ toasts
 
-    // From see-through to the solid card.
-    SettingRow {
-      label: "GLASS"
-      Chips {
-        options: [
-          { value: "clear", label: "Clear" },
-          { value: "frosted", label: "Frosted" },
-          { value: "solid", label: "Solid" }
-        ]
-        value: root.glass
-        onPicked: value => root.set("glass", value)
-      }
-    }
+    Column {
+      width: root.width
+      spacing: root.spacing
+      visible: root.settingsSection === "toasts"
 
-    SettingRow {
-      label: "SOUND"
-      Chips {
-        options: [
-          { value: "omatrophy", label: "OmaTrophy" },
-          { value: "classic", label: "Classic" },
-          { value: "off", label: "Silent" }
-        ]
-        value: root.sound ? root.chimes : "off"
-        onPicked: value => root.set("sound", value)
-      }
-    }
-
-    // Last in the section, so a choice is made before it is tried.
-    SettingRow {
-      label: "TRY IT"
       Row {
+        id: styleCards
         spacing: Commons.Style.space(6)
+        readonly property real cardWidth: (root.width - spacing * (root.styles.length - 1)) / root.styles.length
         Repeater {
-          model: root.metals
-          // A tile per metal that fires a real toast; its edge is the metal.
+          model: root.styles
+          // A card per style: its gold trophy and name. The chosen one carries
+          // the accent edge.
           delegate: Rectangle {
-            id: tile
-            required property string modelData
-            width: Commons.Style.space(56)
-            height: Commons.Style.space(46)
+            id: styleCard
+            required property var modelData
+            readonly property bool chosen: root.iconSet === modelData.id
+            width: styleCards.cardWidth
+            height: Commons.Style.space(78)
             radius: Commons.Style.cornerRadius
-            color: fire.pressed ? Qt.alpha(root.metalColors[modelData], 0.22)
-                   : (fire.containsMouse ? Qt.alpha(root.metalColors[modelData], 0.12) : Qt.alpha(root.foreground, 0.04))
+            color: chosen ? Commons.Style.selectedFill : (pick.containsMouse ? Commons.Style.hoverFill : Qt.alpha(root.foreground, 0.04))
             border.width: 1
-            border.color: Qt.alpha(root.metalColors[modelData], fire.containsMouse ? 0.8 : 0.35)
+            border.color: chosen ? Commons.Color.accent : Qt.alpha(root.foreground, 0.12)
             Accessible.role: Accessible.Button
-            Accessible.name: "Show a " + modelData + " toast now"
+            Accessible.name: modelData.name + " trophies" + (chosen ? ", in use" : "")
 
             MouseArea {
-              id: fire
+              id: pick
               anchors.fill: parent
               hoverEnabled: true
               cursorShape: Qt.PointingHandCursor
-              onClicked: root.preview(tile.modelData)
+              onClicked: root.set("icons", styleCard.modelData.id)
             }
+            // The chosen style's tick, in the corner like a radio mark.
+            Rectangle {
+              visible: styleCard.chosen
+              anchors.right: parent.right
+              anchors.top: parent.top
+              anchors.margins: Commons.Style.space(5)
+              width: 14
+              height: 14
+              radius: 7
+              color: Commons.Color.accent
+              Text {
+                textFormat: Text.PlainText
+                anchors.centerIn: parent
+                text: "✓"
+                color: Commons.Color.popups.background
+                font.pixelSize: 10
+                font.bold: true
+              }
+            }
+            // The whole set, gold raised in the middle, so each card shows
+            // what every tier will look like.
             Column {
               anchors.centerIn: parent
-              spacing: Commons.Style.space(2)
-              Thumb {
+              spacing: Commons.Style.space(6)
+              Row {
                 anchors.horizontalCenter: parent.horizontalCenter
-                style: root.iconSet
-                metal: tile.modelData
-                width: 22
-                height: 22
-                scale: fire.pressed ? 0.9 : 1
-                Behavior on scale { NumberAnimation { duration: 90 } }
+                spacing: -4
+                Repeater {
+                  model: ["bronze", "gold", "silver"]
+                  delegate: Thumb {
+                    required property string modelData
+                    required property int index
+                    anchors.bottom: parent.bottom
+                    style: styleCard.modelData.id
+                    metal: modelData
+                    width: index === 1 ? 34 : 24
+                    height: width
+                    opacity: index === 1 || styleCard.chosen || pick.containsMouse ? 1 : 0.7
+                  }
+                }
               }
               Text {
                 textFormat: Text.PlainText
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: tile.modelData.toUpperCase()
-                color: root.metalColors[tile.modelData]
-                opacity: fire.containsMouse ? 1 : 0.7
+                text: styleCard.modelData.name
+                color: root.foreground
                 font.family: Commons.Style.font.family
-                font.pixelSize: 8
-                font.letterSpacing: 1
+                font.pixelSize: Commons.Style.font.caption
+                font.bold: styleCard.chosen
               }
             }
           }
         }
       }
-    }
 
-    // Said under the toast rows only: the Steam rows below don't touch
-    // toasts.
-    Caption {
-      width: root.width
-      wrapMode: Text.WordWrap
-      elide: Text.ElideNone
-      opacity: 0.4
-      text: "Changes apply to the next toast. A tile shows one now, with your settings."
-    }
+      // Every toast setting is the same kind of control, a row of chips,
+      // so the tab reads at a glance. (A screen drawing for position and a
+      // slider for glass looked nice but each needed learning.)
+      SettingRow {
+        label: "POSITION"
+        Chips {
+          options: [
+            { value: "top-left", label: "Left" },
+            { value: "top-center", label: "Center" },
+            { value: "top-right", label: "Right" }
+          ]
+          value: root.position
+          onPicked: value => root.set("position", value)
+        }
+      }
 
-    // ------------------------------------------------ now tab
+      // From see-through to the solid card.
+      SettingRow {
+        label: "GLASS"
+        Chips {
+          options: [
+            { value: "clear", label: "Clear" },
+            { value: "frosted", label: "Frosted" },
+            { value: "solid", label: "Solid" }
+          ]
+          value: root.glass
+          onPicked: value => root.set("glass", value)
+        }
+      }
 
-    Item { width: 1; height: Commons.Style.space(8) }
+      SettingRow {
+        label: "SOUND"
+        Chips {
+          options: [
+            { value: "omatrophy", label: "OmaTrophy" },
+            { value: "classic", label: "Classic" },
+            { value: "off", label: "Silent" }
+          ]
+          value: root.sound ? root.chimes : "off"
+          onPicked: value => root.set("sound", value)
+        }
+      }
 
-    PanelSectionHeader { text: "NOW TAB"; foreground: root.foreground }
+      // Last in the section, so a choice is made before it is tried.
+      SettingRow {
+        label: "TRY IT"
+        Row {
+          spacing: Commons.Style.space(6)
+          Repeater {
+            model: root.metals
+            // A tile per metal that fires a real toast; its edge is the metal.
+            delegate: Rectangle {
+              id: tile
+              required property string modelData
+              width: Commons.Style.space(56)
+              height: Commons.Style.space(46)
+              radius: Commons.Style.cornerRadius
+              color: fire.pressed ? Qt.alpha(root.metalColors[modelData], 0.22)
+                     : (fire.containsMouse ? Qt.alpha(root.metalColors[modelData], 0.12) : Qt.alpha(root.foreground, 0.04))
+              border.width: 1
+              border.color: Qt.alpha(root.metalColors[modelData], fire.containsMouse ? 0.8 : 0.35)
+              Accessible.role: Accessible.Button
+              Accessible.name: "Show a " + modelData + " toast now"
 
-    // Each section a chip of its own, lit while shown; the game you're
-    // playing always shows.
-    SettingRow {
-      label: "SHOW"
-      Row {
-        spacing: Commons.Style.space(2)
-        Repeater {
-          model: root.nowSections
-          delegate: Rectangle {
-            id: showChip
-            required property var modelData
-            readonly property bool shown: root.nowShows[modelData.value] !== false
-            width: showText.implicitWidth + Commons.Style.space(16)
-            height: showText.implicitHeight + Commons.Style.space(8)
-            radius: height / 2
-            color: shown ? Qt.alpha(Commons.Color.accent, 0.18) : (showHit.containsMouse ? Commons.Style.hoverFill : "transparent")
-            Accessible.role: Accessible.CheckBox
-            Accessible.name: "Show " + modelData.label + " on the Now tab"
-            Accessible.checked: shown
-            Behavior on color { ColorAnimation { duration: 120 } }
-            Text {
-              textFormat: Text.PlainText
-              id: showText
-              anchors.centerIn: parent
-              // The tick tells these apart from the one-of-many chips above.
-              text: (showChip.shown ? "✓ " : "") + showChip.modelData.label
-              color: showChip.shown ? Commons.Color.accent : root.foreground
-              opacity: showChip.shown ? 1 : 0.6
-              font.family: Commons.Style.font.family
-              font.pixelSize: Commons.Style.font.caption
-              font.bold: showChip.shown
+              MouseArea {
+                id: fire
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.preview(tile.modelData)
+              }
+              Column {
+                anchors.centerIn: parent
+                spacing: Commons.Style.space(2)
+                Thumb {
+                  anchors.horizontalCenter: parent.horizontalCenter
+                  style: root.iconSet
+                  metal: tile.modelData
+                  width: 22
+                  height: 22
+                  scale: fire.pressed ? 0.9 : 1
+                  Behavior on scale { NumberAnimation { duration: 90 } }
+                }
+                Text {
+                  textFormat: Text.PlainText
+                  anchors.horizontalCenter: parent.horizontalCenter
+                  text: tile.modelData.toUpperCase()
+                  color: root.metalColors[tile.modelData]
+                  opacity: fire.containsMouse ? 1 : 0.7
+                  font.family: Commons.Style.font.family
+                  font.pixelSize: 8
+                  font.letterSpacing: 1
+                }
+              }
             }
-            MouseArea {
-              id: showHit
-              anchors.fill: parent
-              hoverEnabled: true
-              cursorShape: Qt.PointingHandCursor
-              onClicked: root.set("now-" + showChip.modelData.value, showChip.shown ? "off" : "on")
+          }
+        }
+      }
+
+      // Said under the toast rows only: the Steam rows below don't touch
+      // toasts.
+      Caption {
+        width: root.width
+        wrapMode: Text.WordWrap
+        elide: Text.ElideNone
+        opacity: 0.4
+        text: "Changes apply to the next toast. A tile shows one now, with your settings."
+      }
+    }
+
+    // ------------------------------------------------ now
+
+    Column {
+      width: root.width
+      spacing: root.spacing
+      visible: root.settingsSection === "now"
+
+      // Each section a chip of its own, lit while shown; the game you're
+      // playing always shows.
+      SettingRow {
+        label: "SHOW"
+        Row {
+          spacing: Commons.Style.space(2)
+          Repeater {
+            model: root.nowSections
+            delegate: Rectangle {
+              id: showChip
+              required property var modelData
+              readonly property bool shown: root.nowShows[modelData.value] !== false
+              width: showText.implicitWidth + Commons.Style.space(16)
+              height: showText.implicitHeight + Commons.Style.space(8)
+              radius: height / 2
+              color: shown ? Qt.alpha(Commons.Color.accent, 0.18) : (showHit.containsMouse ? Commons.Style.hoverFill : "transparent")
+              Accessible.role: Accessible.CheckBox
+              Accessible.name: "Show " + modelData.label + " on the Now tab"
+              Accessible.checked: shown
+              Behavior on color { ColorAnimation { duration: 120 } }
+              Text {
+                textFormat: Text.PlainText
+                id: showText
+                anchors.centerIn: parent
+                // The tick tells these apart from the one-of-many chips above.
+                text: (showChip.shown ? "✓ " : "") + showChip.modelData.label
+                color: showChip.shown ? Commons.Color.accent : root.foreground
+                opacity: showChip.shown ? 1 : 0.6
+                font.family: Commons.Style.font.family
+                font.pixelSize: Commons.Style.font.caption
+                font.bold: showChip.shown
+              }
+              MouseArea {
+                id: showHit
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.set("now-" + showChip.modelData.value, showChip.shown ? "off" : "on")
+              }
             }
           }
         }
@@ -3530,232 +4058,570 @@ Column {
 
     // ------------------------------------------------ guides
 
-    Item { width: 1; height: Commons.Style.space(8) }
+    Column {
+      width: root.width
+      spacing: root.spacing
+      visible: root.settingsSection === "guides"
 
-    PanelSectionHeader { text: "GUIDES"; foreground: root.foreground }
-
-    SettingRow {
-      label: "AGENT"
-      Flow {
-        width: root.width * 0.72
-        layoutDirection: Qt.RightToLeft
-        spacing: Commons.Style.space(2)
-        Repeater {
-          // Omarchy's default first, then each agent that can run locked.
-          model: [{ value: "default", label: "Omarchy default" }].concat(
-                   root.guideAgents.filter(function(a) { return a.installed && a.supported })
-                     .map(function(a) { return { value: a.agent, label: a.name } })).reverse()
-          delegate: Chips {
-            required property var modelData
-            options: [modelData]
-            value: root.guideAgent === "" ? "default" : root.guideAgent
-            onPicked: value => root.set("guide-agent", value)
-          }
+      // The agent and the model as two pickers: each shows the choice and
+      // unfolds its list in place (a popup would fight the panel for keys).
+      // Agents carry their state and Check; models a search, every model
+      // the agent lists, and any name typed.
+      MiniLabel { text: "AGENT" }
+      PickerField {
+        open: root.guideMenu === "agent"
+        title: root.guideAgent ? (root.guideRow ? root.guideRow.name : root.guideAgent) : "Omarchy default"
+        detail: {
+          var row = root.guideRow
+          if (!root.guideAgent) return row ? "Follows omarchy default agent: " + row.name : "Follows omarchy default agent (none picked yet)"
+          if (!row) return ""
+          if (!row.installed) return "Not installed"
+          if (!row.supported) return "Off until checked"
+          return "Ready" + (row.models.length ? " · " + row.models.length + " models" : "")
         }
+        onToggled: root.guideMenu = open ? "" : "agent"
       }
-    }
-
-    SettingRow {
-      label: "MODEL"
-      visible: root.guideRow !== null && root.guideRow.installed
-      Column {
-        width: root.width * 0.72
-        spacing: Commons.Style.space(4)
-        Flow {
+      Rectangle {
+        width: root.width
+        visible: root.guideMenu === "agent"
+        height: agentRows.height + Commons.Style.space(8)
+        radius: Commons.Style.cornerRadius
+        color: Qt.alpha(root.foreground, 0.03)
+        border.width: 1
+        border.color: Qt.alpha(root.foreground, 0.08)
+        Column {
+          id: agentRows
+          y: Commons.Style.space(4)
           width: parent.width
-          layoutDirection: Qt.RightToLeft
-          spacing: Commons.Style.space(2)
           Repeater {
-            model: root.guideRow ? [{ value: "", label: "Default" }].concat(
-                     root.guideRow.models.slice(0, 6).map(function(m) { return { value: m.id, label: m.name } })).reverse() : []
-            delegate: Chips {
+            model: [{ agent: "", name: "Omarchy default", installed: true, supported: true, headless: true, omarchy: true }]
+                     .concat(root.guideAgents.filter(function(a) { return a.installed }))
+            delegate: Rectangle {
+              id: agentRow
               required property var modelData
-              options: [modelData]
-              value: root.guidePick.model || ""
-              onPicked: value => root.setGuideModel(value, root.guidePick.effort)
+              readonly property var a: modelData
+              readonly property bool chosen: root.guideAgent === a.agent
+              readonly property bool usable: a.installed && a.supported
+              // A jail check shows under Sandbox, not here.
+              readonly property bool checking: root.guideCheck.state === "running" && root.guideCheck.agent === a.agent
+                                               && !root.guideCheck.jail
+              readonly property bool failedCheck: root.guideCheck.state === "failed" && root.guideCheck.agent === a.agent
+                                                  && !root.guideCheck.jail
+              readonly property string defaultName: {
+                var d = root.guideAgents.find(function(x) { return x.default })
+                return d ? d.name : ""
+              }
+              width: agentRows.width
+              height: Math.max(agentName.implicitHeight + agentNote.implicitHeight, agentAction.height) + Commons.Style.space(16)
+              color: agentHit.containsMouse && usable ? Commons.Style.hoverFill : "transparent"
+              Accessible.role: Accessible.RadioButton
+              Accessible.name: a.name + ", " + agentNote.text
+              Accessible.checked: chosen
+              MouseArea {
+                id: agentHit
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: agentRow.usable ? Qt.PointingHandCursor : Qt.ArrowCursor
+                onClicked: {
+                  if (!agentRow.usable) return
+                  root.set("guide-agent", agentRow.a.omarchy ? "default" : agentRow.a.agent)
+                  root.guideMenu = ""
+                }
+              }
+              Text {
+                textFormat: Text.PlainText
+                id: agentDot
+                x: Commons.Style.space(12)
+                anchors.verticalCenter: parent.verticalCenter
+                text: agentRow.chosen ? "◉" : "○"
+                color: agentRow.chosen ? Commons.Color.accent : root.foreground
+                opacity: agentRow.usable ? (agentRow.chosen ? 1 : 0.5) : 0.2
+                font.pixelSize: Commons.Style.font.body
+              }
+              Column {
+                anchors.left: agentDot.right
+                anchors.leftMargin: Commons.Style.space(10)
+                anchors.right: agentAction.left
+                anchors.rightMargin: Commons.Style.space(8)
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: Commons.Style.space(1)
+                Text {
+                  textFormat: Text.PlainText
+                  id: agentName
+                  width: parent.width
+                  text: agentRow.a.name + (agentRow.a.default ? "  ·  Omarchy's pick" : "")
+                  color: root.foreground
+                  opacity: agentRow.usable ? 1 : 0.6
+                  elide: Text.ElideRight
+                  font.family: Commons.Style.font.family
+                  font.pixelSize: Commons.Style.font.bodySmall
+                  font.bold: agentRow.chosen
+                }
+                Caption {
+                  id: agentNote
+                  width: parent.width
+                  wrapMode: Text.WordWrap
+                  elide: Text.ElideNone
+                  opacity: agentRow.failedCheck ? 0.9 : 0.5
+                  color: agentRow.failedCheck ? Commons.Color.accent : root.foreground
+                  text: {
+                    var a = agentRow.a
+                    if (a.omarchy) return agentRow.defaultName ? "Follows omarchy default agent: " + agentRow.defaultName
+                                                               : "Follows omarchy default agent (none picked yet)"
+                    if (agentRow.checking) return (root.guideCheck.lines || []).slice(-1)[0] || "Checking…"
+                    if (agentRow.failedCheck) return (root.guideCheck.lines || []).slice(-2).join(" · ")
+                    if (a.supported) return "Ready" + (a.models.length ? " · " + a.models.length + " models" : "")
+                    if (!a.headless) return "No headless mode in OmaTrophy yet"
+                    if (a.relocked) return "Updated since its lock check; check it again"
+                    return "Off until checked: Check makes sure it can't write files or run commands"
+                  }
+                }
+              }
+              PillButton {
+                id: agentAction
+                anchors.right: parent.right
+                anchors.rightMargin: Commons.Style.space(10)
+                anchors.verticalCenter: parent.verticalCenter
+                visible: !agentRow.a.omarchy && !agentRow.a.supported && agentRow.a.headless
+                label: agentRow.checking ? "Checking…" : agentRow.failedCheck ? "Check again" : "Check"
+                onClicked: root.checkAgent(agentRow.a.agent)
+              }
             }
           }
         }
-        // Free text for a model the list doesn't name (a full id, an
-        // alias, provider/model for a local endpoint); Enter saves it.
-        Rectangle {
-          anchors.right: parent.right
-          width: Commons.Style.space(170)
-          height: Commons.Style.space(24)
-          radius: height / 2
-          color: "transparent"
-          border.width: 1
-          border.color: guideModelField.activeFocus ? Qt.alpha(Commons.Color.accent, 0.6) : Qt.alpha(root.foreground, 0.15)
-          TextInput {
-            id: guideModelField
-            anchors.fill: parent
-            anchors.leftMargin: Commons.Style.space(10)
-            anchors.rightMargin: Commons.Style.space(10)
-            verticalAlignment: TextInput.AlignVCenter
-            clip: true
-            color: root.foreground
-            font.family: Commons.Style.font.family
-            font.pixelSize: Commons.Style.font.caption
-            text: root.guideRow && root.guidePick.model && !root.guideRow.models.some(function(m) { return m.id === root.guidePick.model })
-                  ? root.guidePick.model : ""
-            onAccepted: { root.setGuideModel(text.trim(), root.guidePick.effort); focus = false }
-            Keys.onEscapePressed: focus = false
+      }
+      Caption {
+        width: root.width
+        visible: text !== "" && root.guideMenu === "agent"
+        wrapMode: Text.WordWrap
+        elide: Text.ElideNone
+        opacity: 0.35
+        text: {
+          var missing = root.guideAgents.filter(function(a) { return !a.installed }).map(function(a) { return a.name })
+          return missing.length ? "Not installed: " + missing.join(", ") : ""
+        }
+      }
+
+
+      MiniLabel { text: "MODEL"; visible: root.guideRow !== null && root.guideRow.supported }
+      PickerField {
+        visible: root.guideRow !== null && root.guideRow.supported
+        open: root.guideMenu === "model"
+        title: {
+          var id = root.guidePick.model
+          if (!id) return "Agent's default"
+          var m = root.guideRow ? root.guideRow.models.find(function(x) { return x.id === id }) : null
+          return m ? m.name : id
+        }
+        detail: {
+          var parts = []
+          var id = root.guidePick.model
+          var m = id && root.guideRow ? root.guideRow.models.find(function(x) { return x.id === id }) : null
+          if (!id) parts.push((root.guideRow ? root.guideRow.name : "The agent") + " picks it")
+          else if (!m) parts.push("Typed by you")
+          else if (m.name.toLowerCase() !== m.id.toLowerCase()) parts.push(m.id)
+          if (root.guidePick.effort) parts.push(root.guidePick.effort + " effort")
+          if (root.guidePick.endpoint) parts.push("at " + root.guidePick.endpoint)
+          return parts.join(" · ")
+        }
+        onToggled: {
+          root.guideMenu = open ? "" : "model"
+          root.guideModelSearch = ""
+        }
+      }
+
+      Rectangle {
+        width: root.width
+        visible: root.guideMenu === "model"
+        height: modelMenu.height + Commons.Style.space(8)
+        radius: Commons.Style.cornerRadius
+        color: Qt.alpha(root.foreground, 0.03)
+        border.width: 1
+        border.color: Qt.alpha(root.foreground, 0.08)
+        Column {
+          id: modelMenu
+          y: Commons.Style.space(4)
+          width: parent.width
+          // Search, or type a model the list doesn't have; Enter takes the
+          // first row.
+          Item {
+            width: parent.width
+            height: Commons.Style.space(36)
             Text {
               textFormat: Text.PlainText
+              id: modelSearchGlyph
+              x: Commons.Style.space(12)
               anchors.verticalCenter: parent.verticalCenter
-              visible: !guideModelField.text && !guideModelField.activeFocus
-              text: "Other model…"
+              text: "⌕"
               color: root.foreground
-              opacity: 0.4
-              font: guideModelField.font
+              opacity: 0.5
+              font.pixelSize: Commons.Style.font.body
             }
+            TextInput {
+              id: guideModelField
+              anchors.left: modelSearchGlyph.right
+              anchors.leftMargin: Commons.Style.space(8)
+              anchors.right: parent.right
+              anchors.rightMargin: Commons.Style.space(12)
+              anchors.verticalCenter: parent.verticalCenter
+              clip: true
+              color: root.foreground
+              selectionColor: Qt.alpha(Commons.Color.accent, 0.4)
+              font.family: Commons.Style.font.family
+              font.pixelSize: Commons.Style.font.bodySmall
+              text: root.guideModelSearch
+              onTextEdited: root.guideModelSearch = text
+              onAccepted: {
+                var first = root.modelChoices()[root.guideModelSearch ? 0 : 1]
+                if (first) root.chooseModel(first)
+              }
+              Keys.onEscapePressed: { root.guideMenu = ""; focus = false }
+              Text {
+                textFormat: Text.PlainText
+                anchors.verticalCenter: parent.verticalCenter
+                visible: !guideModelField.text
+                text: "Search " + (root.guideRow ? root.guideRow.models.length : 0) + " models, or type any model id"
+                color: root.foreground
+                opacity: 0.4
+                font: guideModelField.font
+              }
+            }
+            Rectangle {
+              anchors.bottom: parent.bottom
+              x: Commons.Style.space(12)
+              width: parent.width - Commons.Style.space(24)
+              height: 1
+              color: Qt.alpha(root.foreground, 0.08)
+            }
+          }
+          Repeater {
+            model: root.guideMenu === "model" ? root.modelChoices() : []
+            delegate: Rectangle {
+              id: modelRow
+              required property var modelData
+              readonly property var m: modelData
+              readonly property bool chosen: !m.custom && (root.guidePick.model || "") === m.id
+              width: modelMenu.width
+              height: modelName.implicitHeight + (modelDetail.visible ? modelDetail.implicitHeight : 0) + Commons.Style.space(14)
+              color: modelHit.containsMouse ? Commons.Style.hoverFill : "transparent"
+              Accessible.role: Accessible.RadioButton
+              Accessible.name: m.name
+              Accessible.checked: chosen
+              MouseArea {
+                id: modelHit
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.chooseModel(modelRow.m)
+              }
+              Text {
+                textFormat: Text.PlainText
+                id: modelDot
+                x: Commons.Style.space(12)
+                anchors.verticalCenter: parent.verticalCenter
+                text: modelRow.m.custom ? "+" : modelRow.chosen ? "◉" : "○"
+                color: modelRow.chosen || modelRow.m.custom ? Commons.Color.accent : root.foreground
+                opacity: modelRow.chosen || modelRow.m.custom ? 1 : 0.5
+                font.pixelSize: Commons.Style.font.body
+              }
+              Column {
+                anchors.left: modelDot.right
+                anchors.leftMargin: Commons.Style.space(10)
+                anchors.right: parent.right
+                anchors.rightMargin: Commons.Style.space(12)
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: Commons.Style.space(1)
+                Text {
+                  textFormat: Text.PlainText
+                  id: modelName
+                  width: parent.width
+                  text: modelRow.m.name
+                  color: modelRow.m.custom ? Commons.Color.accent : root.foreground
+                  elide: Text.ElideRight
+                  font.family: Commons.Style.font.family
+                  font.pixelSize: Commons.Style.font.bodySmall
+                  font.bold: modelRow.chosen
+                }
+                Caption {
+                  id: modelDetail
+                  width: parent.width
+                  visible: text !== ""
+                  opacity: 0.5
+                  text: modelRow.m.detail || ""
+                }
+              }
+            }
+          }
+          Caption {
+            x: Commons.Style.space(12)
+            width: parent.width - Commons.Style.space(24)
+            visible: root.guideRow !== null && root.guideRow.models.length === 0
+            wrapMode: Text.WordWrap
+            elide: Text.ElideNone
+            opacity: 0.4
+            text: root.guideRow ? root.guideRow.name + " doesn't list its models here; type the one you want above." : ""
+          }
+          Item { width: 1; height: Commons.Style.space(4) }
+        }
+      }
+
+      MiniLabel { text: "EFFORT"; visible: root.guideEfforts().length > 0 }
+      PickerField {
+        visible: root.guideEfforts().length > 0
+        open: root.guideMenu === "effort"
+        title: root.guidePick.effort ? root.effortName(root.guidePick.effort) : "Model's default"
+        detail: root.effortNote(root.guidePick.effort || "")
+        onToggled: root.guideMenu = open ? "" : "effort"
+      }
+      PickerList {
+        visible: root.guideMenu === "effort"
+        current: root.guidePick.effort || ""
+        rows: [{ value: "", name: "Model's default", detail: root.effortNote("") }].concat(
+                root.guideEfforts().map(function(e) { return { value: e, name: root.effortName(e), detail: root.effortNote(e) } }))
+        onPicked: value => { root.setGuideModel(root.guidePick.model, value); root.guideMenu = "" }
+      }
+
+      SettingRow {
+        label: "WEB"
+        Chips {
+          options: [
+            { value: "on", label: "Search the web" },
+            { value: "off", label: "Saved pages only" }
+          ]
+          value: root.guideWeb ? "on" : "off"
+          onPicked: value => root.set("guide-web", value)
+        }
+      }
+
+      // A second fence around the agent's own lock, when ai-jail is here;
+      // the row stays when it isn't, so "is it installed?" has an answer.
+      SettingRow {
+        label: "SANDBOX"
+        visible: root.guideAgents.length > 0
+        // A Row, which skips hidden children: the slot's childrenRect
+        // counted the hidden caption and pushed the chips off the edge.
+        Row {
+          spacing: Commons.Style.space(8)
+          // Not installed reads as off: a make then runs behind the
+          // agent's own lock only, and says so.
+          Caption {
+            textFormat: Text.PlainText
+            anchors.verticalCenter: parent.verticalCenter
+            visible: !root.jailInstalled
+            text: "Off · not installed"
+          }
+          PillButton {
+            visible: !root.jailInstalled
+            label: "Get ai-jail"
+            onClicked: Qt.openUrlExternally("https://github.com/akitaonrails/ai-jail")
+          }
+          Chips {
+            visible: root.jailInstalled
+            options: [
+              { value: "off", label: "Off" },
+              { value: "on", label: "ai-jail" }
+            ]
+            value: root.guideJail ? "on" : "off"
+            onPicked: value => root.set("guide-jail", value)
           }
         }
       }
-    }
 
-    SettingRow {
-      label: "EFFORT"
-      visible: root.guideEfforts().length > 0
-      Chips {
-        options: [{ value: "", label: "Default" }].concat(root.guideEfforts().map(function(e) { return { value: e, label: e } }))
-        value: root.guidePick.effort || ""
-        onPicked: value => root.setGuideModel(root.guidePick.model, value)
+      // Credit where it's due: the sandbox is Akita's ai-jail.
+      Caption {
+        textFormat: Text.PlainText
+        visible: root.guideAgents.length > 0
+        width: root.width
+        wrapMode: Text.WordWrap
+        elide: Text.ElideNone
+        opacity: 0.4
+        text: root.jailInstalled
+              ? "ai-jail " + (root.jailVersion ? root.jailVersion + " " : "") + "by Akita (github.com/akitaonrails/ai-jail): the agent sees only the job's folder, its own settings and the network."
+              : (root.guideJail ? "The sandbox is on, but ai-jail isn't on this system, so guides are made without it (the agent's own lock still applies). "
+                                 : "")
+                + "ai-jail is Akita's sandbox for coding agents (github.com/akitaonrails/ai-jail): install it to run the agent inside it too."
       }
-    }
 
-    SettingRow {
-      label: "WEB"
-      Chips {
-        options: [
-          { value: "on", label: "Search the web" },
-          { value: "off", label: "Saved pages only" }
-        ]
-        value: root.guideWeb ? "on" : "off"
-        onPicked: value => root.set("guide-web", value)
+      // What the picked agent needs let into the jail: a local model's
+      // server port and key file (`guide-jail-options`).
+      SettingRow {
+        label: "JAIL OPTIONS" + (root.guideRow ? " · " + root.guideRow.name.toUpperCase() : "")
+        visible: root.jailInstalled && root.guideJail && root.guideRow !== null
+        PillButton {
+          label: root.jailChecking ? "Checking…" : "Check in ai-jail"
+          onClicked: root.checkJail()
+        }
       }
-    }
+      Rectangle {
+        width: root.width
+        visible: root.jailInstalled && root.guideJail && root.guideRow !== null
+        height: Commons.Style.space(36)
+        radius: Commons.Style.cornerRadius
+        color: Qt.alpha(root.foreground, 0.03)
+        border.width: 1
+        border.color: Qt.alpha(root.foreground, jailOptionsField.activeFocus ? 0.3 : 0.08)
+        TextInput {
+          id: jailOptionsField
+          anchors.left: parent.left
+          anchors.right: parent.right
+          anchors.leftMargin: Commons.Style.space(12)
+          anchors.rightMargin: Commons.Style.space(12)
+          anchors.verticalCenter: parent.verticalCenter
+          clip: true
+          color: root.foreground
+          selectionColor: Qt.alpha(Commons.Color.accent, 0.4)
+          font.family: Commons.Style.font.family
+          font.pixelSize: Commons.Style.font.bodySmall
+          text: root.jailOptionsText(root.guideRow)
+          onEditingFinished: root.saveJailOptions(text)
+          Keys.onEscapePressed: { text = root.jailOptionsText(root.guideRow); focus = false }
+          Text {
+            textFormat: Text.PlainText
+            anchors.verticalCenter: parent.verticalCenter
+            width: parent.width
+            elide: Text.ElideRight
+            visible: !jailOptionsField.text
+            text: "None. A local model's key file: --map ~/path/to/key"
+            color: root.foreground
+            opacity: 0.4
+            font: jailOptionsField.font
+          }
+        }
+      }
+      Caption {
+        textFormat: Text.PlainText
+        visible: root.jailInstalled && root.guideJail && root.guideRow !== null && text !== ""
+        width: root.width
+        wrapMode: Text.WordWrap
+        elide: Text.ElideNone
+        color: root.jailCheckShown && root.guideCheck.state === "failed" ? Commons.Color.accent : root.foreground
+        text: root.jailCheckShown ? (root.guideCheck.lines || []).slice(root.jailChecking ? -1 : -2).join(" · ")
+                                  : root.jailOptionsNote
+      }
 
-    Caption {
-      textFormat: Text.PlainText
-      width: root.width
-      wrapMode: Text.WordWrap
-      elide: Text.ElideNone
-      opacity: 0.4
-      text: root.guideText()
+      Caption {
+        textFormat: Text.PlainText
+        width: root.width
+        wrapMode: Text.WordWrap
+        elide: Text.ElideNone
+        opacity: 0.4
+        text: root.guideText()
+      }
     }
 
     // ------------------------------------------------ stores
 
-    Item { width: 1; height: Commons.Style.space(8) }
+    Column {
+      width: root.width
+      spacing: root.spacing
+      visible: root.settingsSection === "stores"
 
-    PanelSectionHeader { text: "STORES"; foreground: root.foreground }
+      // Every store OmaTrophy knows, found or not, so "is GOG working?" has
+      // an answer here; a store's own settings sit inside its card.
+      StoreCard {
+        storeId: "steam"
+        missing: "Install Steam and play a game with achievements once. Steam somewhere else? Set STEAM_DIR."
 
-    // Every store OmaTrophy knows, found or not, so "is GOG working?" has
-    // an answer here; a store's own settings sit inside its card.
-    StoreCard {
-      storeId: "steam"
-      missing: "Install Steam and play a game with achievements once. Steam somewhere else? Set STEAM_DIR."
+        // The opt-in profile backfill (ADR 11). The switch goes through
+        // `set community`, like every other setting.
+        SettingRow {
+          label: "PROFILE"
+          Chips {
+            options: [
+              { value: "off", label: "Off" },
+              { value: "on", label: "Fill in" }
+            ]
+            value: root.community ? "on" : "off"
+            onPicked: value => root.set("community", value)
+          }
+        }
 
-      // The opt-in profile backfill (ADR 11). The switch goes through
-      // `set community`, like every other setting.
-      SettingRow {
-        label: "PROFILE"
-        Chips {
-          options: [
-            { value: "off", label: "Off" },
-            { value: "on", label: "Fill in" }
-          ]
-          value: root.community ? "on" : "off"
-          onPicked: value => root.set("community", value)
+        Caption {
+          textFormat: Text.PlainText
+          width: parent.width
+          wrapMode: Text.WordWrap
+          opacity: 0.4
+          text: root.backfillText()
+        }
+
+        // Load from Steam (ADR 13): only ever started here or from the CLI,
+        // never by the watcher, because Steam's window moves.
+        SettingRow {
+          label: "LIBRARY"
+          Row {
+            spacing: Commons.Style.space(4)
+            PillButton {
+              label: "Check all again"
+              visible: !root.steamLoading && root.steamMissing > root.steamUnchecked
+              onClicked: root.startSteamLoad(true)
+            }
+            PillButton {
+              label: root.steamLoading ? "Stop" : "Load from Steam"
+              visible: root.steamLoading || root.steamUnchecked > 0
+              onClicked: root.steamLoading ? root.stopSteamLoad() : root.startSteamLoad(false)
+            }
+          }
+        }
+
+        Caption {
+          textFormat: Text.PlainText
+          width: parent.width
+          wrapMode: Text.WordWrap
+          opacity: 0.4
+          text: root.steamLoadText()
+        }
+
+        // Steam shows its own popup for the same unlock. OmaTrophy only reads
+        // Steam's files (ADR 1), and Steam rewrites its config while it runs,
+        // so this opens Steam's Notifications page for the owner to switch it
+        // off there. Page id and labels from Steam's own client UI (steamui).
+        SettingRow {
+          label: "POPUPS"
+          Rectangle {
+            id: steamButton
+            width: steamText.implicitWidth + Commons.Style.space(20)
+            height: steamText.implicitHeight + Commons.Style.space(10)
+            radius: height / 2
+            color: steamHit.containsMouse ? Commons.Style.hoverFill : "transparent"
+            border.width: 1
+            border.color: Qt.alpha(root.foreground, steamHit.containsMouse ? 0.35 : 0.18)
+            Accessible.role: Accessible.Button
+            Accessible.name: "Open Steam's settings to turn off its achievement popups"
+            Behavior on color { ColorAnimation { duration: 120 } }
+            Text {
+              textFormat: Text.PlainText
+              id: steamText
+              anchors.centerIn: parent
+              text: "Turn off in Steam ↗"
+              color: root.foreground
+              opacity: 0.8
+              font.family: Commons.Style.font.family
+              font.pixelSize: Commons.Style.font.caption
+            }
+            MouseArea {
+              id: steamHit
+              anchors.fill: parent
+              hoverEnabled: true
+              cursorShape: Qt.PointingHandCursor
+              onClicked: Qt.openUrlExternally("steam://open/settings/notifications")
+            }
+          }
+        }
+
+        Caption {
+          textFormat: Text.PlainText
+          width: parent.width
+          wrapMode: Text.WordWrap
+          opacity: 0.4
+          text: "Steam shows its own popup too. On the page this opens, find \"When I unlock an achievement\" and untick Show Toast (and Play Sound)."
         }
       }
 
-      Caption {
-        textFormat: Text.PlainText
-        width: parent.width
-        wrapMode: Text.WordWrap
-        opacity: 0.4
-        text: root.backfillText()
+      StoreCard {
+        storeId: "gog"
+        missing: "Play a GOG game once through Heroic Games Launcher, signed in to GOG."
+        note: "Through Heroic Games Launcher. Toasts come live while you play; nothing to set."
       }
-
-      // Load from Steam (ADR 13): only ever started here or from the CLI,
-      // never by the watcher, because Steam's window moves.
-      SettingRow {
-        label: "LIBRARY"
-        Row {
-          spacing: Commons.Style.space(4)
-          PillButton {
-            label: "Check all again"
-            visible: !root.steamLoading && root.steamMissing > root.steamUnchecked
-            onClicked: root.startSteamLoad(true)
-          }
-          PillButton {
-            label: root.steamLoading ? "Stop" : "Load from Steam"
-            visible: root.steamLoading || root.steamUnchecked > 0
-            onClicked: root.steamLoading ? root.stopSteamLoad() : root.startSteamLoad(false)
-          }
-        }
-      }
-
-      Caption {
-        textFormat: Text.PlainText
-        width: parent.width
-        wrapMode: Text.WordWrap
-        opacity: 0.4
-        text: root.steamLoadText()
-      }
-
-      // Steam shows its own popup for the same unlock. OmaTrophy only reads
-      // Steam's files (ADR 1), and Steam rewrites its config while it runs,
-      // so this opens Steam's Notifications page for the owner to switch it
-      // off there. Page id and labels from Steam's own client UI (steamui).
-      SettingRow {
-        label: "POPUPS"
-        Rectangle {
-          id: steamButton
-          width: steamText.implicitWidth + Commons.Style.space(20)
-          height: steamText.implicitHeight + Commons.Style.space(10)
-          radius: height / 2
-          color: steamHit.containsMouse ? Commons.Style.hoverFill : "transparent"
-          border.width: 1
-          border.color: Qt.alpha(root.foreground, steamHit.containsMouse ? 0.35 : 0.18)
-          Accessible.role: Accessible.Button
-          Accessible.name: "Open Steam's settings to turn off its achievement popups"
-          Behavior on color { ColorAnimation { duration: 120 } }
-          Text {
-            textFormat: Text.PlainText
-            id: steamText
-            anchors.centerIn: parent
-            text: "Turn off in Steam ↗"
-            color: root.foreground
-            opacity: 0.8
-            font.family: Commons.Style.font.family
-            font.pixelSize: Commons.Style.font.caption
-          }
-          MouseArea {
-            id: steamHit
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: Qt.openUrlExternally("steam://open/settings/notifications")
-          }
-        }
-      }
-
-      Caption {
-        textFormat: Text.PlainText
-        width: parent.width
-        wrapMode: Text.WordWrap
-        opacity: 0.4
-        text: "Steam shows its own popup too. On the page this opens, find \"When I unlock an achievement\" and untick Show Toast (and Play Sound)."
-      }
-    }
-
-    StoreCard {
-      storeId: "gog"
-      missing: "Play a GOG game once through Heroic Games Launcher, signed in to GOG."
-      note: "Through Heroic Games Launcher. Toasts come live while you play; nothing to set."
     }
   }
 }
