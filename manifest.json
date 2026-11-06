@@ -16,6 +16,7 @@
     "barWidget": "Panel.qml",
     "overlay": "Tracker.qml"
   },
+  "keepLoaded": true,
   "barWidget": {
     "displayName": "OmaTrophy",
     "description": "Your trophies, the game you're playing, and toast settings",

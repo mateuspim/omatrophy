@@ -860,6 +860,20 @@ class PanelJson(unittest.TestCase):
         self.assertEqual(tiers['ACH_1'], (5.0, 'gold'))
         self.assertEqual(tiers['ACH_2'], (None, 'bronze'))
 
+    def test_game_with_guide_answers_both_in_one_read(self):
+        # The Guide key ran `game`, then `guide`, one after the other; one
+        # process now answers both.
+        out = io.StringIO()
+        # FakeLibrary leaves XDG_DATA_HOME, the owner's real one: guides go
+        # to a folder of the test's own.
+        with tempfile.TemporaryDirectory() as data, FakeLibrary(), redirect_stdout(out), \
+                mock.patch.dict(os.environ, {'XDG_DATA_HOME': data}), \
+                mock.patch.object(omatrophy, 'save_images_later', lambda urls: None):
+            omatrophy.game(['steam', '20', '--guide'])
+        found = json.loads(out.getvalue())
+        self.assertEqual(found['game'], 'Half Game')
+        self.assertEqual(found['guide'], {})  # no guide made for it
+
     def test_game_detail_without_cached_achievements_says_what_to_do(self):
         with FakeLibrary():
             with self.assertRaises(SystemExit) as e:

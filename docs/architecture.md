@@ -37,7 +37,7 @@ turns those lines into cards on screen.
 | `Panel.qml` | Bar button; opens a `KeyboardPanel` that loads `StylePicker.qml`, and turns its `track` signal into a summon of the tracker. |
 | `StylePicker.qml` | Three tabs. Now: totals, the running game (or the last three) and the platinum shelf, from `omatrophy.py now`. Games: every game, sortable, from `omatrophy.py games` on first open. Settings: trophy style, previews, position and sound, through `omatrophy.py set`. |
 | `FreshObject.qml` | Builds a sibling QML file from its current text, so the cards, the panel content and the tracker pick up edits without a restart. |
-| `Tracker.qml` | The `overlay` entry point: a dimmed full-screen window that takes the keyboard while open and loads `TrackerView.qml`. |
+| `Tracker.qml` | The `overlay` entry point (kept loaded): a dimmed full-screen window that takes the keyboard while open and loads `TrackerView.qml`, kept built between opens while its text is unchanged (ADR 19). |
 | `TrackerView.qml` | One game's every achievement with rarity and dates; filters, type-to-search and a keyboard-driven highlight. Its Guide tab shows the game's 100% guide and starts or stops a make (`omatrophy.py guide make`, detached). |
 | `assets/<set>/` | Trophy art: `omarchy` (pixel grid, theme-tinted inlay), `vector`, `painted`. |
 
@@ -57,7 +57,7 @@ turns those lines into cards on screen.
    picker watch it, so changes apply to the next card.
 5. The panel runs `omatrophy.py now` each time it opens. Clicking a game
    summons the plugin's overlay with `{store, app}`; `Tracker.qml` passes it
-   to `TrackerView.qml`, which runs `omatrophy.py game` (ADR 9).
+   to `TrackerView.qml`, which runs `omatrophy.py game --guide` (ADR 9, ADR 19).
 
 Line shapes are in [specs/events.md](specs/events.md), the CLI in
 [specs/cli.md](specs/cli.md), the settings file in
