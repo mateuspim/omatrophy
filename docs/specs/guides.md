@@ -191,7 +191,10 @@ Pages come from, in this order: the earlier `.sources.json`, files in
 `sources/<name>/` (named `file:<name>`), Steam guides, then pages the
 agent read (Claude's WebFetch results, OpenCode's webfetch results, kind
 `agent`), the pages it cites, and trusted-site links its searches turned
-up, fetched by OmaTrophy within the budget. Search engines' result pages
+up (Claude's and OpenCode's search results; Codex's `web_search` items:
+result URLs and pages it opened), best site first, fetched by OmaTrophy
+within the budget. A Steam player's own page (`/profiles/...`, `/id/...`)
+is never fetched: it lists achievements, not how to get them. Search engines' result pages
 (Bing, DuckDuckGo, Google, any `/search?q=`) are never kept as sources. A
 cite verifies when its quote (folded, 12-400 characters) is in the source
 it names, or failing that in any source held, and says more than the

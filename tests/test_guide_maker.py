@@ -220,6 +220,13 @@ class Checks(unittest.TestCase):
         self.assertFalse(guide_maker.search_page('https://steamcommunity.com/app/1/guides/'))
         self.assertFalse(guide_maker.search_page('https://www.powerpyx.com/re7-trophy-guide/'))
 
+    def test_player_page_is_a_steam_profile_only(self):
+        self.assertTrue(guide_maker.player_page('https://steamcommunity.com/profiles/1/achievements/418370'))
+        self.assertTrue(guide_maker.player_page('https://steamcommunity.com/id/someone/stats/418370'))
+        self.assertFalse(guide_maker.player_page('https://steamcommunity.com/achievements/418370'))
+        self.assertFalse(guide_maker.player_page('https://steamcommunity.com/sharedfiles/filedetails/?id=1'))
+        self.assertFalse(guide_maker.player_page('https://example.com/profiles/1'))
+
     def test_slug(self):
         self.assertEqual(guide_maker.slug('DOOM: The Dark Ages™'), 'doom-the-dark-ages')
 
@@ -317,6 +324,21 @@ class Agents(unittest.TestCase):
         self.assertIn('OPENCODE_CONFIG_CONTENT', envs)
         self.assertNotIn('SECRET_THING', ' '.join(argv))
         self.assertNotIn('--docker', argv)
+
+    # Regression: Codex's search runs server-side and gave OmaTrophy no
+    # page, so GPT-6.1 Sol and GPT-6 Luna verified 0 of 11 on RE7.
+    def test_codex_answer_keeps_its_search_and_opened_links(self):
+        lines = [{'type': 'item.completed', 'item': {'type': 'web_search', 'action': {'type': 'search'},
+                                                     'results': [{'url': 'https://www.powerpyx.com/a'},
+                                                                 {'url': 'http://plain/x'}, {'title': 'no url'}]}},
+                 {'type': 'item.completed', 'item': {'type': 'web_search',
+                                                     'action': {'type': 'open_page', 'url': 'https://b/page'},
+                                                     'results': [{'url': 'https://www.powerpyx.com/a'}]}},
+                 {'type': 'item.completed', 'item': {'type': 'agent_message', 'text': 'done'}}]
+        with tempfile.TemporaryDirectory() as d:
+            out = guide_agents.Codex().answer('\n'.join(json.dumps(l) for l in lines), d)
+        self.assertEqual(out['text'], 'done')
+        self.assertEqual(out['links'], ['https://www.powerpyx.com/a', 'https://b/page'])
 
     def test_codex_models_cache(self):
         with tempfile.TemporaryDirectory() as d:

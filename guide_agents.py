@@ -221,7 +221,25 @@ class Codex(Adapter):
             item = event.get('item') if event.get('type') == 'item.completed' else None
             if isinstance(item, dict) and item.get('type') == 'agent_message' and not out['text']:
                 out['text'] = str(item.get('text') or '')
+            if isinstance(item, dict) and item.get('type') == 'web_search':
+                out['links'] += [u for u in codex_search_links(item) if u not in out['links']]
         return out
+
+
+def codex_search_links(item):
+    """The URLs in one of Codex's `web_search` items: a page it opened
+    (`action.url`) and every search result's `url`. Its search runs on
+    OpenAI's side and hands back only snippets, so OmaTrophy fetches the
+    pages itself; without these a Codex guide could have no source at
+    all (GPT-6.1 Sol and GPT-6 Luna verified 0 of 11 on RE7, 2026-11-06)."""
+    found = []
+    action = item.get('action') if isinstance(item.get('action'), dict) else {}
+    if action.get('type') == 'open_page':
+        found.append(action.get('url'))
+    for result in item.get('results') if isinstance(item.get('results'), list) else []:
+        if isinstance(result, dict):
+            found.append(result.get('url'))
+    return [u for u in found if isinstance(u, str) and u.startswith('https://')]
 
 
 class ListedModels(Adapter):
