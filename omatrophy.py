@@ -1132,6 +1132,21 @@ SWITCHES = {'community', 'guide-web', 'guide-jail', 'reveal-hidden'} | {f'now-{n
 def set_option(key, value):
     """Write one setting to ~/.config/omatrophy/config.json; the shell picks it up live.
     `sound` takes on/off, or a chime set, which also turns sound on."""
+    if key == 'guide-key':
+        # Installed from Settings > Guides only when the owner asks (ADR 18);
+        # `none` removes it.
+        import guide_key
+        parsed = guide_key.parse('' if value == 'none' else value)
+        if parsed is None:
+            raise SystemExit(f'omatrophy: set guide-key: "{value}" is not a key; write it like {guide_key.DEFAULT}, or none')
+        value = parsed['spec']
+        path = config_path()
+        cfg = read_json(path, {})
+        cfg = cfg if isinstance(cfg, dict) else {}
+        cfg[key] = value
+        write_json(path, cfg, indent=2)
+        print(f'guide-key = {value or "none"}')
+        return
     if key == 'guide-agent':
         import guide_agents
         if value != 'default' and value not in guide_agents.BY_ID:
@@ -1361,10 +1376,21 @@ def main(argv):
         demo(argv[2:] or ['unlock', 'rare', 'platinum'])
     elif cmd == 'set' and len(argv) == 4:
         set_option(argv[2], argv[3])
-    elif cmd == 'guide-key' and len(argv) <= 3:
-        # Called by Service.qml with the plugin's Guide key setting (ADR 18).
+    elif cmd == 'guide-key' and argv[2:] == ['free']:
         import guide_key
-        print(json.dumps(guide_key.sync(argv[2] if len(argv) == 3 else guide_key.DEFAULT)))
+        raw = guide_key.hyprctl('-j', 'binds')
+        try:
+            binds = json.loads(raw) if raw else []
+        except ValueError:
+            binds = []
+        print(json.dumps(guide_key.free(binds if isinstance(binds, list) else [])))
+    elif cmd == 'guide-key' and len(argv) == 4 and argv[2] == 'check':
+        import guide_key
+        print(json.dumps(guide_key.check(argv[3])))
+    elif cmd == 'guide-key' and len(argv) == 3:
+        # Called by Service.qml with config.json's `guide-key` (ADR 18).
+        import guide_key
+        print(json.dumps(guide_key.sync(argv[2])))
     elif cmd == 'sync':
         sync()
     elif cmd == 'steam-load' and argv[2:] in ([], ['all']):

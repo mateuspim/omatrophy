@@ -29,7 +29,7 @@ made.
 | [15](0015-check-an-agents-lock-on-the-owners-machine.md) | Check an agent's lock on the owner's machine, per installed binary | Accepted |
 | [16](0016-in-game-guide-is-the-tracker-on-a-key.md) | The in-game guide is the tracker's Guide tab on a key | Accepted; binding superseded by 18 |
 | [17](0017-walkthrough-is-a-maker-stage.md) | The walkthrough is one more maker stage, checked like the rest | Accepted |
-| [18](0018-bind-the-guide-key-at-runtime.md) | Bind the Guide key at runtime from a plugin setting | Accepted |
+| [18](0018-bind-the-guide-key-at-runtime.md) | Bind the Guide key at runtime, once the owner installs it | Accepted |
 
 ## Rules
 

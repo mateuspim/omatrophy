@@ -27,6 +27,17 @@ class Views(unittest.TestCase):
             dupes = sorted({h for h in found if found.count(h) > 1})
             self.assertEqual(dupes, [], f'{name}: the root sets these twice: {dupes}')
 
+    def test_no_property_set_twice_in_a_row(self):
+        # The live shell refuses the whole file for a property assigned
+        # twice in one object; an edit on 2026-11-06 left two `visible:`.
+        for name in VIEWS:
+            lines = text(name).split('\n')
+            for i in range(len(lines) - 1):
+                a = re.match(r'^(\s+)([a-z]\w*):\s', lines[i])
+                b = re.match(r'^(\s+)([a-z]\w*):\s', lines[i + 1])
+                self.assertFalse(a and b and a.groups() == b.groups(),
+                                 f'{name}:{i + 2}: {a.group(2) if a else ""} set twice')
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -19,6 +19,7 @@ bar panel).
 | `settings-section` | The Settings tab's last section: `"overview"`, `"toasts"`, `"now"`, `"guides"`, `"stores"`. Written when you pick one. | `"overview"` |
 | `tracker-sort` | `"recent"`, `"rarity"`, `"name"`, `"game"` (the store's own order) | `"recent"` |
 | `reveal-hidden` | `true`, `false`: the tracker shows hidden achievements' names and tips without a hover. Written by the tracker's Reveal all and Shift+Enter. | `false` |
+| `guide-key` | The key that opens the running game's guide over it, like `"SUPER + CTRL + G"`; `""` binds none. Written by Settings > Guides (Install, Change, Remove) and `omatrophy.py set guide-key <key>\|none` ([ADR 18](../adr/0018-bind-the-guide-key-at-runtime.md)). | `""` |
 | `community` | `true`, `false`: fill in games that never ran here from your public Steam profile (ADR 11) | `false` |
 | `now-metals`, `now-recent`, `now-rarest`, `now-shelf` | `true`, `false`: show the bar panel's Now-tab section (the metal tally, recently played, rarest unlocks, the platinum shelf). The game you're playing always shows. | `true` |
 | `showcase` | Up to six trophies on the Profile tab's showcase, in the order pinned: `"store:game:api"` for one achievement, `"store:game"` for a game's platinum. Written by `omatrophy.py showcase` and the tracker's ☆; empty shows your rarest instead. | `[]` |
@@ -57,11 +58,3 @@ The panel's IPC target is `pym.omatrophy` (`open`, `close`, `toggle`, from
 Omarchy's `Panel`). `omarchy-shell shell summon pym.omatrophy '<json>'` opens
 the tracker ([payload](cli.md#overlay), ADR 9).
 
-## Omarchy's plugin settings
-
-Set on Omarchy's plugin settings page for OmaTrophy (the bar widget's
-`schema` in `manifest.json`), not in `config.json`.
-
-| Key | Values | Default |
-| --- | --- | --- |
-| `guideKey` | The key that opens the running game's guide over it, written like `SUPER + CTRL + G`; `""` binds none. A key in use is refused ([ADR 18](../adr/0018-bind-the-guide-key-at-runtime.md)). | `"SUPER + CTRL + G"` |

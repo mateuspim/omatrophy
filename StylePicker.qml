@@ -296,6 +296,80 @@ Column {
   // How the service's last bind of the Guide key went (guide_key.py):
   // {key, bound, error}.
   property var guideKeyState: ({})
+  // The Guide key the owner installed (config.json `guide-key`), "" none.
+  property string guideKeyInstalled: ""
+  readonly property string defaultGuideKey: "SUPER + CTRL + G"
+  // `guide-key check` answers, {key, valid, taken}: the default's, read
+  // when Guides opens, and the typed key's, on Install.
+  property var defaultKeyCheck: ({})
+  property var draftKeyCheck: ({})
+  property bool keyEditing: false
+  // Why the last key press was not taken, shown under the recorder.
+  property string keyHint: ""
+  // Keys no Hyprland bind uses (`guide-key free`), offered while recording:
+  // a bound key never reaches the recorder, Hyprland handles it first.
+  property var freeKeys: []
+  onKeyEditingChanged: if (keyEditing && live) freeKeyReader.running = true
+  property string keyDraft: ""
+  // The field holds a key other than the installed one (same key, written
+  // another way, counts as the same).
+  readonly property bool keyChanged: {
+    var draft = String(keyDraft).toUpperCase().replace(/\s+/g, "")
+    return draft !== "" && draft !== guideKeyInstalled.toUpperCase().replace(/\s+/g, "")
+  }
+
+  // A key press as Hyprland's key spec ("SUPER + ALT + G"): null for a
+  // modifier alone (still waiting), "" for one guide_key.py would refuse
+  // (no modifier, or a key it can't name).
+  function recordedKey(event) {
+    var k = event.key
+    if ([Qt.Key_Shift, Qt.Key_Control, Qt.Key_Alt, Qt.Key_Meta, Qt.Key_Super_L, Qt.Key_Super_R, Qt.Key_AltGr,
+         Qt.Key_Hyper_L, Qt.Key_Hyper_R].indexOf(k) >= 0) return null
+    var mods = []
+    if (event.modifiers & Qt.MetaModifier) mods.push("SUPER")
+    if (event.modifiers & Qt.ControlModifier) mods.push("CTRL")
+    if (event.modifiers & Qt.AltModifier) mods.push("ALT")
+    if (event.modifiers & Qt.ShiftModifier) mods.push("SHIFT")
+    var name = ""
+    if (k >= Qt.Key_A && k <= Qt.Key_Z) name = String.fromCharCode(k)
+    else if (k >= Qt.Key_0 && k <= Qt.Key_9) name = String.fromCharCode(k)
+    else if (k >= Qt.Key_F1 && k <= Qt.Key_F35) name = "F" + (k - Qt.Key_F1 + 1)
+    else {
+      var named = {}
+      named[Qt.Key_Space] = "SPACE"; named[Qt.Key_Tab] = "TAB"; named[Qt.Key_Backspace] = "BACKSPACE"
+      named[Qt.Key_Delete] = "DELETE"; named[Qt.Key_Insert] = "INSERT"; named[Qt.Key_Home] = "HOME"
+      named[Qt.Key_End] = "END"; named[Qt.Key_PageUp] = "PRIOR"; named[Qt.Key_PageDown] = "NEXT"
+      named[Qt.Key_Left] = "LEFT"; named[Qt.Key_Right] = "RIGHT"; named[Qt.Key_Up] = "UP"; named[Qt.Key_Down] = "DOWN"
+      named[Qt.Key_Comma] = "COMMA"; named[Qt.Key_Period] = "PERIOD"; named[Qt.Key_Slash] = "SLASH"
+      named[Qt.Key_Backslash] = "BACKSLASH"; named[Qt.Key_Semicolon] = "SEMICOLON"; named[Qt.Key_Apostrophe] = "APOSTROPHE"
+      named[Qt.Key_Minus] = "MINUS"; named[Qt.Key_Equal] = "EQUAL"; named[Qt.Key_QuoteLeft] = "GRAVE"
+      named[Qt.Key_BracketLeft] = "BRACKETLEFT"; named[Qt.Key_BracketRight] = "BRACKETRIGHT"
+      named[Qt.Key_Print] = "PRINT"; named[Qt.Key_Pause] = "PAUSE"
+      name = named[k] || ""
+    }
+    if (!name) return ""
+    if (!mods.length && name.charAt(0) !== "F") return ""
+    if (!mods.length && name.length === 1) return ""
+    return mods.concat([name]).join(" + ")
+  }
+
+  function keyLabel(spec) {
+    return String(spec || "").split(" + ").map(function(p) { return p.length > 1 ? p.charAt(0) + p.slice(1).toLowerCase() : p }).join("+")
+  }
+
+  function installGuideKey(spec) {
+    keyEditing = false
+    guideKeyInstalled = spec
+    runner.exec(["python3", helperPath, "set", "guide-key", spec])
+  }
+
+  // Checks a typed key against the owner's binds, then installs it if free.
+  function tryGuideKey(text) {
+    if (!String(text).trim()) return
+    keyChecker.forInstall = true
+    keyChecker.command = ["python3", helperPath, "guide-key", "check", String(text)]
+    keyChecker.running = true
+  }
 
   signal track(string store, string app, string api)
 
@@ -309,6 +383,7 @@ Column {
     if (key === "guide-web") guideWeb = value === "on"
     if (key === "guide-jail") guideJail = value === "on"
     if (key === "guide-agent") guideAgent = value === "default" ? "" : value
+    if (key === "guide-key") guideKeyInstalled = value === "none" ? "" : value
     if (key.indexOf("now-") === 0) {
       var shows = Object.assign({}, nowShows)
       shows[key.slice(4)] = value === "on"
@@ -584,6 +659,7 @@ Column {
       root.guideAgent = typeof c["guide-agent"] === "string" ? c["guide-agent"] : ""
       root.guideModels = c["guide-models"] && typeof c["guide-models"] === "object" ? c["guide-models"] : {}
       root.guideWeb = c["guide-web"] !== false
+      root.guideKeyInstalled = typeof c["guide-key"] === "string" ? c["guide-key"] : ""
       root.guideJail = c["guide-jail"] === true
       if (c["games-sort"]) root.sort = c["games-sort"]
       if (c.rarest) root.rarestRange = c.rarest
@@ -677,6 +753,38 @@ Column {
   }
 
   Process { id: runner }
+
+  // Is the default Guide key free? Asked once Guides is open, so a taken
+  // default shows its warning instead of an Install button.
+  Process {
+    id: defaultKeyChecker
+    running: root.live && root.tab === "settings" && root.settingsSection === "guides" && root.defaultKeyCheck.key === undefined
+    command: ["python3", root.helperPath, "guide-key", "check", root.defaultGuideKey]
+    stdout: StdioCollector {
+      onStreamFinished: { try { root.defaultKeyCheck = JSON.parse(text) } catch (e) {} }
+    }
+  }
+
+  Process {
+    id: freeKeyReader
+    command: ["python3", root.helperPath, "guide-key", "free"]
+    stdout: StdioCollector {
+      onStreamFinished: { try { root.freeKeys = JSON.parse(text) } catch (e) {} }
+    }
+  }
+
+  Process {
+    id: keyChecker
+    property bool forInstall: false
+    stdout: StdioCollector {
+      onStreamFinished: {
+        var r = {}
+        try { r = JSON.parse(text) } catch (e) { return }
+        root.draftKeyCheck = r
+        if (keyChecker.forInstall && r.valid && !r.taken) root.installGuideKey(r.key)
+      }
+    }
+  }
 
   // A guide being made runs out of sight once its tracker closes; the strip
   // under the tabs follows it with a light poll.
@@ -4562,18 +4670,142 @@ Column {
         text: root.guideText()
       }
 
-      // The guide over a running game (ADR 18): the service binds the
-      // plugin setting and writes how that went to guide-key.json.
+      // The guide over a running game (ADR 18). Nothing is bound until
+      // the owner installs a key here: the default when it's free, else
+      // one they type, checked against their binds first.
       SettingRow {
         label: "IN GAME"
-        Caption {
-          textFormat: Text.PlainText
-          anchors.verticalCenter: parent ? parent.verticalCenter : undefined
-          // No state yet: the shell hasn't started the service that binds
-          // it (0.6 to this version needs one restart).
-          text: root.guideKeyState.bound ? root.guideKeyState.bound : root.guideKeyState.error ? "Not bound"
-                : root.guideKeyState.key === "" ? "No key" : "Needs a shell restart"
-          color: root.guideKeyState.error ? Commons.Color.accent : root.foreground
+        Row {
+          spacing: Commons.Style.space(6)
+          Caption {
+            textFormat: Text.PlainText
+            anchors.verticalCenter: parent.verticalCenter
+            visible: root.guideKeyInstalled !== "" && !root.keyEditing
+            text: root.guideKeyState.error && root.guideKeyState.bound !== root.guideKeyInstalled ? "Not bound"
+                  : root.keyLabel(root.guideKeyInstalled)
+            color: root.guideKeyState.error ? Commons.Color.accent : root.foreground
+          }
+          PillButton {
+            visible: root.guideKeyInstalled === "" && !root.keyEditing && root.defaultKeyCheck.valid === true
+                     && root.defaultKeyCheck.taken === ""
+            label: "Install " + root.keyLabel(root.defaultGuideKey)
+            onClicked: root.installGuideKey(root.defaultGuideKey)
+          }
+          PillButton {
+            visible: !root.keyEditing && (root.guideKeyInstalled !== "" || root.defaultKeyCheck.taken !== "")
+            label: root.guideKeyInstalled !== "" ? "Change" : "Pick a key"
+            onClicked: { root.keyEditing = true; root.keyDraft = root.guideKeyInstalled || ""; root.keyHint = ""; root.draftKeyCheck = ({}) }
+          }
+          PillButton {
+            visible: root.guideKeyInstalled !== "" && !root.keyEditing
+            label: "Remove"
+            onClicked: root.set("guide-key", "none")
+          }
+        }
+      }
+      // The default is taken: say by what, before any key is offered.
+      Caption {
+        textFormat: Text.PlainText
+        width: root.width
+        visible: root.guideKeyInstalled === "" && root.defaultKeyCheck.taken !== "" && root.defaultKeyCheck.taken !== undefined
+        wrapMode: Text.WordWrap
+        elide: Text.ElideNone
+        color: Commons.Color.accent
+        text: "⚠ " + root.keyLabel(root.defaultGuideKey) + " is already used by " + root.defaultKeyCheck.taken + ". Pick another key."
+      }
+      Row {
+        visible: root.keyEditing
+        spacing: Commons.Style.space(6)
+        Rectangle {
+          width: root.width - (keyInstall.visible ? keyInstall.width + Commons.Style.space(6) : 0) - keyCancel.width
+                 - Commons.Style.space(6)
+          height: Commons.Style.space(32)
+          radius: Commons.Style.cornerRadius
+          color: Qt.alpha(root.foreground, 0.03)
+          border.width: 1
+          border.color: Qt.alpha(root.foreground, keyField.activeFocus ? 0.3 : 0.08)
+          // Records a key press, not typed text: the owner typed a word
+          // once, and Hyprland refused it.
+          Item {
+            id: keyField
+            anchors.fill: parent
+            focus: root.keyEditing
+            onVisibleChanged: if (visible) forceActiveFocus()
+            Keys.onPressed: function(event) {
+              event.accepted = true
+              if (event.key === Qt.Key_Escape) { root.keyEditing = false; return }
+              if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && !event.modifiers && root.keyChanged) {
+                root.tryGuideKey(root.keyDraft)
+                return
+              }
+              var spec = root.recordedKey(event)
+              if (spec === null) return  // a modifier alone: wait for the key
+              root.draftKeyCheck = ({})
+              root.keyHint = spec === "" ? "Hold Super, Ctrl, Alt or Shift with a letter, digit or F-key." : ""
+              if (spec !== "") root.keyDraft = spec
+            }
+            TapHandler { onTapped: keyField.forceActiveFocus() }
+            Text {
+              textFormat: Text.PlainText
+              anchors.left: parent.left
+              anchors.leftMargin: Commons.Style.space(12)
+              anchors.verticalCenter: parent.verticalCenter
+              text: root.keyDraft ? root.keyLabel(root.keyDraft) : "Press the keys…"
+              color: root.foreground
+              opacity: root.keyDraft ? 1 : 0.4
+              font.family: Commons.Style.font.family
+              font.pixelSize: Commons.Style.font.bodySmall
+              font.bold: !!root.keyDraft
+            }
+            Text {
+              textFormat: Text.PlainText
+              anchors.right: parent.right
+              anchors.rightMargin: Commons.Style.space(12)
+              anchors.verticalCenter: parent.verticalCenter
+              visible: keyField.activeFocus
+              text: "recording"
+              color: Commons.Color.accent
+              font.family: Commons.Style.font.family
+              font.pixelSize: Commons.Style.font.caption
+            }
+          }
+        }
+        // Changing an installed key: Save, and only once the field holds
+        // another key; the owner read "Install" over the key they had.
+        PillButton {
+          id: keyInstall
+          visible: root.keyChanged
+          label: root.guideKeyInstalled !== "" ? "Save" : "Install"
+          onClicked: root.tryGuideKey(root.keyDraft)
+        }
+        PillButton {
+          id: keyCancel
+          label: "Cancel"
+          onClicked: root.keyEditing = false
+        }
+      }
+      // Taken keys can't be recorded: say so, and offer free ones.
+      Caption {
+        textFormat: Text.PlainText
+        width: root.width
+        visible: root.keyEditing
+        wrapMode: Text.WordWrap
+        elide: Text.ElideNone
+        opacity: 0.55
+        text: "A key Hyprland already uses (like Super+Ctrl+F, tiled full screen) runs its own action and never reaches here."
+              + (root.freeKeys.length ? " Free on your system:" : "")
+      }
+      Flow {
+        width: root.width
+        visible: root.keyEditing && root.freeKeys.length > 0
+        spacing: Commons.Style.space(6)
+        Repeater {
+          model: root.freeKeys.filter(function(k) { return k !== root.guideKeyInstalled })
+          delegate: PillButton {
+            required property string modelData
+            label: root.keyLabel(modelData)
+            onClicked: { root.keyDraft = modelData; root.keyHint = ""; root.draftKeyCheck = ({}); keyField.forceActiveFocus() }
+          }
         }
       }
       Caption {
@@ -4581,10 +4813,22 @@ Column {
         width: root.width
         wrapMode: Text.WordWrap
         elide: Text.ElideNone
-        opacity: root.guideKeyState.error ? 0.8 : 0.4
-        text: (root.guideKeyState.error ? root.guideKeyState.error + " " : "")
-              + "The key opens the guide of the game running now over it, and closes it again, like Steam's Shift+Tab. "
-              + "Change it under Guide key in Omarchy's plugin settings for OmaTrophy."
+        visible: text !== ""
+        color: Commons.Color.accent
+        text: root.keyEditing && root.keyHint ? "⚠ " + root.keyHint
+              : root.keyEditing && root.draftKeyCheck.key !== undefined
+              ? (!root.draftKeyCheck.valid ? "⚠ " + root.keyLabel(root.keyDraft) + " can't be used; press another."
+                 : root.draftKeyCheck.taken ? "⚠ " + root.keyLabel(root.draftKeyCheck.key) + " is already used by " + root.draftKeyCheck.taken + "." : "")
+              : (root.guideKeyInstalled !== "" && root.guideKeyState.error ? root.guideKeyState.error : "")
+      }
+      Caption {
+        textFormat: Text.PlainText
+        width: root.width
+        wrapMode: Text.WordWrap
+        elide: Text.ElideNone
+        opacity: 0.4
+        text: "A key that opens the guide of the game running now over it, and closes it again, like Steam's Shift+Tab. "
+              + "OmaTrophy binds it while the shell runs and never edits your Hyprland config."
       }
     }
 
