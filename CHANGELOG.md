@@ -1,9 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 - 2026-11-06
 
-100% guides (ADR 14). The tracker and panel changes show on their next
-open; the watcher and `Tracker.qml` are unchanged, so no restart is needed.
+100% guides (ADR 14). Needs one `omarchy restart shell`, with no game
+running: `FreshObject.qml` changed (each edit of a view builds at its own
+URL). The watcher is unchanged.
 
 - The tracker's **Guide** tab shows a game's path to 100%: up next, the
   route and notes, then every open achievement by phase, missables first,
