@@ -157,6 +157,24 @@ until you hide them again.
 Anything no source backs says
 "(unverified)". With a guide, the Now tab's **Up next** follows its route.
 
+### The guide over your game
+
+Like Steam's Shift+Tab overlay: one key opens the guide of the game you're
+playing over it, and the same key (or Escape) closes it. No guide yet?
+**Make guide** is right there. OmaTrophy never edits your Hyprland config,
+so add the bind yourself: **Settings > Guides > Copy key bind** copies
+this line for `~/.config/hypr/bindings.lua`:
+
+```lua
+o.bind("SUPER + CTRL + G", "OmaTrophy guide", "omarchy-shell shell toggle pym.omatrophy '{\"view\":\"guide\"}'")
+```
+
+While the guide is open it takes the keyboard, like the Steam overlay; a
+game that pauses when it loses focus pauses
+([ADR 16](docs/adr/0016-in-game-guide-is-the-tracker-on-a-key.md)).
+
+### Making a guide
+
 No guide yet? **Make guide** asks your coding agent to write one. OmaTrophy
 gathers what it can fetch itself (Steam community guides, pages you saved
 by hand in `~/.local/share/omatrophy/guides/sources/<guide name>/`), the

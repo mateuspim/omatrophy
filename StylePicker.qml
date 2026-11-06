@@ -287,6 +287,11 @@ Column {
 
   // Asks Panel.qml to open the tracker on one game; the panel owns the
   // shell handle, this file only knows the game.
+  // The Hyprland line for the in-game guide (ADR 16); Copy key bind puts
+  // it on the clipboard.
+  readonly property string guideBind: "o.bind(\"SUPER + CTRL + G\", \"OmaTrophy guide\", \"omarchy-shell shell toggle pym.omatrophy '{\\\"view\\\":\\\"guide\\\"}'\")"
+  property bool bindCopied: false
+
   signal track(string store, string app, string api)
 
   // ---------------------------------------------------------------- Helpers
@@ -4524,6 +4529,28 @@ Column {
         elide: Text.ElideNone
         opacity: 0.4
         text: root.guideText()
+      }
+
+      // The guide over a running game (ADR 16): a bind the owner adds,
+      // as OmaTrophy never edits their Hyprland config.
+      SettingRow {
+        label: "IN GAME"
+        PillButton {
+          label: root.bindCopied ? "Copied" : "Copy key bind"
+          onClicked: {
+            Quickshell.execDetached(["wl-copy", root.guideBind])
+            root.bindCopied = true
+          }
+        }
+      }
+      Caption {
+        textFormat: Text.PlainText
+        width: root.width
+        wrapMode: Text.WordWrap
+        elide: Text.ElideNone
+        opacity: 0.4
+        text: "Open the guide over your game with a key, like Steam's Shift+Tab: paste the bind into ~/.config/hypr/bindings.lua. "
+              + "Super+Ctrl+G opens the guide of the game running now, and closes it again."
       }
     }
 

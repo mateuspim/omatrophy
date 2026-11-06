@@ -10,6 +10,9 @@
   OmaTrophy fetches the full page when the agent read only a summary,
   and skips a blog's lists of posts. A guide made before this says so
   next to **Make again**.
+- **The guide over your game**: a key (Super+Ctrl+G suggested; copy
+  the bind from Settings > Guides) opens the running game's guide over
+  it and closes it again, like Steam's Shift+Tab (ADR 16).
 - **Reveal all** is remembered (`reveal-hidden`) for every game and
   every open, sits next to Up next too, and Shift+Enter flips it.
 
