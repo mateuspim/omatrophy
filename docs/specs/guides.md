@@ -1,6 +1,6 @@
 # 100% guides
 
-Status: **design**, with slice b (the reader) built. The slices below
+Status: slices b to e built; f (manual ticks) waits on its own ADR. The slices below
 build it in order, and each one updates this page to match the code. Why it works this way: [ADR 14](../adr/0014-generate-guides-through-the-users-agent.md).
 
 ## Slices
@@ -9,9 +9,9 @@ build it in order, and each one updates this page to match the code. Why it work
 | --- | --- |
 | a | This spec, ADR 14, the stage contracts. |
 | b (built) | Reader: `guide <store> <app>`, `guide import`, file parsing, tests, a made-up sample in `dev/samples/`. |
-| c | Maker: gather, the four agent adapters, prompts, verify, `guide make/stop/status`, tests with a fake agent. |
-| d | Tracker Guide view (`TrackerView.qml`, hot-reloads): route, phases, missables first, next up, Make guide button; `dev/render.sh guide`. |
-| e | Now tab "Up next" from the plan. |
+| c (built) | Maker: gather, the four agent adapters, prompts, verify, `guide make/stop/status`, tests with a fake agent. |
+| d (built) | Tracker Guide view (`TrackerView.qml`, hot-reloads): route, phases, missables first, next up, Make guide button; `dev/render.sh guide`. |
+| e (built) | Now tab "Up next" from the plan. |
 | f | Manual ticks, counters, notes: needs its own ADR (ADR 9's open question). |
 
 ## Files
@@ -27,6 +27,8 @@ OmaTrophy writes only here.
 | `<name>.sources.json` | Every source the guide quotes: `{url: {kind, fetched, text}}`. |
 | `sources/<name>/` | Pages the owner saved by hand (`.html`, `.txt`, `.md`), read as sources on the next make. |
 | `status.json` | The latest make job, like `steam-load/status.json`. |
+| `.stop` | A stop request for the running job, removed when the job sees it. |
+| `<name>.md.prev`, `<name>.plan.json.prev` | The guide as it was before the last make, so a worse new one never costs the old. |
 
 `<slug>` is the game name lowercased, with runs of anything but `a-z0-9`
 turned into `-`. A game is found by its trailing `-<app>` (Steam) or
@@ -116,38 +118,38 @@ OmaTrophy doesn't know survive a rewrite.
 - Format 1 is the games app's plan: no `format`, no `api`, no `minutes`,
   no `cites`. The reader accepts it.
 
-## Command line (slice b: `guide`, `guide import`; the rest is slice c)
+## Command line
 
 | Command | Does |
 | --- | --- |
-| `guide [store app]` | Prints the guide as JSON for the tracker: `{store, app, file, generated, order, items: {api: item}, sections, notes, ticks: [api], next: [api]}`, or `{}` when there is none. The reader is `guides.py`. `items` holds only the plan items that match a store achievement (by `api`, then name); `ticks` are the `api`s of hand ticks; `ticks` and the store's unlocks both count as done for `next`. `next` is the first three open items in `order`, missables first. Without arguments, the game running now, else the last one played. |
+| `guide [store app]` | Prints the guide as JSON for the tracker: `{store, app, file, generated, order, items: {api: item}, sections, notes, ticks: [api], next: [api], agent, cost_usd}` (`agent` is the plan's, `cost_usd` the sum of its `usage`), or `{}` when there is none. The reader is `guides.py`. `items` holds only the plan items that match a store achievement (by `api`, then name); `ticks` are the `api`s of hand ticks; `ticks` and the store's unlocks both count as done for `next`. `next` is the first three open items in `order`, missables first. Without arguments, the game running now, else the last one played. |
 | `guide import <folder>` | Copies every `*-<app>.md` with its `.plan.json` and `.sources.json` from another folder (the games app's `games/`), skipping files we already have (`--replace` overwrites). Read-only on `<folder>`. Prints `imported N, skipped M`. |
 | `guide agents` | Every agent with its models and picks (see Settings). |
 | `guide model <agent> <model> [effort]`, `guide model <agent> default` | Sets or clears that agent's pick in `guide-models`. |
 | `guide make <store> <app> [--no-web] [--agent a] [--model m] [--effort e]` | Runs the job below; the flags override the settings for this run only. One line per stage, then `done: N items, M verified`, or `stopped`/`failed: <what to do>`. Exits non-zero with no agent, an unsupported agent, or another job running. |
-| `guide stop` | Stops the job; a stage cut short writes nothing. |
-| `guide status` | `status.json`: `{state, store, app, stage, done, total, line, started, agent}`. |
+| `guide stop` | Stops the job within half a second (the agent's process group is killed); nothing is written, so the old guide stays. |
+| `guide status` | `status.json`: `{state, store, app, game, stage, done, total, line, started, time, agent, model, pid}`; `state` is `running`, `done`, `stopped` or `failed`, and a `running` job whose `pid` is gone reads as `failed`. `{}` before any job. `done`/`total` count steps: gather, research (with web), one per classify batch, route, verify. |
 
-## Settings (config.json, slice c)
+## Settings (config.json)
 
 | Key | Values | Default |
 | --- | --- | --- |
-| `guide-agent` | `""` (follow `omarchy-default-agent`) or any agent id in the adapter table | `""` |
+| `guide-agent` | `""` (follow `omarchy-default-agent`) or any agent id in the adapter table. `set guide-agent default\|<id>`. | `""` |
 | `guide-models` | Per agent, `{agent: {"model": "...", "effort": "..."}}`; a missing agent or `""` uses that agent's own default. Written by `guide model` and the panel. | `{}` |
-| `guide-web` | `true`, `false`: let the agent search the web itself | `true` |
+| `guide-web` | `true`, `false`: let the agent search the web itself. `set guide-web on\|off`. | `true` |
 
 `guide agents` prints `[{agent, name, installed, supported, default,
 web, models: [{id, name, efforts}], model, effort, source}]`. It lists
 every agent in the adapter table. `default` marks the one
 `omarchy-default-agent` names, and `model`/`effort` are the picks from
 `guide-models`. `models` comes from the source named in the table and is
-empty when the agent can't list them. The panel then offers free text:
+empty when the agent can't list them, isn't installed, or isn't supported yet. The panel then offers free text:
 any string the agent's model flag takes, such as a full model id, a
 `provider/model` for a local endpoint, or an alias. `guide model <agent>
 <model> [effort]` sets a pick, and `guide model <agent> default` clears
 it.
 
-## The make job (slice c)
+## The make job
 
 1. **Gather** (no model). The store's achievements (name, description,
    hidden, rarity, unlocked, counter) and playtime. Sources, each cut into
@@ -179,6 +181,14 @@ it.
    game. Matches each quote against the source text after folding case,
    whitespace and quotes. Writes the files atomically.
 
+Pages come from, in this order: the earlier `.sources.json`, files in
+`sources/<name>/` (named `file:<name>`), Steam guides, then pages the
+agent read (claude's WebFetch results, kind `agent`), the pages it cites,
+and trusted-site links its searches turned up, fetched by OmaTrophy
+within the budget. A cite verifies when its quote (folded, 12-400
+characters) is in the source it names, or failing that in any source
+held; the cite then names that source.
+
 Each model stage is checked as it lands: on a shape error it is asked once
 more with the errors listed, then the valid part is kept. A cut-short
 job leaves the old guide in place.
@@ -201,8 +211,9 @@ but rank lower in excerpts.
   revealed.
 - Plain, short sentences. One JSON block between the stage's tags, nothing
   else needed outside it.
-- The prompt text lives in `prompts/guide/<stage>.md`, with `{{name}}`
-  placeholders.
+- The prompt text lives in `prompts/guide/<stage>.md` (`research`,
+  `classify`, `route`), with `{{name}}` placeholders; `rules.md` holds
+  these rules and fills `{{rules}}`.
 
 ### Agent adapters
 
@@ -210,17 +221,19 @@ One table row per agent `omarchy-default-agent` offers, except
 openclaw, which only runs through its own gateway and terminal app.
 Each runs in a fresh, empty temporary folder, with the prompt
 on stdin or as an argument and a 25 min ceiling per stage. A row is
-**supported** once slice c has checked, on a real run, that its lock keeps
-shell and file tools off. Until then `guide agents` shows it as "not
+**supported** once a real run has shown that its lock keeps shell and file
+tools off: `dev/check-lock.py <agent>` asks the agent, through the job's own
+command, to write a file and run a shell command, and passes when neither
+happened. Until then `guide agents` shows it as "not
 supported yet". No row ever falls back to an auto-approve flag. Flags come
 from each tool's `--help` on 2026-11-04; "unverified" means the help didn't
 show it or timed out.
 
 | Agent | Headless | Lock (no shell, no writes) | Web for research | Model / effort | Models listed from |
 | --- | --- | --- | --- | --- | --- |
-| claude | `-p --output-format stream-json --verbose --no-session-persistence` | `--disallowedTools Bash Edit Write NotebookEdit` | `--allowedTools WebSearch WebFetch` | `--model`, `--effort` | built-in aliases (`opus`, `sonnet`, `haiku`, `fable`, ...) plus `~/.claude.json` `additionalModelOptionsCache`; works with `ANTHROPIC_BASE_URL` for a local endpoint |
-| codex | `exec --json --skip-git-repo-check -C <tmp>` | `--sandbox read-only` | `--search` | `-c model=`, `-c model_reasoning_effort=` | `$CODEX_HOME/models_cache.json` (`visibility: list`) |
-| opencode | `run --format json` | through its permission config (unverified how, slice c) | its own websearch provider (unverified) | `-m provider/model#variant` | `opencode models` |
+| claude (**supported**, checked 2026-11-04 on 2.1.318) | `-p --output-format stream-json --verbose --no-session-persistence --strict-mcp-config --setting-sources "" --permission-mode dontAsk` | `--tools ""` (an allowlist of built-in tools: none) | `--tools WebSearch WebFetch --allowedTools WebSearch WebFetch` | `--model`, `--effort` | built-in aliases (`opus`, `sonnet`, `haiku`, `fable`, ...) plus `~/.claude.json` `additionalModelOptionsCache`; works with `ANTHROPIC_BASE_URL` for a local endpoint |
+| codex (written, not checked yet) | `exec --json --skip-git-repo-check --ephemeral -C <tmp> --output-last-message <tmp>/answer.txt -c approval_policy="never"` | `--sandbox read-only --disable shell_tool --disable unified_exec` | `-c web_search="live"` (`"disabled"` otherwise) | `-c model=`, `-c model_reasoning_effort=` | `$CODEX_HOME/models_cache.json` (`visibility: list`) |
+| opencode (written, not checked yet) | `run --format json` | `OPENCODE_CONFIG_CONTENT` with `permission` edit/bash/external_directory `deny` and those tools off | `webfetch`/`websearch` on in that config | `-m provider/model#variant` | `opencode models` |
 | crush | `run --quiet` | unverified (`--yolo` only on the interactive command) | unverified | `-m`, `--reasoning-effort` | `crush models` |
 | pi | `-p --mode json` | `--no-tools`, or `--tools` allowlist | `--tools` with its web tool, if one is installed (unverified) | `--model provider/id:thinking` | `pi --list-models` |
 | gemini | `-p --output-format json` | `--approval-mode plan` | unverified whether plan mode allows search | `-m` (unverified) | none (free text) |

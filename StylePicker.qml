@@ -101,12 +101,52 @@ Column {
   onGamesPageCountChanged: gamesPageIndex = Math.min(gamesPageIndex, gamesPageCount - 1)
   // True while the filter field has the keyboard; Panel.qml then lets keys
   // through to it instead of its own shortcuts.
-  readonly property bool typing: filterField.activeFocus || favoriteField.activeFocus
+  readonly property bool typing: filterField.activeFocus || favoriteField.activeFocus || guideModelField.activeFocus
 
   // The Games tab reads once per open; a copy from the last read (below)
   // shows until it answers.
   property bool gamesRead: false
-  onTabChanged: if (tab === "games" && !gamesRead && live) { gamesRead = true; gamesReader.running = true }
+  onTabChanged: {
+    if (tab === "games" && !gamesRead && live) { gamesRead = true; gamesReader.running = true }
+    if (tab === "settings" && live && !guideAgentsReader.running) { guideAgentsReader.running = true; guideJobReader.running = true }
+  }
+
+  // Settings > Guides (ADR 14): `guide agents` lists the agents and their
+  // models; config.json holds the picks, so a change shows live.
+  property var guideAgents: []
+  property string guideAgent: ""
+  property var guideModels: ({})
+  property bool guideWeb: true
+  property var guideJob: ({})
+  // The agent a make uses now: the one picked, else Omarchy's default.
+  readonly property var guideRow: guideAgents.find(function(a) { return guideAgent ? a.agent === guideAgent : a.default }) || null
+  readonly property var guidePick: guideRow ? guideModels[guideRow.agent] || {} : {}
+
+  function setGuideModel(model, effort) {
+    if (!guideRow) return
+    var picks = Object.assign({}, guideModels)
+    if (model) picks[guideRow.agent] = { model: model, effort: effort || "" }
+    else delete picks[guideRow.agent]
+    guideModels = picks
+    var args = ["python3", helperPath, "guide", "model", guideRow.agent, model || "default"]
+    runner.exec(model && effort ? args.concat([effort]) : args)
+  }
+
+  function guideEfforts() {
+    if (!guideRow) return []
+    var m = guideRow.models.find(function(m) { return m.id === guidePick.model })
+    return m ? m.efforts : []
+  }
+
+  function guideText() {
+    var j = guideJob
+    if (j.state === "running") return "Making a guide for " + (j.game || j.app) + ": " + (j.line || j.stage)
+    var lead = "Make a game's guide from its tracker (its Guide tab). "
+    if (j.state && j.line) return lead + "Last: " + (j.game || j.app) + ", " + j.line
+    if (guideRow && !guideRow.supported) return guideRow.name + " can't run locked down yet; pick another agent."
+    if (guideRow && !guideRow.installed) return guideRow.name + " isn't installed; pick another agent."
+    return lead + "The agent reads guides, OmaTrophy checks every quote."
+  }
 
   // Asks Panel.qml to open the tracker on one game; the panel owns the
   // shell handle, this file only knows the game.
@@ -119,6 +159,8 @@ Column {
     if (key === "position") position = value
     if (key === "glass") glass = value
     if (key === "community") community = value === "on"
+    if (key === "guide-web") guideWeb = value === "on"
+    if (key === "guide-agent") guideAgent = value === "default" ? "" : value
     if (key.indexOf("now-") === 0) {
       var shows = Object.assign({}, nowShows)
       shows[key.slice(4)] = value === "on"
@@ -389,6 +431,9 @@ Column {
       if (c.chimes) root.chimes = c.chimes
       if (c.glass) root.glass = c.glass
       root.community = c.community === true
+      root.guideAgent = typeof c["guide-agent"] === "string" ? c["guide-agent"] : ""
+      root.guideModels = c["guide-models"] && typeof c["guide-models"] === "object" ? c["guide-models"] : {}
+      root.guideWeb = c["guide-web"] !== false
       if (c["games-sort"]) root.sort = c["games-sort"]
       if (c.rarest) root.rarestRange = c.rarest
       var shows = {}
@@ -472,6 +517,22 @@ Column {
   }
 
   Process { id: runner }
+
+  Process {
+    id: guideAgentsReader
+    command: ["python3", root.helperPath, "guide", "agents"]
+    stdout: StdioCollector {
+      onStreamFinished: { try { root.guideAgents = JSON.parse(text) || [] } catch (e) {} }
+    }
+  }
+
+  Process {
+    id: guideJobReader
+    command: ["python3", root.helperPath, "guide", "status"]
+    stdout: StdioCollector {
+      onStreamFinished: { try { root.guideJob = JSON.parse(text) || {} } catch (e) {} }
+    }
+  }
 
   // `favorite` then a fresh `now`, in order, so the new favorite shows.
   Process {
@@ -1706,7 +1767,8 @@ Column {
         MiniLabel {
           x: Commons.Style.space(10)
           visible: playing.game !== null && playing.game.next.length > 0
-          text: "UP NEXT"
+          // With a guide the order is its route, missables first.
+          text: playing.game && playing.game.guide ? "UP NEXT · FROM YOUR GUIDE" : "UP NEXT"
         }
         Column {
           x: Commons.Style.space(10)
@@ -1745,7 +1807,16 @@ Column {
                 Caption {
                   width: parent.width
                   visible: text !== ""
-                  text: nextRow.modelData.desc
+                  text: nextRow.modelData.tip || nextRow.modelData.desc
+                }
+                // The guide's time and missable warning, when it has them.
+                Caption {
+                  width: parent.width
+                  readonly property var n: nextRow.modelData
+                  visible: text !== ""
+                  text: [n.missable ? "⚠ Missable" + (n.missable_note ? ": " + n.missable_note : "") : "", n.guide_time || ""]
+                        .filter(function(t) { return t !== "" }).join(" · ")
+                  color: n.missable ? Commons.Color.accent : root.foreground
                 }
                 // A counter achievement shows how far along it is: a thin
                 // bar under its text and the count beside the rarity.
@@ -3455,6 +3526,123 @@ Column {
           }
         }
       }
+    }
+
+    // ------------------------------------------------ guides
+
+    Item { width: 1; height: Commons.Style.space(8) }
+
+    PanelSectionHeader { text: "GUIDES"; foreground: root.foreground }
+
+    SettingRow {
+      label: "AGENT"
+      Flow {
+        width: root.width * 0.72
+        layoutDirection: Qt.RightToLeft
+        spacing: Commons.Style.space(2)
+        Repeater {
+          // Omarchy's default first, then each agent that can run locked.
+          model: [{ value: "default", label: "Omarchy default" }].concat(
+                   root.guideAgents.filter(function(a) { return a.installed && a.supported })
+                     .map(function(a) { return { value: a.agent, label: a.name } })).reverse()
+          delegate: Chips {
+            required property var modelData
+            options: [modelData]
+            value: root.guideAgent === "" ? "default" : root.guideAgent
+            onPicked: value => root.set("guide-agent", value)
+          }
+        }
+      }
+    }
+
+    SettingRow {
+      label: "MODEL"
+      visible: root.guideRow !== null && root.guideRow.installed
+      Column {
+        width: root.width * 0.72
+        spacing: Commons.Style.space(4)
+        Flow {
+          width: parent.width
+          layoutDirection: Qt.RightToLeft
+          spacing: Commons.Style.space(2)
+          Repeater {
+            model: root.guideRow ? [{ value: "", label: "Default" }].concat(
+                     root.guideRow.models.slice(0, 6).map(function(m) { return { value: m.id, label: m.name } })).reverse() : []
+            delegate: Chips {
+              required property var modelData
+              options: [modelData]
+              value: root.guidePick.model || ""
+              onPicked: value => root.setGuideModel(value, root.guidePick.effort)
+            }
+          }
+        }
+        // Free text for a model the list doesn't name (a full id, an
+        // alias, provider/model for a local endpoint); Enter saves it.
+        Rectangle {
+          anchors.right: parent.right
+          width: Commons.Style.space(170)
+          height: Commons.Style.space(24)
+          radius: height / 2
+          color: "transparent"
+          border.width: 1
+          border.color: guideModelField.activeFocus ? Qt.alpha(Commons.Color.accent, 0.6) : Qt.alpha(root.foreground, 0.15)
+          TextInput {
+            id: guideModelField
+            anchors.fill: parent
+            anchors.leftMargin: Commons.Style.space(10)
+            anchors.rightMargin: Commons.Style.space(10)
+            verticalAlignment: TextInput.AlignVCenter
+            clip: true
+            color: root.foreground
+            font.family: Commons.Style.font.family
+            font.pixelSize: Commons.Style.font.caption
+            text: root.guideRow && root.guidePick.model && !root.guideRow.models.some(function(m) { return m.id === root.guidePick.model })
+                  ? root.guidePick.model : ""
+            onAccepted: { root.setGuideModel(text.trim(), root.guidePick.effort); focus = false }
+            Keys.onEscapePressed: focus = false
+            Text {
+              textFormat: Text.PlainText
+              anchors.verticalCenter: parent.verticalCenter
+              visible: !guideModelField.text && !guideModelField.activeFocus
+              text: "Other model…"
+              color: root.foreground
+              opacity: 0.4
+              font: guideModelField.font
+            }
+          }
+        }
+      }
+    }
+
+    SettingRow {
+      label: "EFFORT"
+      visible: root.guideEfforts().length > 0
+      Chips {
+        options: [{ value: "", label: "Default" }].concat(root.guideEfforts().map(function(e) { return { value: e, label: e } }))
+        value: root.guidePick.effort || ""
+        onPicked: value => root.setGuideModel(root.guidePick.model, value)
+      }
+    }
+
+    SettingRow {
+      label: "WEB"
+      Chips {
+        options: [
+          { value: "on", label: "Search the web" },
+          { value: "off", label: "Saved pages only" }
+        ]
+        value: root.guideWeb ? "on" : "off"
+        onPicked: value => root.set("guide-web", value)
+      }
+    }
+
+    Caption {
+      textFormat: Text.PlainText
+      width: root.width
+      wrapMode: Text.WordWrap
+      elide: Text.ElideNone
+      opacity: 0.4
+      text: root.guideText()
     }
 
     // ------------------------------------------------ stores

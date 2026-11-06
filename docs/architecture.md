@@ -26,6 +26,9 @@ turns those lines into cards on screen.
 | `stores/gog.py` | GOG through Heroic: reads Comet's per-game SQLite database read-only (achievements, unlock times, GOG's rarity), pairs Comet's client ids with product ids from install folders, and takes titles, art and last-played times from Heroic's files (ADR 12). |
 | `stores/steam_community.py` | The opt-in backfill for games that never ran here: reads the JSON embedded in a public profile's achievement pages, cached under `~/.cache/omatrophy/community/` (ADR 11). |
 | `stores/steam_loader.py` | Load from Steam: opens played games' library pages through `steam://` links so the client caches their stats, on request only (`omatrophy.py steam-load`, ADR 13). |
+| `guides.py` | Reads 100% guides: finds a game's `.md` by its trailing id, parses notes, checklist and `.plan.json`, matches items to achievements (`omatrophy.py guide`), and imports guide files. |
+| `guide_maker.py` | Makes a guide on request (ADR 14): gather sources, research, classify, route, verify quotes, write the files; status and stop like Load from Steam. Prompts in `prompts/guide/`. |
+| `guide_agents.py` | One adapter per coding agent: its locked headless command, model list and answer parsing; only adapters whose lock was checked run. |
 | `stores/__init__.py` | The list of stores; `available()` keeps the installed ones. |
 | `omatrophy.py` | Watch loop, diffing, tiers, event shapes, test inbox, settings, the panel's and tracker's JSON (`now`, `games`, `game`), CLI. |
 | `Service.qml` | Runs the watcher, parses lines, queues events, plays the chime, shows one card at a time in an Overlay-layer window on the focused monitor. |
@@ -35,7 +38,7 @@ turns those lines into cards on screen.
 | `StylePicker.qml` | Three tabs. Now: totals, the running game (or the last three) and the platinum shelf, from `omatrophy.py now`. Games: every game, sortable, from `omatrophy.py games` on first open. Settings: trophy style, previews, position and sound, through `omatrophy.py set`. |
 | `FreshObject.qml` | Builds a sibling QML file from its current text, so the cards, the panel content and the tracker pick up edits without a restart. |
 | `Tracker.qml` | The `overlay` entry point: a dimmed full-screen window that takes the keyboard while open and loads `TrackerView.qml`. |
-| `TrackerView.qml` | One game's every achievement with rarity and dates; filters, type-to-search and a keyboard-driven highlight. Read-only. |
+| `TrackerView.qml` | One game's every achievement with rarity and dates; filters, type-to-search and a keyboard-driven highlight. Its Guide tab shows the game's 100% guide and starts or stops a make (`omatrophy.py guide make`, detached). |
 | `assets/<set>/` | Trophy art: `omarchy` (pixel grid, theme-tinted inlay), `vector`, `painted`. |
 
 ## Data flow

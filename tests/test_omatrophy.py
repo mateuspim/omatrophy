@@ -587,6 +587,45 @@ class NowTab(unittest.TestCase):
                          [('A', 4.0, 'steam', '1'), ('D', None, 'steam', '1')])
 
 
+class UpNextFromGuide(unittest.TestCase):
+    class Fake:
+        id, name = 'steam', 'Steam'
+        def percents(self, game):
+            return {'a': 90.0, 'b': 5.0, 'c': 50.0}
+        def game_name(self, game):
+            return 'G'
+        def art(self, game):
+            return {'header': '', 'hero': ''}
+
+    def card(self, guide_files):
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {'XDG_DATA_HOME': d}):
+            folder = os.path.join(d, 'omatrophy', 'guides')
+            os.makedirs(folder)
+            for name, text in guide_files.items():
+                with open(os.path.join(folder, name), 'w') as f:
+                    f.write(text)
+            achs = [ach('a', True, 5), ach('b'), ach('c'), ach('d', hidden=True)]
+            return omatrophy.playing_card(self.Fake(), '7', achs, 0)
+
+    def test_without_a_guide_the_most_common_locked(self):
+        card = self.card({})
+        self.assertFalse(card['guide'])
+        self.assertEqual([n['api'] for n in card['next']], ['c', 'b', 'd'])
+        self.assertEqual(card['next'][0]['tip'], '')
+
+    def test_a_guide_sets_the_order_missables_first_and_keeps_hidden_tips_out(self):
+        plan = {'order': ['C', 'D', 'B'], 'items': {
+            'B': {'name': 'B', 'api': 'b', 'missable': True, 'time': '~5 min', 'tips': 'Go left.'},
+            'C': {'name': 'C', 'api': 'c', 'tips': 'Easy.'},
+            'D': {'name': 'D', 'api': 'd', 'tips': 'Spoiler!'}}}
+        card = self.card({'g-7.md': '# G\n\n## Achievements\n', 'g-7.plan.json': json.dumps(plan)})
+        self.assertTrue(card['guide'])
+        self.assertEqual([n['api'] for n in card['next']], ['b', 'c', 'd'])
+        self.assertEqual((card['next'][0]['guide_time'], card['next'][0]['missable'], card['next'][0]['tip']),
+                         ('~5 min', True, 'Go left.'))
+        self.assertEqual(card['next'][2]['tip'], '')
+
+
 class FakeLibrary:
     """A whole throwaway Steam install for the panel's and tracker's JSON:
     three games' stats, the account's localconfig, library art, and warm

@@ -45,32 +45,45 @@
    {
     "name": "Cartographer",
     "icon": "dev/samples/art/icon-cartographer.svg",
-    "time": 0,
     "desc": "Map every system in the Veil",
     "percent": 48.2,
     "progress": {
      "value": 9,
      "max": 14
-    }
+    },
+    "missable": true,
+    "missable_note": "Before the Veil closes",
+    "tip": "Map each system on the first visit.",
+    "guide_time": "~20 min",
+    "time": 0
    },
    {
     "name": "Hidden Achievement",
     "icon": "dev/samples/art/icon-hidden-achievement.svg",
-    "time": 0,
     "desc": "",
     "percent": 41.0,
-    "progress": null
+    "progress": null,
+    "missable": false,
+    "missable_note": "",
+    "tip": "",
+    "guide_time": "~1-2 h",
+    "time": 0
    },
    {
     "name": "Pacifist Run",
     "icon": "dev/samples/art/icon-pacifist-run.svg",
-    "time": 0,
     "desc": "Finish a chapter without a kill",
     "percent": 22.7,
-    "progress": null
+    "progress": null,
+    "missable": false,
+    "missable_note": "",
+    "tip": "",
+    "guide_time": "",
+    "time": 0
    }
   ],
-  "hero": "dev/samples/art/starfall-odyssey-hero.svg"
+  "hero": "dev/samples/art/starfall-odyssey-hero.svg",
+  "guide": true
  },
  "recent": [
   {

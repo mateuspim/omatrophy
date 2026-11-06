@@ -11,6 +11,7 @@
 #   dev/render.sh tracker-loading out.png
 #   dev/render.sh settings out.png       its Settings tab
 #   dev/render.sh tracker out.png        the achievement tracker
+#   dev/render.sh guide out.png          its Guide view (guide-making: a make running; guide-empty: none yet)
 #   dev/render.sh gold out.png           a toast: bronze, silver, gold, platinum
 #   dev/render.sh --live tracker out.png the views read your real stores
 #
@@ -22,7 +23,7 @@ set -euo pipefail
 repo=$(cd "$(dirname "$0")/.." && pwd)
 live=false
 if [[ ${1:-} == --live ]]; then live=true; shift; fi
-[[ $# -eq 2 ]] || { sed -n '5,16p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+[[ $# -eq 2 ]] || { sed -n '5,17p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 target=$1
 out=$(realpath -m "$2")
 theme=$HOME/.local/state/omarchy/current/theme
@@ -33,6 +34,7 @@ for path in "$repo" "$out" "$theme"; do
     { echo "can't render with a quote, backslash or newline in a path: $path" >&2; exit 2; }
 done
 
+extra=""
 dir=$(mktemp -d)
 trap 'rm -rf "$dir"' EXIT
 ln -s /usr/share/omarchy/shell/Commons "$dir/Commons"
@@ -41,11 +43,16 @@ ln -s /usr/share/omarchy/shell/Ui "$dir/Ui"
 case $target in
   now|idle|empty|profile|settings|games|loading)
     w=460 h=900 at=2500
+    [[ $target == settings ]] && h=1400
     tab=now; [[ $target == settings || $target == games || $target == profile ]] && tab=$target
     data=now.json; [[ $target == idle || $target == empty ]] && data=$target.json; [[ $target == games ]] && data=games.json
     feed="item.cabinet = JSON.parse(sample.text())"
     [[ $target == games ]] && feed="item.games = JSON.parse(sample.text())"
     [[ $target == loading ]] && feed=""
+    if [[ $target == settings ]]; then
+      extra="FileView { id: agentSample; path: \"$repo/dev/samples/agents.json\"; blockLoading: true }"
+      feed="$feed; item.guideAgents = JSON.parse(agentSample.text()); item.guideModels = ({ claude: { model: \"sonnet\", effort: \"medium\" } })"
+    fi
     view="Loader {
         x: 20; y: 20; width: 420
         source: \"file:$repo/StylePicker.qml\"
@@ -66,6 +73,28 @@ case $target in
           item.maxWidth = 960; item.maxHeight = 860
           if (\"$live\" === \"true\") item.load({})
           else if (\"$live\" === \"false\") item.game = JSON.parse(sample.text())
+        }
+      }"
+    data=game.json ;;
+  guide|guide-making|guide-empty)
+    w=1000 h=900 at=3000
+    guide="JSON.parse(guideSample.text())"; [[ $target == guide-empty ]] && guide="({})"
+    job="({})"; [[ $target == guide-making ]] && job="JSON.parse(jobSample.text())"
+    extra="FileView { id: guideSample; path: \"$repo/dev/samples/guide.json\"; blockLoading: true }
+  FileView { id: agentSample; path: \"$repo/dev/samples/agents.json\"; blockLoading: true }
+  FileView { id: jobSample; path: \"$repo/dev/samples/guide-job.json\"; blockLoading: true }"
+    view="Loader {
+        anchors.centerIn: parent
+        source: \"file:$repo/TrackerView.qml\"
+        onLoaded: {
+          item.maxWidth = 960; item.maxHeight = 860
+          item.game = JSON.parse(sample.text())
+          item.agents = JSON.parse(agentSample.text())
+          item.choosePick()
+          item.guide = $guide
+          item.makerOpen = !item.hasGuide
+          item.job = $job
+          item.filter = \"guide\"
         }
       }"
     data=game.json ;;
@@ -93,6 +122,7 @@ ShellRoot {
   FileView { path: "$theme/colors.toml"; blockLoading: true; onLoaded: Commons.Color.loadColors(text()) }
   FileView { path: "$theme/shell.toml"; blockLoading: true; printErrors: false; onLoaded: Commons.Color.loadShell(text()) }
   FileView { id: sample; path: "$repo/dev/samples/$data"; blockLoading: true }
+  $extra
   FloatingWindow {
     implicitWidth: $w
     implicitHeight: $h
