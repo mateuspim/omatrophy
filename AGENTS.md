@@ -72,6 +72,14 @@ says how the parts fit, `docs/adr/` why, `docs/specs/` what the contracts are
   Store tests build their launcher files in a temporary folder (see
   `SteamDir`); tests never touch a real launcher, the network or the user's
   config.
+- Trying the CLI by hand: run it through `dev/sandbox.sh <command>` (or
+  `dev/sandbox.sh bash -c '<a && b>'` for several steps), which points the XDG
+  folders at a throwaway folder and removes only that folder. Never `export
+  XDG_*`/`HOME` in one shell call and clean up in another: each call is a
+  fresh shell, and on the owner's machine `XDG_DATA_HOME` is the real
+  `~/.local/share` (a `rm -rf "$XDG_DATA_HOME"` once wiped it). Never
+  `rm -rf` an environment variable; delete only a literal path you just made
+  with `mktemp -d` in the same command.
 - Visual checks: `dev/preview.sh [bronze|silver|gold|platinum]` or
   `dev/preview.sh --picker` runs a throwaway Quickshell instance with sample
   events; it never touches the live shell. `dev/render.sh <view> out.png`
