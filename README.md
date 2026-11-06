@@ -176,7 +176,9 @@ playing over it, and the same key (or Escape) closes it. No guide yet?
 **Settings > Guides**, **Install Super+Ctrl+G**. If something already
 uses that key, a warning says what, and **Pick a key** records the
 next combination you press, with Super, Ctrl, Alt or Shift (checked
-against your binds before it's installed; Escape cancels). **Change**
+against your binds before it's installed; Escape cancels). A key
+Hyprland already uses runs its own action and never reaches the
+recorder, so it lists combinations free on your system to pick from. **Change**
 and **Remove** are there afterwards. OmaTrophy binds the key while the
 shell runs and never edits your Hyprland config
 ([ADR 18](docs/adr/0018-bind-the-guide-key-at-runtime.md)). With nothing

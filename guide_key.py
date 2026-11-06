@@ -123,6 +123,28 @@ def check(text, run=None):
     return {'key': parsed['spec'], 'valid': True, 'taken': conflict(binds if isinstance(binds, list) else [], parsed)}
 
 
+# Where free keys are looked for, in order: G for guide first, then the
+# rest of the alphabet under each modifier pair Omarchy leaves room in.
+FREE_MODS = ('SUPER + CTRL', 'SUPER + ALT', 'SUPER + CTRL + ALT', 'SUPER + SHIFT + ALT')
+FREE_KEYS = 'GJMQUXYZHKNOPRTVWBCDEFILSA'
+
+
+def free(binds, n=6):
+    """Up to `n` keys no bind uses (ours counts as free), to offer when the
+    recorder can't hear a taken one: Hyprland handles a bound key before
+    any app, so Super+Ctrl+F (Omarchy's tiled full screen) never reached
+    Settings > Guides."""
+    out = []
+    for mods in FREE_MODS:
+        for key in FREE_KEYS:
+            parsed = parse(f'{mods} + {key}')
+            if not conflict(binds, parsed):
+                out.append(parsed['spec'])
+                if len(out) >= n:
+                    return out
+    return out
+
+
 def hyprctl(*args):
     try:
         done = subprocess.run(['hyprctl', *args], capture_output=True, text=True, timeout=HYPRCTL_SECONDS)

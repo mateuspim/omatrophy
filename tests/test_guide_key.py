@@ -80,6 +80,10 @@ class GuideKey(unittest.TestCase):
             error = guide_key.sync('SUPER + PAUSE', run)['error']
         self.assertEqual(error, 'Hyprland did not accept SUPER + PAUSE as a key; pick another.')
 
+    def test_free_skips_taken_keys_and_counts_ours_free(self):
+        taken = [{'modmask': 68, 'key': k, 'submap': '', 'description': 'x'} for k in 'JMQ']
+        self.assertEqual(guide_key.free(taken + [OURS], 3), ['SUPER + CTRL + G', 'SUPER + CTRL + U', 'SUPER + CTRL + X'])
+
     def test_sync_without_hyprland(self):
         with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {'XDG_STATE_HOME': d}):
             self.assertIn('did not answer', guide_key.sync('SUPER + CTRL + G', lambda *a: None)['error'])

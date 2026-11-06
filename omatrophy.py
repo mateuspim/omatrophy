@@ -1375,6 +1375,14 @@ def main(argv):
         demo(argv[2:] or ['unlock', 'rare', 'platinum'])
     elif cmd == 'set' and len(argv) == 4:
         set_option(argv[2], argv[3])
+    elif cmd == 'guide-key' and argv[2:] == ['free']:
+        import guide_key
+        raw = guide_key.hyprctl('-j', 'binds')
+        try:
+            binds = json.loads(raw) if raw else []
+        except ValueError:
+            binds = []
+        print(json.dumps(guide_key.free(binds if isinstance(binds, list) else [])))
     elif cmd == 'guide-key' and len(argv) == 4 and argv[2] == 'check':
         import guide_key
         print(json.dumps(guide_key.check(argv[3])))

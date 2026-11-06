@@ -25,6 +25,7 @@ installed.
 | `set glass clear\|frosted\|solid` | How see-through toasts are. |
 | `set tracker-sort recent\|rarity\|name\|game` | The tracker's sort; the tracker writes it when you change it. |
 | `guide-key <key>` | Binds the Guide key (`""` unbinds) through `hyprctl`, refusing a key in use; prints and saves `{key, bound, error}` to `~/.local/state/omatrophy/guide-key.json` ([ADR 18](../adr/0018-bind-the-guide-key-at-runtime.md)). `Service.qml` runs it with config.json's `guide-key`. |
+| `guide-key free` | Up to six keys no Hyprland bind uses (ours counts as free), as a JSON list; the recorder offers them, as a bound key never reaches it. |
 | `guide-key check <key>` | `{key, valid, taken}`: whether the key parses and what else uses it (`""` when free), without binding. Settings > Guides asks before Install. |
 | `set guide-key <key>\|none` | Installs or removes the Guide key. |
 | `set reveal-hidden on\|off` | The tracker's Reveal all; the tracker writes it when you change it. |

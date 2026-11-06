@@ -306,6 +306,10 @@ Column {
   property bool keyEditing: false
   // Why the last key press was not taken, shown under the recorder.
   property string keyHint: ""
+  // Keys no Hyprland bind uses (`guide-key free`), offered while recording:
+  // a bound key never reaches the recorder, Hyprland handles it first.
+  property var freeKeys: []
+  onKeyEditingChanged: if (keyEditing && live) freeKeyReader.running = true
   property string keyDraft: ""
   // The field holds a key other than the installed one (same key, written
   // another way, counts as the same).
@@ -758,6 +762,14 @@ Column {
     command: ["python3", root.helperPath, "guide-key", "check", root.defaultGuideKey]
     stdout: StdioCollector {
       onStreamFinished: { try { root.defaultKeyCheck = JSON.parse(text) } catch (e) {} }
+    }
+  }
+
+  Process {
+    id: freeKeyReader
+    command: ["python3", root.helperPath, "guide-key", "free"]
+    stdout: StdioCollector {
+      onStreamFinished: { try { root.freeKeys = JSON.parse(text) } catch (e) {} }
     }
   }
 
@@ -4770,6 +4782,30 @@ Column {
           id: keyCancel
           label: "Cancel"
           onClicked: root.keyEditing = false
+        }
+      }
+      // Taken keys can't be recorded: say so, and offer free ones.
+      Caption {
+        textFormat: Text.PlainText
+        width: root.width
+        visible: root.keyEditing
+        wrapMode: Text.WordWrap
+        elide: Text.ElideNone
+        opacity: 0.55
+        text: "A key Hyprland already uses (like Super+Ctrl+F, tiled full screen) runs its own action and never reaches here."
+              + (root.freeKeys.length ? " Free on your system:" : "")
+      }
+      Flow {
+        width: root.width
+        visible: root.keyEditing && root.freeKeys.length > 0
+        spacing: Commons.Style.space(6)
+        Repeater {
+          model: root.freeKeys.filter(function(k) { return k !== root.guideKeyInstalled })
+          delegate: PillButton {
+            required property string modelData
+            label: root.keyLabel(modelData)
+            onClicked: { root.keyDraft = modelData; root.keyHint = ""; root.draftKeyCheck = ({}); keyField.forceActiveFocus() }
+          }
         }
       }
       Caption {
