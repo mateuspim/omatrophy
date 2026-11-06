@@ -1,0 +1,169 @@
+"""Reader for 100% guides: finds a game's guide file, parses it and matches
+its items to the store's achievements. Format: docs/specs/guides.md.
+
+Guides are the owner's data in ~/.local/share/omatrophy/guides/. This module
+reads them and copies them in from another folder (`guide import`); it never
+writes into the source folder, and never changes a guide it already holds.
+"""
+import json, os, re, shutil
+
+PHASES = ('missable', 'story', 'quick', 'challenge', 'grind', 'collect', 'online')
+NEXT_COUNT = 3
+# A hand tick is "[x]" with no "_(unlocked ...)_" note: OmaTrophy writes that
+# note itself when the store says the achievement is unlocked.
+# Store ids other than Steam, which a Steam lookup must skip (extend with new stores).
+OTHER_STORE_TAIL = re.compile(r'-(gog)$')
+TICK = re.compile(r'^- \[(?P<mark>[ xX])\] \*\*(?P<name>.+?)\*\*(?P<rest>.*)$')
+
+
+def guides_dir():
+    # Resolved per call so tests can point the environment elsewhere.
+    base = os.environ.get('XDG_DATA_HOME') or os.path.expanduser('~/.local/share')
+    return os.path.join(base, 'omatrophy', 'guides')
+
+
+def find_guide(store, app, folder=None):
+    """Path of the .md for one game, found by its trailing id, never by slug
+    (a renamed game keeps its file). Steam is `<slug>-<app>.md`, any other
+    store `<slug>-<store>-<app>.md`. None when there is none."""
+    folder = folder or guides_dir()
+    try:
+        names = sorted(os.listdir(folder))
+    except OSError:
+        return None
+    suffix = f'-{app}.md' if store == 'steam' else f'-{store}-{app}.md'
+    for name in names:
+        slug = name[:-len(suffix)]
+        if name.endswith(suffix) and slug:
+            # '<slug>-gog-5.md' also ends in '-5.md' but is not Steam app 5.
+            if store == 'steam' and OTHER_STORE_TAIL.search(slug):
+                continue
+            return os.path.join(folder, name)
+    return None
+
+
+def parse_markdown(text):
+    """(notes, [{name, done, hand}]) from a guide .md. `done` is any [x];
+    `hand` is a tick made by the owner (no unlock note)."""
+    lines = text.splitlines()
+    notes, items, part = [], [], ''
+    for line in lines:
+        head = line.strip().lower()
+        # Only these two headings switch parts: the notes keep their own
+        # "## Overview", "## Recommended route" ... subsections.
+        if head in ('## guide notes', '## achievements'):
+            part = 'notes' if head == '## guide notes' else 'achievements'
+            continue
+        if part == 'notes':
+            notes.append(line)
+        elif part == 'achievements':
+            m = TICK.match(line)
+            if not m:
+                continue
+            done = m['mark'] in 'xX'
+            items.append({'name': m['name'], 'done': done,
+                          'hand': done and '_(unlocked' not in m['rest']})
+    return '\n'.join(notes).strip(), items
+
+
+def plan_path(md_path):
+    return md_path[:-3] + '.plan.json'
+
+
+def load_plan(md_path):
+    """The .plan.json beside a guide, or {} when missing or broken (the
+    prose and checklist still show)."""
+    try:
+        with open(plan_path(md_path), encoding='utf-8') as f:
+            plan = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    return plan if isinstance(plan, dict) and isinstance(plan.get('items'), dict) else {}
+
+
+def match_items(plan_items, achievements):
+    """{api: item} matching plan items to the store's achievements: by `api`
+    first, then by name. Two achievements with one name take the plan's items
+    of that name in store order."""
+    by_api = {i['api']: key for key, i in plan_items.items() if isinstance(i, dict) and i.get('api')}
+    by_name, taken, out = {}, set(), {}
+    for key, item in plan_items.items():
+        if isinstance(item, dict):
+            by_name.setdefault(item.get('name') or key, []).append(key)
+    for a in achievements:
+        key = by_api.get(a['api'])
+        if key is None:
+            queue = [k for k in by_name.get(a['name'], []) if k not in taken and not plan_items[k].get('api')]
+            key = queue[0] if queue else None
+        if key is not None and key not in taken:
+            taken.add(key)
+            out[a['api']] = dict(plan_items[key], name=plan_items[key].get('name') or key)
+    return out
+
+
+def phase_rank(item):
+    phase = item.get('phase')
+    return PHASES.index(phase) if phase in PHASES else len(PHASES)
+
+
+def open_order(order, items, done):
+    """The first NEXT_COUNT open apis in `order`, missables first."""
+    open_ = [api for api in order if api in items and api not in done]
+    open_.sort(key=lambda api: (not items[api].get('missable'),))  # stable: keeps the plan's order
+    return open_[:NEXT_COUNT]
+
+
+def guide_answer(store, app, achievements, folder=None):
+    """The guide for one game as the tracker reads it, or {} when none."""
+    path = find_guide(store, app, folder)
+    if not path:
+        return {}
+    try:
+        with open(path, encoding='utf-8') as f:
+            notes, checklist = parse_markdown(f.read())
+    except OSError:
+        return {}
+    plan = load_plan(path)
+    items = match_items(plan.get('items', {}), achievements)
+    by_name = {}
+    for a in achievements:
+        by_name.setdefault(a['name'], []).append(a['api'])
+    ticks = []
+    for row in checklist:
+        apis = by_name.get(row['name'], [])
+        if row['hand'] and apis:
+            ticks.append(apis.pop(0))
+        elif apis:
+            apis.pop(0)
+    done = {a['api'] for a in achievements if a.get('unlocked')} | set(ticks)
+    name_to_api = {i['name']: api for api, i in items.items()}
+    order = [name_to_api[n] for n in plan.get('order', []) if n in name_to_api]
+    order += [api for api in items if api not in order]
+    return {'store': store, 'app': str(app), 'file': os.path.basename(path),
+            'generated': plan.get('generated', 0), 'order': order, 'items': items,
+            'sections': plan.get('sections') or {}, 'notes': notes, 'ticks': ticks,
+            'next': open_order(order, items, done)}
+
+
+def import_guides(source, replace=False, folder=None):
+    """Copy every guide .md with its .plan.json and .sources.json from
+    `source`. Returns (imported, skipped); `source` is only read."""
+    folder = folder or guides_dir()
+    if not os.path.isdir(source):
+        raise SystemExit(f'omatrophy: guide import: {source} is not a folder; give the folder that holds the guide files')
+    os.makedirs(folder, exist_ok=True)
+    imported = skipped = 0
+    for name in sorted(os.listdir(source)):
+        if not name.endswith('.md') or not os.path.isfile(os.path.join(source, name)):
+            continue
+        target = os.path.join(folder, name)
+        if os.path.exists(target) and not replace:
+            skipped += 1
+            continue
+        base = name[:-3]
+        for extra in (name, base + '.plan.json', base + '.sources.json'):
+            src = os.path.join(source, extra)
+            if os.path.isfile(src):
+                shutil.copyfile(src, os.path.join(folder, extra))
+        imported += 1
+    return imported, skipped

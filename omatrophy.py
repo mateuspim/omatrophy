@@ -10,6 +10,9 @@ Usage:
   omatrophy.py games                  every game with achievements and its progress, as JSON (the panel's Games tab)
   omatrophy.py game [store app]       every achievement of one game with rarity, as JSON (the tracker);
                                       without arguments, the game running now or played last
+  omatrophy.py guide [store app]      the 100% guide of one game, as JSON ({} when none; docs/specs/guides.md)
+  omatrophy.py guide import <folder> [--replace]
+                                      copy guide files in from another folder (read-only on it)
   omatrophy.py set position <where>   top-center, top-left or top-right (applies live)
   omatrophy.py set glass <look>       clear, frosted or solid toast background
   omatrophy.py set sound on|off|omatrophy|classic
@@ -799,6 +802,24 @@ def game(args):
     print_with_images(game_detail(store, app))
 
 
+def guide(args):
+    """`guide [store app]` prints the guide as JSON; `guide import <folder> [--replace]` copies guides in."""
+    import guides
+    if args[:1] == ['import'] and len(args) in (2, 3) and args[2:] in ([], ['--replace']):
+        imported, skipped = guides.import_guides(args[1], replace=len(args) == 3)
+        print(f'imported {imported}, skipped {skipped}')
+        return
+    found = found_stores()
+    if not args:
+        store, app = pick_game(found)
+    elif len(args) == 2 and args[0] in [s.id for s in found]:
+        store, app = next(s for s in found if s.id == args[0]), args[1]
+    else:
+        raise SystemExit(f'usage: omatrophy.py guide [{"|".join(s.id for s in found)} <game id>]\n'
+                         '       omatrophy.py guide import <folder> [--replace]')
+    print(json.dumps(guides.guide_answer(store.id, app, store.achievements(app))))
+
+
 def config_path():
     # Resolved per call so tests can point HOME at a temporary folder.
     return os.path.expanduser('~/.config/omatrophy/config.json')
@@ -1040,6 +1061,8 @@ def main(argv):
         panel_answer('games', games())
     elif cmd == 'game':
         game(argv[2:])
+    elif cmd == 'guide':
+        guide(argv[2:])
     elif cmd == 'demo':
         demo(argv[2:] or ['unlock', 'rare', 'platinum'])
     elif cmd == 'set' and len(argv) == 4:

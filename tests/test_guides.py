@@ -1,0 +1,148 @@
+import json, os, sys, tempfile, unittest
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+import guides
+
+SAMPLES = os.path.join(os.path.dirname(__file__), '..', 'dev', 'samples', 'guides')
+ACHS = [
+    {'api': 'ACH_LANTERN', 'name': 'Last Lantern', 'unlocked': False},
+    {'api': 'ACH_STARS', 'name': 'Star Counter', 'unlocked': False},
+    {'api': 'ACH_QUIET', 'name': 'Quiet Hours', 'unlocked': False},
+    {'api': 'A1', 'name': 'First Light', 'unlocked': True},
+    {'api': 'A2', 'name': 'Long Way Home', 'unlocked': True},
+    {'api': 'A3', 'name': 'Moth to a Flame', 'unlocked': False},
+]
+
+
+def touch(folder, name, text=''):
+    with open(os.path.join(folder, name), 'w', encoding='utf-8') as f:
+        f.write(text)
+
+
+class FindGuide(unittest.TestCase):
+    def test_finds_by_trailing_id_not_slug(self):
+        with tempfile.TemporaryDirectory() as d:
+            touch(d, 'renamed-game-42.md')
+            touch(d, 'other-gog-42.md')
+            touch(d, 'doom-gog-1435827232.md')
+            self.assertEqual(os.path.basename(guides.find_guide('steam', '42', d)), 'renamed-game-42.md')
+            self.assertEqual(os.path.basename(guides.find_guide('gog', '1435827232', d)), 'doom-gog-1435827232.md')
+            self.assertEqual(os.path.basename(guides.find_guide('gog', '42', d)), 'other-gog-42.md')
+            self.assertIsNone(guides.find_guide('steam', '4', d))
+
+    def test_steam_skips_other_store_files(self):
+        with tempfile.TemporaryDirectory() as d:
+            touch(d, 'doom-gog-5.md')
+            self.assertIsNone(guides.find_guide('steam', '5', d))
+
+    def test_missing_folder(self):
+        self.assertIsNone(guides.find_guide('steam', '1', '/nonexistent-omatrophy-folder'))
+
+
+class ParseMarkdown(unittest.TestCase):
+    def test_notes_and_ticks(self):
+        text = open(os.path.join(SAMPLES, 'starfall-odyssey-1.md'), encoding='utf-8').read()
+        notes, rows = guides.parse_markdown(text)
+        self.assertIn('Last Lantern', notes)
+        self.assertIn('## Overview', notes)
+        self.assertNotIn('First Light', notes)
+        byname = {r['name']: r for r in rows}
+        self.assertEqual(len(rows), 6)
+        self.assertEqual((byname['First Light']['done'], byname['First Light']['hand']), (True, False))
+        self.assertEqual((byname['Long Way Home']['done'], byname['Long Way Home']['hand']), (True, False))
+        self.assertEqual((byname['Moth to a Flame']['done'], byname['Moth to a Flame']['hand']), (True, True))
+        self.assertEqual((byname['Last Lantern']['done'], byname['Last Lantern']['hand']), (False, False))
+
+
+class MatchItems(unittest.TestCase):
+    def test_api_first_then_name(self):
+        items = {'Renamed': {'name': 'Renamed', 'api': 'A1'}, 'Star Counter': {'name': 'Star Counter'}}
+        out = guides.match_items(items, ACHS)
+        self.assertEqual(out['A1']['name'], 'Renamed')
+        self.assertIn('ACH_STARS', out)
+
+    def test_duplicate_names_in_store_order(self):
+        items = {'Twin': {'name': 'Twin', 'tips': 'first'}, 'Twin ': {'name': 'Twin', 'tips': 'second'}}
+        achs = [{'api': 'X', 'name': 'Twin'}, {'api': 'Y', 'name': 'Twin'}]
+        out = guides.match_items(items, achs)
+        self.assertEqual((out['X']['tips'], out['Y']['tips']), ('first', 'second'))
+
+    def test_format_1_key_is_the_name(self):
+        out = guides.match_items({'Star Counter': {'phase': 'grind'}}, ACHS)
+        self.assertEqual(out['ACH_STARS']['name'], 'Star Counter')
+
+
+class GuideAnswer(unittest.TestCase):
+    def folder(self):
+        d = tempfile.TemporaryDirectory()
+        self.addCleanup(d.cleanup)
+        guides.import_guides(SAMPLES, folder=d.name)
+        return d.name
+
+    def test_sample(self):
+        out = guides.guide_answer('steam', '1', ACHS, self.folder())
+        self.assertEqual(out['file'], 'starfall-odyssey-1.md')
+        self.assertEqual(out['order'], ['ACH_LANTERN', 'ACH_STARS', 'ACH_QUIET'])
+        self.assertEqual(out['ticks'], ['A3'])
+        self.assertEqual(out['next'], ['ACH_LANTERN', 'ACH_STARS', 'ACH_QUIET'])
+        self.assertEqual(out['sections']['route'], 'Lantern first, then stars.')
+        self.assertEqual(out['generated'], 1792990000)
+
+    def test_next_skips_done_and_puts_missables_first(self):
+        items = {'a': {'name': 'a'}, 'b': {'name': 'b', 'missable': True}, 'c': {'name': 'c'}, 'd': {'name': 'd'}}
+        done = {'c'}
+        self.assertEqual(guides.open_order(['a', 'b', 'c', 'd'], items, done), ['b', 'a', 'd'])
+
+    def test_unlocked_items_leave_next(self):
+        achs = [dict(a, unlocked=True) if a['api'] == 'ACH_LANTERN' else a for a in ACHS]
+        out = guides.guide_answer('steam', '1', achs, self.folder())
+        self.assertEqual(out['next'], ['ACH_STARS', 'ACH_QUIET'])
+
+    def test_no_guide(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.assertEqual(guides.guide_answer('steam', '9', ACHS, d), {})
+
+    def test_md_without_plan(self):
+        with tempfile.TemporaryDirectory() as d:
+            touch(d, 'x-7.md', '# X\n\n## Guide notes\n\nhello\n\n## Achievements\n\n- [x] **First Light** — d\n')
+            out = guides.guide_answer('steam', '7', ACHS, d)
+            self.assertEqual((out['items'], out['order'], out['ticks'], out['notes']), ({}, [], ['A1'], 'hello'))
+
+    def test_broken_plan_still_shows_prose(self):
+        with tempfile.TemporaryDirectory() as d:
+            touch(d, 'x-7.md', '## Guide notes\n\nhi\n\n## Achievements\n')
+            touch(d, 'x-7.plan.json', '{not json')
+            self.assertEqual(guides.guide_answer('steam', '7', ACHS, d)['notes'], 'hi')
+
+    def test_plan_with_foreign_keys_and_format_1(self):
+        with tempfile.TemporaryDirectory() as d:
+            touch(d, 'x-7.md', '## Achievements\n')
+            touch(d, 'x-7.plan.json', json.dumps({'items': {'Star Counter': {'phase': 'grind'}},
+                                                  'order': ['Star Counter'], 'progress': {}}))
+            out = guides.guide_answer('steam', '7', ACHS, d)
+            self.assertEqual(out['order'], ['ACH_STARS'])
+
+
+class Import(unittest.TestCase):
+    def test_copies_skips_and_replaces(self):
+        with tempfile.TemporaryDirectory() as src, tempfile.TemporaryDirectory() as dst:
+            touch(src, 'a-1.md', 'new')
+            touch(src, 'a-1.plan.json', '{}')
+            touch(src, 'a-1.sources.json', '{}')
+            touch(src, 'b-2.md', 'b')
+            touch(src, 'notes.txt', 'ignored')
+            touch(dst, 'b-2.md', 'mine')
+            self.assertEqual(guides.import_guides(src, folder=dst), (1, 1))
+            self.assertEqual(sorted(os.listdir(dst)), ['a-1.md', 'a-1.plan.json', 'a-1.sources.json', 'b-2.md'])
+            self.assertEqual(open(os.path.join(dst, 'b-2.md')).read(), 'mine')
+            self.assertEqual(guides.import_guides(src, replace=True, folder=dst), (2, 0))
+            self.assertEqual(open(os.path.join(dst, 'b-2.md')).read(), 'b')
+            self.assertEqual(sorted(os.listdir(src)), ['a-1.md', 'a-1.plan.json', 'a-1.sources.json', 'b-2.md', 'notes.txt'])
+
+    def test_not_a_folder(self):
+        with self.assertRaises(SystemExit):
+            guides.import_guides('/nonexistent-omatrophy-folder')
+
+
+if __name__ == '__main__':
+    unittest.main()
