@@ -24,6 +24,10 @@ BATCH_CHARS = 12000
 # timeout (a job, not a toast), a page budget, and a size cap.
 FETCH_SECONDS = 8
 FETCH_PAGES = 10
+# Shorter than this, a page the agent read is likely its tool's summary
+# (Claude's WebFetch kept 2,113 of GamePressure's 11,934 characters on
+# 2026-11-04); OmaTrophy fetches it again and keeps the longer text.
+AGENT_SHORT = 4000
 FETCH_BYTES = 4 * 1024 * 1024
 STEAM_GUIDE_PAGES = 3
 SOURCES_KEPT = 30 * 86400
@@ -211,6 +215,15 @@ def player_page(url):
     host = (parts.hostname or '').lower()
     first = parts.path.strip('/').split('/')[0]
     return (host == 'steamcommunity.com' or host.endswith('.steamcommunity.com')) and first in ('profiles', 'id')
+
+
+# A blog's lists of posts, not a post: the MGSV research of 2026-11-04
+# spent 5 of its 10 fetches on PowerPyx's /page/1177/ and /author/.../page/494/.
+LISTING_PATH = re.compile(r'/(?:page/\d+|author|tag|tags|category|categories)(?:/|$)', re.I)
+
+
+def listing_page(url):
+    return bool(LISTING_PATH.search(urllib.parse.urlsplit(url).path))
 
 
 def site_rank(url):
@@ -742,11 +755,14 @@ class Job:
             self.sources[url] = {'kind': kind, 'fetched': int(self.clock()), 'text': text}
 
     def fetch_into(self, url, kind):
-        if url in self.sources or self.fetched >= FETCH_PAGES:
+        if self.fetched >= FETCH_PAGES or listing_page(url):
+            return
+        held = self.sources.get(url)
+        if held and not (held['kind'] == 'agent' and len(held['text']) < AGENT_SHORT):
             return
         self.fetched += 1
         text = self.fetch(url)
-        if text:
+        if text and (not held or len(text) > len(held['text'])):
             self.add_source(url, text, kind)
 
     def gather(self, name):
@@ -766,11 +782,14 @@ class Job:
         found, _ = self.ask('research', text, lambda t: check_research(t, set(names)),
                             lambda a, b: b if b['notes'] or b['pages'] else a)
         found = found or {'pages': [], 'notes': []}
-        # Pages the agent cites first, then trusted sites its searches named.
-        # Best site first: the fetch budget is FETCH_PAGES.
+        # Pages the agent cites first, then the full text of pages it read
+        # only in summary, then trusted sites its searches named. Best site
+        # first: the fetch budget is FETCH_PAGES.
+        summaries = sorted((u for u, s in self.sources.items() if s['kind'] == 'agent' and len(s['text']) < AGENT_SHORT),
+                           key=site_rank)
         trusted = sorted((u for u in self.links if site_rank(u) < len(SITE_HOSTS) and not player_page(u)),
                          key=site_rank)
-        for url in found['pages'] + [n['url'] for n in found['notes']] + trusted:
+        for url in found['pages'] + summaries + [n['url'] for n in found['notes']] + trusted:
             self.fetch_into(url, 'research')
         hints = {}
         for n in found['notes']:
@@ -881,7 +900,7 @@ class Job:
             entry.update(name=a['name'], api=a['api'])
             plan_items[key] = entry
         plan = dict(old)
-        plan.update({'format': 2, 'generated': int(self.clock()),
+        plan.update({'format': 2, 'maker': guides.MAKER, 'generated': int(self.clock()),
                      'agent': {'name': self.adapter.id, 'model': self.model, 'effort': self.effort, 'jail': self.jail,
                                'stages': stage_counts(self.usage)},
                      'order': route['order'] or list(items), 'items': plan_items,

@@ -20,6 +20,12 @@ def touch(folder, name, text=''):
 
 
 class FindGuide(unittest.TestCase):
+    def test_outdated_only_for_made_guides_of_an_older_maker(self):
+        self.assertTrue(guides.outdated({'generated': 1}))
+        self.assertTrue(guides.outdated({'generated': 1, 'maker': guides.MAKER - 1}))
+        self.assertFalse(guides.outdated({'generated': 1, 'maker': guides.MAKER}))
+        self.assertFalse(guides.outdated({}))  # imported by hand
+
     def test_finds_by_trailing_id_not_slug(self):
         with tempfile.TemporaryDirectory() as d:
             touch(d, 'renamed-game-42.md')

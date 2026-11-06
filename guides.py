@@ -16,6 +16,20 @@ OTHER_STORE_TAIL = re.compile(r'-(gog)$')
 TICK = re.compile(r'^- \[(?P<mark>[ xX])\] \*\*(?P<name>.+?)\*\*(?P<rest>.*)$')
 
 
+# The guide maker's revision, written to each plan it makes. Bump it when
+# making a guide again gives a clearly better one (prompts, sources), so
+# the tracker can say so. 3: route prose without `table` citations, fuller
+# tips, full pages instead of the agent's summaries (2026-11-06).
+MAKER = 3
+
+
+def outdated(plan):
+    """True for a guide OmaTrophy made with an older maker; an imported
+    guide (no `generated`) never is."""
+    rev = plan.get('maker')
+    return bool(plan.get('generated')) and not (isinstance(rev, int) and rev >= MAKER)
+
+
 def guides_dir():
     # Resolved per call so tests can point the environment elsewhere.
     base = os.environ.get('XDG_DATA_HOME') or os.path.expanduser('~/.local/share')
@@ -144,7 +158,7 @@ def guide_answer(store, app, achievements, folder=None):
             'sections': plan.get('sections') or {}, 'notes': notes, 'ticks': ticks,
             'next': open_order(order, items, done),
             'agent': plan.get('agent') if isinstance(plan.get('agent'), dict) else {},
-            'cost_usd': plan_cost(plan)}
+            'cost_usd': plan_cost(plan), 'outdated': outdated(plan)}
 
 
 def plan_cost(plan):

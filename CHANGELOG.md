@@ -6,6 +6,10 @@
   plain prose for the player, with no "`table`" citations or "the
   provided table has no chunk ids". Such talk asks the agent again, and
   what is left is cut. Make a guide again to get the cleaner text.
+- Fuller guides: tips say where, how and what to watch out for;
+  OmaTrophy fetches the full page when the agent read only a summary,
+  and skips a blog's lists of posts. A guide made before this says so
+  next to **Make again**.
 - **Reveal all** is remembered (`reveal-hidden`) for every game and
   every open, sits next to Up next too, and Shift+Enter flips it.
 

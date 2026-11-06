@@ -524,7 +524,10 @@ Item {
     if (!guide || !guide.generated) return "Imported guide"
     var a = guide.agent || {}
     var who = a.name ? " with " + a.name + (a.model ? " · " + a.model : "") : ""
-    return "Made " + day(guide.generated) + who + (guide.cost_usd ? " · $" + guide.cost_usd.toFixed(2) : "")
+    var made = "Made " + day(guide.generated) + who + (guide.cost_usd ? " · $" + guide.cost_usd.toFixed(2) : "")
+    // A newer maker writes better guides (guides.MAKER): say so, as the
+    // owner judged an older MGSV guide thin without knowing.
+    return made + (guide.outdated ? " · older maker" : "")
   }
 
   function forceKeys() {
@@ -1931,6 +1934,7 @@ Item {
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
             visible: !root.complete
+            chosen: !!root.guide && !!root.guide.outdated
             text: "↻ Make again"
             onClicked: root.makerOpen = true
           }

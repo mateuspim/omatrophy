@@ -34,7 +34,11 @@ For each achievement to classify, give:
 - `counter`: `{"target": 50, "label": "kills"}` for a count of 2 or more,
   else null.
 - `combine_with`: names of achievements best done in the same run.
-- `tips`: one or two plain sentences.
+- `tips`: two to four plain sentences a player can act on: where and
+  when (chapter, mission, area), how to do it, and what to watch out
+  for. Never just "unlocks through the story": say which mission, or
+  what to do on the way, when an excerpt says. One sentence is fine for
+  a trivial one.
 - `dlc`: the DLC or separate mode the achievement belongs to, or "" for
   the base game. The store's description often names it: "Feed Jack every
   type of food in Jack's 55th Birthday" belongs to `Jack's 55th Birthday`,

@@ -69,6 +69,7 @@ OmaTrophy doesn't know survive a rewrite.
 ```json
 {
   "format": 2,
+  "maker": 3,
   "generated": 1793059700,
   "agent": {"name": "claude", "model": "", "stages": {"classify": 4, "route": 1}},
   "order": ["Name", "..."],
@@ -84,7 +85,7 @@ OmaTrophy doesn't know survive a rewrite.
       "missable_note": "Before leaving the Baker house in chapter 3",
       "counter": {"target": 50, "label": "kills"},
       "combine_with": ["Other name"],
-      "tips": "One or two plain sentences.",
+      "tips": "Two to four plain sentences: where, how, what to watch out for.",
       "dlc": "End of Zoe",
       "cites": [{"source": "https://...", "quote": "verbatim snippet", "verified": true}],
       "unverified": ["time"],
@@ -125,7 +126,7 @@ OmaTrophy doesn't know survive a rewrite.
 
 | Command | Does |
 | --- | --- |
-| `guide [store app]` | Prints the guide as JSON for the tracker: `{store, app, file, generated, order, items: {api: item}, sections, notes, ticks: [api], next: [api], agent, cost_usd}` (`agent` is the plan's, `cost_usd` the sum of its `usage`), or `{}` when there is none. The reader is `guides.py`. `items` holds only the plan items that match a store achievement (by `api`, then name); `ticks` are the `api`s of hand ticks; `ticks` and the store's unlocks both count as done for `next`. `next` is the first three open items in `order`, missables first. Without arguments, the game running now, else the last one played. |
+| `guide [store app]` | Prints the guide as JSON for the tracker: `{store, app, file, generated, order, items: {api: item}, sections, notes, ticks: [api], next: [api], agent, cost_usd, outdated}` (`agent` is the plan's, `cost_usd` the sum of its `usage`, `outdated` true when OmaTrophy made it with a `maker` older than `guides.MAKER`, so the tracker says "older maker" and lights Make again), or `{}` when there is none. The reader is `guides.py`. `items` holds only the plan items that match a store achievement (by `api`, then name); `ticks` are the `api`s of hand ticks; `ticks` and the store's unlocks both count as done for `next`. `next` is the first three open items in `order`, missables first. Without arguments, the game running now, else the last one played. |
 | `guide import <folder>` | Copies every `*-<app>.md` with its `.plan.json` and `.sources.json` from another folder (the games app's `games/`), skipping files we already have (`--replace` overwrites). Read-only on `<folder>`. Prints `imported N, skipped M`. |
 | `guide agents` | Every agent with its models and picks (see Settings). |
 | `guide model <agent> <model> [effort] [@http://endpoint]`, `guide model <agent> default` | Sets or clears that agent's pick in `guide-models`; `@endpoint` points claude at a local Anthropic-compatible server (`ANTHROPIC_BASE_URL`) for that model. |
