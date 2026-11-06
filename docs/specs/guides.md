@@ -128,7 +128,7 @@ OmaTrophy doesn't know survive a rewrite.
 | `guide model <agent> <model> [effort] [@http://endpoint]`, `guide model <agent> default` | Sets or clears that agent's pick in `guide-models`; `@endpoint` points claude at a local Anthropic-compatible server (`ANTHROPIC_BASE_URL`) for that model. |
 | `guide jail` | Prints the installed ai-jail's version and path, whether the sandbox is on, and each agent's jail options; exits non-zero when ai-jail isn't installed. |
 | `guide jail-options <agent> [options...]` | Sets that agent's extra ai-jail options in `guide-jail-options`; none (or `""`) clears them. One argument with spaces (the panel's) is split like a shell would. Only `--map`, `--rw-map`, `--env`, `--env-from-file` (each with a value; `--opt=value` works) and `--allow-loopback-listen`; anything else fails with the list. `--forward-port`, `--allow-host`, `--allow-private-host` and `--publish-port` fail with why: ai-jail refuses them next to the `--network` we pass, and with it the host's `127.0.0.1` (a local model's server) is reachable already. Prints `<agent> in ai-jail: <options>`. |
-| `guide bench <store> <app> <agent:model[:effort][@endpoint]>... [--no-web] [--jail] [--pick] [--keep]` | [Compares](#benchmark) agents and models on one game. |
+| `guide bench <store> <app> <agent:model[:effort][@endpoint]>... [--no-web] [--jail\|--no-jail] [--pick] [--keep]` | [Compares](#benchmark) agents and models on one game. |
 | `guide check <agent> [model] [--jail]` | The lock check on a real run (below); prints a line per run and `PASS`/`FAIL`, exits non-zero on a fail. Progress in `~/.cache/omatrophy/guide/check.json` (`{agent, jail, state: running\|passed\|failed, lines, time, runs}`; `jail`: a `--jail` check, which Settings shows under Sandbox) for Settings > Guides' Check. |
 | `guide make <store> <app> [--no-web] [--notify] [--jail\|--no-jail] [--agent a] [--model m] [--effort e]` | Runs the job below; the flags override the settings for this run only. `--notify` (the tracker passes it) sends a desktop notification when the job is done or failed. `--jail` runs the agent inside ai-jail (see Settings). One line per stage, then `done: N items, M verified`, or `stopped`/`failed: <what to do>`. Exits non-zero with no agent, an unsupported agent, another job running, or a game already at 100% (nothing open to plan; the tracker says so instead of offering a make). A saved sandbox setting without ai-jail installed runs without it and prints a `note:`; an explicit `--jail` fails. |
 | `guide stop` | Stops the job within half a second (the agent's process group is killed); nothing is written, so the old guide stays. |
@@ -141,7 +141,7 @@ OmaTrophy doesn't know survive a rewrite.
 | `guide-agent` | `""` (follow `omarchy-default-agent`) or any agent id in the adapter table. `set guide-agent default\|<id>`. | `""` |
 | `guide-models` | Per agent, `{agent: {"model": "...", "effort": "...", "endpoint": "..."}}`; a missing agent or `""` uses that agent's own default. Written by `guide model` and the panel. | `{}` |
 | `guide-web` | `true`, `false`: let the agent search the web itself. `set guide-web on\|off`. | `true` |
-| `guide-jail` | `true`, `false`: run the agent inside [ai-jail](https://github.com/akitaonrails/ai-jail) (`ai-jail --exec ... --network -- <agent command>`): the job's empty folder read-write, the agent's own state dirs, the network, and only the environment variables it needs (its endpoint and key, when set). A second fence around the adapter's lock; an unchecked agent still never runs. Checked with `dev/check-lock.py --jail <agent>` (unverified as of 2026-11-04: written where ai-jail could not nest). `set guide-jail on\|off`. | `false` |
+| `guide-jail` | `true`, `false`: run the agent inside [ai-jail](https://github.com/akitaonrails/ai-jail) (`ai-jail --exec ... --network -- <agent command>`): the job's empty folder read-write, the agent's own state dirs, the network, and only the environment variables it needs (its endpoint and key, when set). A second fence around the adapter's lock; an unchecked agent still never runs. Checked with `guide check <agent> [model] --jail` (Settings > Guides: Check in ai-jail): passed for OpenCode with a local model on 2026-11-05 (ai-jail 2.15.0, its key file let in with `--map`); Claude Code passed in the jail on 2026-11-05 once mise shims were resolved (mise itself fails in the jail with "Read-only file system", so OmaTrophy starts the tool `mise which` names); Codex in the jail is unverified there. On ai-jail 3.x (`jail_version` major 3 or more) the argv also has `--clean --agent-state --harness <agent>` (the harness only for agents ai-jail knows: claude, codex, opencode, crush, gemini, grok, pi): with no terminal, 3.x applies its first-run preset in a new folder, whose filtered egress it won't combine with `--network`, and leaves the agent logged out. `--clean` ignores that and any saved policy for the job's temp folder, so the flags alone decide and nothing needs approving with `ai-jail configure`. Claude Code (haiku), Codex (GPT-6.1 Terra) and OpenCode with a local model passed `guide check --jail` on ai-jail 3.1.0, 2026-11-06. `set guide-jail on\|off`. | `false` |
 | `guide-jail-options` | Per agent, `{agent: ["--map", "~/path/to/key", ...]}`: ai-jail options added before `--` when that agent runs in the jail (the lock check too), `~` expanded. What a local model may need: its key file (`--map`); its server on the host's `127.0.0.1` is reachable already. Checked against the list under `guide jail-options` when written and when read: a saved filtered-network option is dropped with its value, and an entry that still fails reads as none. Written by `guide jail-options` and the panel. | `{}` |
 
 `guide agents` prints `[{agent, name, installed, supported, default,
@@ -189,11 +189,15 @@ it.
 
 Pages come from, in this order: the earlier `.sources.json`, files in
 `sources/<name>/` (named `file:<name>`), Steam guides, then pages the
-agent read (claude's WebFetch results, kind `agent`), the pages it cites,
-and trusted-site links its searches turned up, fetched by OmaTrophy
-within the budget. A cite verifies when its quote (folded, 12-400
-characters) is in the source it names, or failing that in any source
-held; the cite then names that source.
+agent read (Claude's WebFetch results, OpenCode's webfetch results, kind
+`agent`), the pages it cites, and trusted-site links its searches turned
+up, fetched by OmaTrophy within the budget. Search engines' result pages
+(Bing, DuckDuckGo, Google, any `/search?q=`) are never kept as sources. A
+cite verifies when its quote (folded, 12-400 characters) is in the source
+it names, or failing that in any source held, and says more than the
+store's own text: with the achievement's name, description and DLC name
+taken out, at least 10 letters or digits remain. The cite then names that
+source.
 
 Each model stage is checked as it lands: on a shape error it is asked once
 more with the errors listed, then the valid part is kept. A cut-short
@@ -218,7 +222,8 @@ the cheaper (unknown cost last), then the faster. A failed or stopped
 entry scores 0. `--pick` saves the best as `guide-agent` and its
 `guide-models` pick (endpoint included); `--keep` copies its guide over
 the game's (the old one kept as `.prev`). Ctrl-C skips the entry running;
-`guide stop` doesn't reach a bench.
+`guide stop` doesn't reach a bench. Results of a first bench on three
+games: [docs/guide/guide-models.md](../guide/guide-models.md).
 
 ### Trusted sites
 

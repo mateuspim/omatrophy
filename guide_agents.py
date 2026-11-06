@@ -281,19 +281,50 @@ class OpenCode(ListedModels):
         return argv, None, {'OPENCODE_CONFIG_CONTENT': json.dumps(lock)}
 
     def answer(self, stdout, folder):
-        texts, out = [], {'text': '', 'pages': [], 'links': [], 'usage': {}, 'error': ''}
+        """OpenCode's --format json: one event per line. `text` parts are the
+        answer; a completed `webfetch` tool part is a page the agent read
+        (its markdown, so a quote can verify), a completed `websearch` part
+        names links; `step_finish` parts carry tokens and cost per step.
+        Before 2026-11-05 only text was read, so a local model's research
+        left sources.json empty and every claim unverified."""
+        texts, pages, links, usage = [], [], [], {'input': 0, 'output': 0, 'cost_usd': 0.0}
+        out = {'text': '', 'pages': pages, 'links': links, 'usage': usage, 'error': ''}
         for line in stdout.splitlines():
             try:
                 event = json.loads(line)
             except ValueError:
                 continue
-            part = event.get('part') if isinstance(event, dict) else None
-            if isinstance(part, dict) and part.get('type') == 'text' and isinstance(part.get('text'), str):
-                texts.append(part['text'])
-            if isinstance(event, dict) and event.get('type') == 'error':
+            if not isinstance(event, dict):
+                continue
+            part = event.get('part')
+            if isinstance(part, dict):
+                self.read_part(part, texts, pages, links, usage)
+            if event.get('type') == 'error':
                 out['error'] = str((event.get('error') or {}).get('message') or event.get('error') or 'opencode failed')
         out['text'] = '\n'.join(texts) or stdout
         return out
+
+    @staticmethod
+    def read_part(part, texts, pages, links, usage):
+        kind = part.get('type')
+        if kind == 'text' and isinstance(part.get('text'), str):
+            texts.append(part['text'])
+        elif kind == 'step-finish':
+            tokens = part.get('tokens') if isinstance(part.get('tokens'), dict) else {}
+            cache = tokens.get('cache') if isinstance(tokens.get('cache'), dict) else {}
+            usage['input'] += int(tokens.get('input') or 0) + int(cache.get('read') or 0) + int(cache.get('write') or 0)
+            usage['output'] += int(tokens.get('output') or 0) + int(tokens.get('reasoning') or 0)
+            usage['cost_usd'] += float(part.get('cost') or 0)
+        elif kind == 'tool':
+            state = part.get('state') if isinstance(part.get('state'), dict) else {}
+            output = state.get('output') if isinstance(state.get('output'), str) else ''
+            if state.get('status') != 'completed' or not output:
+                return
+            args = state.get('input') if isinstance(state.get('input'), dict) else {}
+            if part.get('tool') == 'webfetch' and isinstance(args.get('url'), str):
+                pages.append({'url': args['url'], 'text': output})
+            elif part.get('tool') == 'websearch':
+                links.extend(u for u in re.findall(r'https://[^\s"\'<>)\]]+', output) if u not in links)
 
 
 class Unchecked(Adapter):
@@ -351,7 +382,32 @@ def jail_version(runner=subprocess.run):
     return found.group(0) if found else ''
 
 
-def jailed(argv, extra_env, options=()):
+def jail_binary(name, runner=subprocess.run):
+    """What ai-jail should start for `name`: the tool itself when `name` is
+    a mise shim or command wrapper. mise exits with "Read-only file system"
+    inside the jail (mise 2026.11.0, 2026-11-05), while the tool it points
+    at runs there fine."""
+    path = shutil.which(name)
+    if not path:
+        return name
+    real = os.path.realpath(path)
+    target = mise_target(real, name, runner)
+    return target if target != real else name
+
+
+# Agents ai-jail knows by name (its presets). On 3.x OmaTrophy declares
+# the one it starts, so ai-jail mounts that agent's login state even when
+# the binary is a resolved path, and refuses a mismatch.
+JAIL_HARNESSES = ('claude', 'codex', 'opencode', 'crush', 'gemini', 'grok', 'pi')
+
+
+def jail_major(version):
+    """The major number of an ai-jail version ("3.1.0" -> 3), 0 when unknown."""
+    found = re.match(r'(\d+)', version or '')
+    return int(found.group(1)) if found else 0
+
+
+def jailed(argv, extra_env, options=(), harness='', version=None):
     """`argv` run inside ai-jail (bubblewrap, Landlock, seccomp): the agent
     sees only the job's empty folder read-write, its own state dirs and
     the network, whatever its own flags let it do. A second fence around
@@ -359,13 +415,25 @@ def jailed(argv, extra_env, options=()):
     its own lock was checked. `--exec` runs it directly, stdin and stdout
     piped as without the jail; nothing is saved to a project .ai-jail.
     `options` are the owner's extra jail options for this agent
-    (`guide-jail-options`), checked by jail_options()."""
+    (`guide-jail-options`), checked by jail_options(). `version` is the
+    installed ai-jail's (None: ask it)."""
+    version = jail_version() if version is None else version
     out = ['ai-jail', '--exec', '--no-status-bar', '--no-save-config', '--no-display', '--no-gpu',
            '--no-audio', '--no-docker', '--no-ssh', '--network']
+    if jail_major(version) >= 3:
+        # ai-jail 3.x (2026-11-06): with no terminal, a first run in a
+        # folder applies its "For developers" preset, which adds filtered
+        # egress to the agent's API host; next to our --network that
+        # fails ("--network and --allow-host ... are mutually exclusive")
+        # and agent state stays off, so the agent is logged out. The job
+        # folder is a fresh temp folder with no policy worth reading:
+        # --clean starts from the flags alone, and --agent-state is the
+        # login that 2.x mounted by default.
+        out += ['--clean', '--agent-state'] + (['--harness', harness] if harness in JAIL_HARNESSES else [])
     for name in sorted(set(JAIL_ENV) | set(extra_env)):
         if name in os.environ or name in extra_env:
             out += ['--env', name]
-    return out + [os.path.expanduser(o) for o in options] + ['--'] + list(argv)
+    return out + [os.path.expanduser(o) for o in options] + ['--', jail_binary(argv[0])] + list(argv[1:])
 
 
 # The ai-jail options an owner may add per agent: what a local model needs
@@ -462,19 +530,34 @@ def check_status_path():
     return f'{CACHE}/guide/check.json'
 
 
-def fingerprint(adapter):
+def fingerprint(adapter, runner=subprocess.run):
     """The installed agent binary as it is now (real path, size, mtime): an
     update changes it, and a lock checked on the old one no longer counts.
-    No subprocess, so `guide agents` stays fast."""
+    No subprocess, so `guide agents` stays fast, except for a mise shim."""
     path = shutil.which(adapter.binary) if adapter.binary else None
     if not path:
         return ''
-    real = os.path.realpath(path)
+    real = mise_target(os.path.realpath(path), adapter.binary, runner)
     try:
         st = os.stat(real)
     except OSError:
         return ''
     return f'{real}:{st.st_size}:{int(st.st_mtime)}'
+
+
+def mise_target(real, binary, runner=subprocess.run):
+    """The tool a mise shim runs, or `real` unchanged. mise's shims and
+    command wrappers are links to mise itself, so stamping them saw no
+    agent update, and the stamp changed with PATH order: the shell found
+    the shim, a terminal the install (2026-11-05). `mise which` answers in
+    milliseconds."""
+    if os.path.basename(real) != 'mise':
+        return real
+    try:
+        out = runner([real, 'which', binary], capture_output=True, text=True, timeout=4).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return real
+    return os.path.realpath(out) if out and os.path.isabs(out) else real
 
 
 def recorded_locks():
@@ -611,7 +694,7 @@ def run(adapter, prompt, web=False, model='', effort='', stopped=lambda: False, 
         extra = dict(env or {}, **extra)
         env = dict(os.environ, **extra)
         if jail:
-            argv = jailed(argv, extra, saved_jail_options(adapter.id))
+            argv = jailed(argv, extra, saved_jail_options(adapter.id), harness=adapter.id)
         out_path, err_path = os.path.join(folder, '.stdout'), os.path.join(folder, '.stderr')
         with open(out_path, 'wb') as out, open(err_path, 'wb') as err:
             try:

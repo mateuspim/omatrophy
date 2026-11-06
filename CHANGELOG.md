@@ -31,6 +31,20 @@ open; the watcher and `Tracker.qml` are unchanged, so no restart is needed.
   `guide stop`, `guide status`, `guide agents`, `guide model`, and
   `set guide-agent` / `set guide-web`. `dev/check-lock.py <agent>` checks
   an agent's lock on a real run.
+- OpenCode's research counts: the pages its webfetch read become sources
+  and its token use is recorded (before, a local model's guide had no
+  sources and every claim was unverified).
+- Agents installed through mise run inside ai-jail (mise itself can't), and
+  a lock check follows the agent's own binary, not mise's.
+- A quote that only repeats the achievement's name, description or DLC no
+  longer counts as verified, and search result pages are no source.
+- The Sandbox works with ai-jail 3.x, which refused every agent: OmaTrophy
+  passes the network and the agent's login itself and starts from a clean
+  policy, so there is nothing to approve in `ai-jail configure`.
+- `guide bench --no-jail` runs outside ai-jail whatever the Sandbox
+  setting says.
+- Bench results for seven agent and model pairs on three games in the
+  README and `docs/guide/guide-models.md`.
 
 ## 0.5.2 - 2026-11-04
 

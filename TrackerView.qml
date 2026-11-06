@@ -1746,24 +1746,39 @@ Item {
         }
 
         // A game at 100% needs no guide: say so instead of offering one.
-        Column {
+        // The pane's whole height, so the note sits in its middle.
+        Item {
           width: parent.width
+          height: guidePane.height
           visible: root.complete && !root.hasGuide && !root.making && root.guide !== null
-          spacing: Commons.Style.space(6)
-          Text {
-            textFormat: Text.PlainText
-            width: parent.width
-            text: "You already have the platinum"
-            color: Commons.Color.accent
-            font.family: Commons.Style.font.family
-            font.pixelSize: Commons.Style.font.title
-            font.bold: true
-          }
-          Caption {
-            width: parent.width
-            wrapMode: Text.Wrap
-            elide: Text.ElideNone
-            text: "All " + (root.game ? root.game.total : 0) + " achievements are unlocked, so there's nothing left for a guide to plan. Making one would only spend your agent's tokens."
+          Column {
+            anchors.centerIn: parent
+            width: Math.min(parent.width, Commons.Style.space(420))
+            spacing: Commons.Style.space(10)
+            Trophy {
+              anchors.horizontalCenter: parent.horizontalCenter
+              style: root.iconSet
+              metal: "platinum"
+              width: 72
+              height: 72
+            }
+            Text {
+              textFormat: Text.PlainText
+              width: parent.width
+              horizontalAlignment: Text.AlignHCenter
+              text: "You already have the platinum"
+              color: Commons.Color.accent
+              font.family: Commons.Style.font.family
+              font.pixelSize: Commons.Style.font.title
+              font.bold: true
+            }
+            Caption {
+              width: parent.width
+              horizontalAlignment: Text.AlignHCenter
+              wrapMode: Text.Wrap
+              elide: Text.ElideNone
+              text: "All " + (root.game ? root.game.total : 0) + " achievements are unlocked, so there's nothing left for a guide to plan. Making one would only spend your agent's tokens."
+            }
           }
         }
 

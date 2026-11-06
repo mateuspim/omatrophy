@@ -1,4 +1,4 @@
-import json, os, re, sys, tempfile, unittest
+import json, os, re, subprocess, sys, tempfile, unittest
 from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -198,6 +198,28 @@ class Checks(unittest.TestCase):
         out = guide_maker.verify_cites(dict(item, cites=[]), {}, [])
         self.assertEqual(out['unverified'], ['time', 'tips'])
 
+    # Regression: a local model "verified" items by quoting their own name
+    # or DLC ("End of Zoe DLC"), which is on the page but proves nothing.
+    def test_a_quote_of_the_store_text_does_not_verify(self):
+        page = {'u': {'text': 'King of the Swamp. End of Zoe DLC. Punch the boss without guns: block, then '
+                              'counter after its slam. Win a fight in End of Zoe.'}}
+        given = ('King of the Swamp', 'Win a fight in End of Zoe.', 'End of Zoe')
+
+        def verified(quote):
+            item = {'cites': [{'source': 'u', 'quote': quote}]}
+            return guide_maker.verify_cites(item, page, [], given)['cites'][0]['verified']
+        self.assertFalse(verified('King of the Swamp'))
+        self.assertFalse(verified('End of Zoe DLC'))
+        self.assertFalse(verified('Win a fight in End of Zoe.'))
+        self.assertTrue(verified('block, then counter after its slam'))
+
+    def test_search_result_pages_are_no_source(self):
+        self.assertTrue(guide_maker.search_page('https://www.bing.com/search?q=x'))
+        self.assertTrue(guide_maker.search_page('https://lite.duckduckgo.com/lite/?q=x'))
+        self.assertTrue(guide_maker.search_page('https://searx.example/search?q=x'))
+        self.assertFalse(guide_maker.search_page('https://steamcommunity.com/app/1/guides/'))
+        self.assertFalse(guide_maker.search_page('https://www.powerpyx.com/re7-trophy-guide/'))
+
     def test_slug(self):
         self.assertEqual(guide_maker.slug('DOOM: The Dark Ages™'), 'doom-the-dark-ages')
 
@@ -236,6 +258,29 @@ class Agents(unittest.TestCase):
         self.assertEqual(lock['permission']['webfetch'], 'deny')
         self.assertIn('--standalone', guide_agents.OpenCode.models_command)
 
+    # Regression: only text parts were read, so a local model's research
+    # (webfetch results, tokens) never reached sources.json or the usage.
+    def test_opencode_answer_reads_fetched_pages_links_and_usage(self):
+        events = [
+            {'type': 'tool_use', 'part': {'type': 'tool', 'tool': 'websearch', 'state': {
+                'status': 'error', 'input': {'query': 'q'}, 'error': 'Unable to search'}}},
+            {'type': 'tool_use', 'part': {'type': 'tool', 'tool': 'websearch', 'state': {
+                'status': 'completed', 'input': {'query': 'q'},
+                'output': 'Guide https://example.com/guide and https://example.org/b)'}}},
+            {'type': 'tool_use', 'part': {'type': 'tool', 'tool': 'webfetch', 'state': {
+                'status': 'completed', 'input': {'url': 'https://example.com/guide'}, 'output': '# Page text'}}},
+            {'type': 'step_finish', 'part': {'type': 'step-finish', 'cost': 0,
+                                            'tokens': {'input': 10, 'output': 2, 'reasoning': 1,
+                                                       'cache': {'read': 5, 'write': 0}}}},
+            {'type': 'text', 'part': {'type': 'text', 'text': '<answer/>'}},
+            {'type': 'step_finish', 'part': {'type': 'step-finish', 'tokens': {'input': 4, 'output': 3}}},
+        ]
+        found = guide_agents.OpenCode().answer('\n'.join(json.dumps(e) for e in events), '/x')
+        self.assertEqual(found['text'], '<answer/>')
+        self.assertEqual(found['pages'], [{'url': 'https://example.com/guide', 'text': '# Page text'}])
+        self.assertEqual(found['links'], ['https://example.com/guide', 'https://example.org/b'])
+        self.assertEqual((found['usage']['input'], found['usage']['output']), (19, 6))
+
     def test_no_adapter_ever_auto_approves(self):
         for a in guide_agents.ADAPTERS:
             try:
@@ -262,7 +307,8 @@ class Agents(unittest.TestCase):
         self.assertEqual(out['usage'], {'input': 7, 'output': 2, 'cost_usd': 0.5})
 
     def test_jailed_wraps_the_command_and_passes_only_named_env(self):
-        with mock.patch.dict(os.environ, {'ANTHROPIC_BASE_URL': 'http://x', 'SECRET_THING': 'y'}):
+        with mock.patch.dict(os.environ, {'ANTHROPIC_BASE_URL': 'http://x', 'SECRET_THING': 'y'}), \
+                mock.patch.object(guide_agents.shutil, 'which', return_value=None):
             argv = guide_agents.jailed(['claude', '-p'], {'OPENCODE_CONFIG_CONTENT': '{}'})
         self.assertEqual(argv[:2], ['ai-jail', '--exec'])
         self.assertEqual(argv[argv.index('--') + 1:], ['claude', '-p'])
@@ -459,11 +505,47 @@ class JailOptions(unittest.TestCase):
     # A local model inside ai-jail may need its key file (OpenCode at a
     # local server worked without the jail, failed in it).
     def test_jailed_puts_the_options_before_the_agent_with_home_expanded(self):
-        with mock.patch.dict(os.environ, {'HOME': '/h'}):
+        with mock.patch.dict(os.environ, {'HOME': '/h'}), \
+                mock.patch.object(guide_agents.shutil, 'which', return_value=None):
             argv = guide_agents.jailed(['opencode', 'run'], {}, ['--env', 'K', '--map', '~/k.key'])
         cut = argv.index('--')
         self.assertEqual(argv[cut - 4:cut], ['--env', 'K', '--map', '/h/k.key'])
         self.assertEqual(argv[cut + 1:], ['opencode', 'run'])
+
+    # Regression: ai-jail 3.1 refused claude and codex ("--network and
+    # --allow-host ... are mutually exclusive") and left agents logged out.
+    def test_jailed_on_3x_starts_clean_with_agent_state_and_the_harness(self):
+        with mock.patch.object(guide_agents.shutil, 'which', return_value=None):
+            argv = guide_agents.jailed(['claude', '-p'], {}, harness='claude', version='3.1.0')
+            cut = argv.index('--')
+            for flag in ('--clean', '--agent-state', '--network'):
+                self.assertIn(flag, argv[:cut])
+            self.assertEqual(argv[argv.index('--harness') + 1], 'claude')
+            self.assertEqual(argv[cut + 1:], ['claude', '-p'])
+            unknown = guide_agents.jailed(['hermes'], {}, harness='hermes', version='3.1.0')
+            self.assertNotIn('--harness', unknown)
+
+    def test_jailed_on_2x_keeps_the_old_argv(self):
+        with mock.patch.object(guide_agents.shutil, 'which', return_value=None):
+            for version in ('2.15.0', ''):
+                argv = guide_agents.jailed(['claude', '-p'], {}, harness='claude', version=version)
+                for flag in ('--clean', '--agent-state', '--harness'):
+                    self.assertNotIn(flag, argv)
+
+    def test_jail_major(self):
+        self.assertEqual(guide_agents.jail_major('3.1.0'), 3)
+        self.assertEqual(guide_agents.jail_major('2.15.0'), 2)
+        self.assertEqual(guide_agents.jail_major(''), 0)
+
+    # Regression: mise fails with "Read-only file system" in the jail, so
+    # every agent installed through mise failed there; its tool runs fine.
+    def test_jailed_runs_the_tool_behind_a_mise_shim(self):
+        runner = mock.Mock(return_value=mock.Mock(stdout='/mise/installs/claude/latest/claude\n'))
+        with mock.patch.object(guide_agents.shutil, 'which', return_value='/shims/claude'), \
+                mock.patch.object(guide_agents.os.path, 'realpath', side_effect=lambda p: '/usr/bin/mise' if p == '/shims/claude' else p):
+            self.assertEqual(guide_agents.jail_binary('claude', runner), '/mise/installs/claude/latest/claude')
+        with mock.patch.object(guide_agents.shutil, 'which', return_value='/usr/bin/claude'):
+            self.assertEqual(guide_agents.jail_binary('claude', runner), 'claude')
 
     def test_jail_options_checks_each_word(self):
         self.assertEqual(guide_agents.jail_options(['--env=K', '--allow-loopback-listen', '--map', '~/a']),
@@ -514,6 +596,26 @@ class SandboxWithoutJail(unittest.TestCase):
             self.assertTrue(omatrophy.use_jail(None, {'guide-jail': True}, say=said.append))
         self.assertEqual(len(said), 1)
 
+    # The bench followed the saved Sandbox with no way out, so ai-jail 3.1
+    # (which refused every agent) blocked benching unless the setting changed.
+    def test_bench_no_jail_overrides_the_saved_setting(self):
+        import omatrophy, guide_bench
+        store = mock.Mock(id='steam')
+        seen = {}
+
+        def fake_bench(*a, **kw):
+            seen.update(kw)
+            return '/x', [{'state': 'done', 'agent': 'claude', 'model': 'haiku', 'effort': '', 'endpoint': ''}]
+        with mock.patch.object(guide_agents, 'jail_installed', return_value=True), \
+                mock.patch.object(guide_agents, 'resolve'), \
+                mock.patch.object(omatrophy, 'guide_target', return_value=(store, [], 60)), \
+                mock.patch.object(guide_bench, 'bench', side_effect=fake_bench), \
+                mock.patch.object(guide_bench, 'table', return_value=''), mock.patch('builtins.print'):
+            omatrophy.guide_bench('steam', '1', ['claude:haiku', '--no-jail'], {'guide-jail': True})
+            self.assertFalse(seen['jail'])
+            omatrophy.guide_bench('steam', '1', ['claude:haiku'], {'guide-jail': True})
+            self.assertTrue(seen['jail'])
+
     def test_jail_version_reads_the_number_or_nothing(self):
         answer = lambda out: (lambda argv, **kw: mock.Mock(stdout=out))
         with mock.patch.object(guide_agents, 'jail_installed', return_value=True):
@@ -546,6 +648,24 @@ class LockCheck(unittest.TestCase):
                 self.assertTrue(guide_agents.checked(codex))
             with mock.patch.object(guide_agents, 'fingerprint', lambda a: 'bin:2'):
                 self.assertFalse(guide_agents.checked(codex))
+
+    # Regression: a mise shim is a link to mise itself, so the stamp missed
+    # agent updates and differed between the shell's PATH and a terminal's.
+    def test_a_mise_shim_is_stamped_by_the_tool_it_runs(self):
+        with tempfile.TemporaryDirectory() as d:
+            tool = os.path.join(d, 'installs', 'opencode')
+            write(os.path.dirname(tool), 'opencode', 'tool')
+            calls = []
+
+            def runner(argv, **kw):
+                calls.append(argv)
+                return mock.Mock(stdout=tool + '\n')
+            self.assertEqual(guide_agents.mise_target('/usr/bin/mise', 'opencode', runner), tool)
+            self.assertEqual(calls, [['/usr/bin/mise', 'which', 'opencode']])
+            self.assertEqual(guide_agents.mise_target('/usr/bin/opencode', 'opencode', runner), '/usr/bin/opencode')
+            self.assertEqual(len(calls), 1)
+            failed = mock.Mock(side_effect=subprocess.TimeoutExpired('mise', 4))
+            self.assertEqual(guide_agents.mise_target('/usr/bin/mise', 'opencode', failed), '/usr/bin/mise')
 
     def test_a_write_fails_and_records_nothing_and_a_jail_pass_records_nothing(self):
         with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {'HOME': d}), \
