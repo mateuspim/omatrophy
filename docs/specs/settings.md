@@ -18,6 +18,7 @@ bar panel).
 | `rarest` | The Now tab's last rarest-unlocks list: `"ever"`, `"month"`, `"platinum"`. Written when you pick one. | `"ever"` |
 | `settings-section` | The Settings tab's last section: `"overview"`, `"toasts"`, `"now"`, `"guides"`, `"stores"`. Written when you pick one. | `"overview"` |
 | `tracker-sort` | `"recent"`, `"rarity"`, `"name"`, `"game"` (the store's own order) | `"recent"` |
+| `reveal-hidden` | `true`, `false`: the tracker shows hidden achievements' names and tips without a hover. Written by the tracker's Reveal all and Shift+Enter. | `false` |
 | `community` | `true`, `false`: fill in games that never ran here from your public Steam profile (ADR 11) | `false` |
 | `now-metals`, `now-recent`, `now-rarest`, `now-shelf` | `true`, `false`: show the bar panel's Now-tab section (the metal tally, recently played, rarest unlocks, the platinum shelf). The game you're playing always shows. | `true` |
 | `showcase` | Up to six trophies on the Profile tab's showcase, in the order pinned: `"store:game:api"` for one achievement, `"store:game"` for a game's platinum. Written by `omatrophy.py showcase` and the tracker's ☆; empty shows your rarest instead. | `[]` |

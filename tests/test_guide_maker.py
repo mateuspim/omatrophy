@@ -80,6 +80,19 @@ class Job(unittest.TestCase):
         with open(os.path.join(self.agent_dir, 'calls')) as f:
             return len(f.read())
 
+    def test_fetch_replaces_agent_summaries_and_skips_listings(self):
+        fetched = []
+        job = guide_maker.Job('steam', '1', 'G', [dict(a) for a in ACHS], FakeAgent(self.agent_dir), web=False,
+                              folder=self.guides, list_guides=lambda app: [],
+                              fetch=lambda url: fetched.append(url) or 'full page text ' * 400)
+        job.add_source('https://a.example/guide', 'a short summary', 'agent')
+        job.add_source('https://b.example/guide', 'kept as found ' * 400, 'agent')
+        for url in ('https://a.example/guide', 'https://b.example/guide', 'https://p.example/page/1177/',
+                    'https://p.example/author/x/page/494/'):
+            job.fetch_into(url, 'research')
+        self.assertEqual(fetched, ['https://a.example/guide'])
+        self.assertTrue(job.sources['https://a.example/guide']['text'].startswith('full page text'))
+
     def test_makes_files_and_verifies_quotes(self):
         self.assertEqual(guide_maker.make(self.job())['state'], 'done')
         md = os.path.join(self.guides, 'starfall-odyssey-1.md')
@@ -88,6 +101,7 @@ class Job(unittest.TestCase):
         self.assertEqual(len(rows), 4)
         plan = json.loads(read(md[:-3] + '.plan.json'))
         self.assertEqual(plan['format'], 2)
+        self.assertEqual(plan['maker'], guides.MAKER)
         self.assertEqual(plan['order'], ['Last Lantern', 'Quiet Hours', 'Star Counter'])
         lantern, stars = plan['items']['Last Lantern'], plan['items']['Star Counter']
         self.assertEqual(lantern['api'], 'L')
@@ -179,6 +193,37 @@ class Checks(unittest.TestCase):
         route, errors = guide_maker.check_route('<route>{"order": ["A", "Z", "A"], "sections": {}}</route>', {'A'})
         self.assertEqual(route['order'], ['A'])
         self.assertEqual(len(errors), 2)  # Z unknown, no overview
+
+    def test_route_meta_talk_is_rejected_and_scrubbed(self):
+        # Regression: the MGSV guide of 2026-11-04 talked about "the
+        # provided table" and cited `table` all through its prose.
+        overview = ('You have 13 of 42. The provided table has no source URLs or chunk ids. '
+                    'Executed is hard (`table`: "challenge; difficulty 4").')
+        route = '1. **Story.** Play Skull. It "combines with Accomplished" (`table`).\n2. Do Hero, then Truth.'
+        answer = json.dumps({'order': ['A'], 'sections': {'overview': overview, 'route': route}})
+        found, errors = guide_maker.check_route(f'<route>{answer}</route>', {'A'})
+        self.assertEqual(len(errors), 2)
+        self.assertIn('sections.overview talks about your input', errors[0])
+        self.assertEqual(found['sections']['overview'], 'You have 13 of 42. Executed is hard.')
+        self.assertEqual(found['sections']['route'],
+                         '1. **Story.** Play Skull. It "combines with Accomplished".\n2. Do Hero, then Truth.')
+
+    def test_meta_talk_leaves_game_prose_alone(self):
+        for text in ('Put the key on the table in the lab.', 'A list of missables follows.',
+                     'Source the parts in chapter 2.'):
+            self.assertEqual(guide_maker.meta_talk(text), [], text)
+            self.assertEqual(guide_maker.scrub_meta(text), text)
+
+    def test_route_prompt_asks_for_no_citations(self):
+        text = guide_maker.prompt('route', game='G', progress='0 of 1', table='- A: story')
+        self.assertNotIn('chunk id (like', text)
+        self.assertIn('no quotes and no citations', text)
+
+    def test_listing_page(self):
+        self.assertTrue(guide_maker.listing_page('https://www.powerpyx.com/guide/page/1132/'))
+        self.assertTrue(guide_maker.listing_page('https://www.powerpyx.com/author/powerpyx/page/494/'))
+        self.assertFalse(guide_maker.listing_page('https://www.powerpyx.com/guides/mgsv-trophy-guide.html'))
+        self.assertFalse(guide_maker.listing_page('https://www.powerpyx.com/?p=1482'))
 
     def test_fold_matches_typographic_quotes(self):
         self.assertIn(guide_maker.fold('don’t  go — "now"'), guide_maker.fold('Don\'t go - “now”!'))

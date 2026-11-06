@@ -24,6 +24,10 @@ BATCH_CHARS = 12000
 # timeout (a job, not a toast), a page budget, and a size cap.
 FETCH_SECONDS = 8
 FETCH_PAGES = 10
+# Shorter than this, a page the agent read is likely its tool's summary
+# (Claude's WebFetch kept 2,113 of GamePressure's 11,934 characters on
+# 2026-11-04); OmaTrophy fetches it again and keeps the longer text.
+AGENT_SHORT = 4000
 FETCH_BYTES = 4 * 1024 * 1024
 STEAM_GUIDE_PAGES = 3
 SOURCES_KEPT = 30 * 86400
@@ -211,6 +215,15 @@ def player_page(url):
     host = (parts.hostname or '').lower()
     first = parts.path.strip('/').split('/')[0]
     return (host == 'steamcommunity.com' or host.endswith('.steamcommunity.com')) and first in ('profiles', 'id')
+
+
+# A blog's lists of posts, not a post: the MGSV research of 2026-11-04
+# spent 5 of its 10 fetches on PowerPyx's /page/1177/ and /author/.../page/494/.
+LISTING_PATH = re.compile(r'/(?:page/\d+|author|tag|tags|category|categories)(?:/|$)', re.I)
+
+
+def listing_page(url):
+    return bool(LISTING_PATH.search(urllib.parse.urlsplit(url).path))
 
 
 def site_rank(url):
@@ -419,6 +432,43 @@ def check_items(text, batch, every):
     return items, errors
 
 
+# Talk about the prompt's own input instead of the game. The MGSV guide of
+# 2026-11-04 read "The provided table has no source URLs or chunk ids, so
+# every quote below is cited as `table`" and quoted "(`table`: ...)" all
+# through: the route stage got the citation rules but nothing to cite.
+META_TALK = re.compile(
+    r"`table`|\bchunk ids?\b|\bsource urls?\b|\bthe classification\b"
+    r"|\b(?:provided|given|above|below)\s+(?:table|list|rows?|excerpts?|data|input)\b"
+    r"|\b(?:table|list|rows?|excerpts?)\s+(?:above|below)\b|\bopen list\b|\bin the combos\b"
+    r"|\b(?:does|do|did)\s+not\s+(?:state|mark|list|say|give)\b"
+    r"|\b(?:in|from|per|by|according to)\s+the\s+(?:table|rows?|excerpts?|input)\b"
+    r"|\bthe\s+(?:table|input)\s+(?:lists|says|shows|marks|has|does|gives|states|notes|is)\b", re.I)
+# A citation of the table: `(`table`)`, `(`table`: "...")`, `, `table``.
+TABLE_CITE = re.compile(r'\s*\(`?table`?(?::[^)]*)?\)|,\s*`table`(?=\))')
+
+
+def meta_talk(text):
+    """The phrases in `text` that talk about the prompt's input."""
+    return [m.group(0) for m in META_TALK.finditer(text or '')]
+
+
+def scrub_meta(text):
+    """`text` without table citations and without the sentences that still
+    talk about the input, for when the second answer has them too."""
+    lines = []
+    for line in TABLE_CITE.sub('', text).split('\n'):
+        lead = re.match(r'\s*(?:[-*]|\d+\.)\s+(?:\*\*[^*]+\*\*\s*)?', line)
+        lead = lead.group(0) if lead else ''
+        kept = [s for s in re.split(r'(?<=[.!?])\s+', line[len(lead):]) if not META_TALK.search(s)]
+        if not META_TALK.search(line):
+            lines.append(line)
+        elif ' '.join(kept).strip():
+            lines.append(lead + ' '.join(kept).strip())
+        elif not lead:
+            lines.append('')
+    return re.sub(r'\n{3,}', '\n\n', '\n'.join(lines)).strip()
+
+
 def check_route(text, names):
     try:
         raw = tagged(text, 'route')
@@ -437,7 +487,11 @@ def check_route(text, names):
     found = raw.get('sections') if isinstance(raw.get('sections'), dict) else {}
     for key in ('overview', 'route', 'missables', 'combos'):
         if isinstance(found.get(key), str):
-            sections[key] = found[key].strip()
+            talk = meta_talk(found[key])
+            if talk:
+                errors.append(f'sections.{key} talks about your input ({", ".join(sorted(set(talk))[:3])}); '
+                              'write for the player and never mention the table, sources, ids or quotes')
+            sections[key] = scrub_meta(found[key])
     if not order:
         errors.append('order is empty')
     if not sections.get('overview'):
@@ -701,11 +755,14 @@ class Job:
             self.sources[url] = {'kind': kind, 'fetched': int(self.clock()), 'text': text}
 
     def fetch_into(self, url, kind):
-        if url in self.sources or self.fetched >= FETCH_PAGES:
+        if self.fetched >= FETCH_PAGES or listing_page(url):
+            return
+        held = self.sources.get(url)
+        if held and not (held['kind'] == 'agent' and len(held['text']) < AGENT_SHORT):
             return
         self.fetched += 1
         text = self.fetch(url)
-        if text:
+        if text and (not held or len(text) > len(held['text'])):
             self.add_source(url, text, kind)
 
     def gather(self, name):
@@ -725,11 +782,14 @@ class Job:
         found, _ = self.ask('research', text, lambda t: check_research(t, set(names)),
                             lambda a, b: b if b['notes'] or b['pages'] else a)
         found = found or {'pages': [], 'notes': []}
-        # Pages the agent cites first, then trusted sites its searches named.
-        # Best site first: the fetch budget is FETCH_PAGES.
+        # Pages the agent cites first, then the full text of pages it read
+        # only in summary, then trusted sites its searches named. Best site
+        # first: the fetch budget is FETCH_PAGES.
+        summaries = sorted((u for u, s in self.sources.items() if s['kind'] == 'agent' and len(s['text']) < AGENT_SHORT),
+                           key=site_rank)
         trusted = sorted((u for u in self.links if site_rank(u) < len(SITE_HOSTS) and not player_page(u)),
                          key=site_rank)
-        for url in found['pages'] + [n['url'] for n in found['notes']] + trusted:
+        for url in found['pages'] + summaries + [n['url'] for n in found['notes']] + trusted:
             self.fetch_into(url, 'research')
         hints = {}
         for n in found['notes']:
@@ -840,7 +900,7 @@ class Job:
             entry.update(name=a['name'], api=a['api'])
             plan_items[key] = entry
         plan = dict(old)
-        plan.update({'format': 2, 'generated': int(self.clock()),
+        plan.update({'format': 2, 'maker': guides.MAKER, 'generated': int(self.clock()),
                      'agent': {'name': self.adapter.id, 'model': self.model, 'effort': self.effort, 'jail': self.jail,
                                'stages': stage_counts(self.usage)},
                      'order': route['order'] or list(items), 'items': plan_items,
