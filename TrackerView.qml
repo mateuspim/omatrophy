@@ -91,13 +91,14 @@ Item {
   // The trophy picked on the guide side (an Up next row): the trophy list
   // scrolls to it and lights it.
   property string highlightApi: ""
-  // The walkthrough step shown open: -1 follows the guide's current step
-  // (the first with an achievement left), so the in-game guide opens on
-  // where the player is (ADR 17); -2 when the player folded every step.
-  property int openStep: -1
+  // Walkthrough steps the player opened or folded, by index: true or
+  // false. Unset, the current step (the first with an achievement left)
+  // is open, so the in-game guide opens on where the player is (ADR 17).
+  // Several stay open at once: with one, opening a later step folded the
+  // current one, and the owner saw a lit step with no text.
+  property var stepOpen: ({})
   readonly property var walkSteps: guide && Array.isArray(guide.walkthrough) ? guide.walkthrough : []
-  readonly property int shownStep: openStep >= 0 ? openStep : openStep === -2 ? -1
-                                   : (guide && guide.step >= 0 ? guide.step : -1)
+  readonly property int currentStep: guide && guide.step >= 0 ? guide.step : -1
   // The agent and model picker; folded away under a made guide.
   property bool makerOpen: false
   // Which Make-guide picker is unfolded: "agent", "model", "effort" or "".
@@ -138,8 +139,18 @@ Item {
     loader.running = true
   }
 
+  function stepIsOpen(index) {
+    return stepOpen[index] !== undefined ? stepOpen[index] : index === currentStep
+  }
+
+  function toggleStep(index) {
+    var next = Object.assign({}, stepOpen)
+    next[index] = !stepIsOpen(index)
+    stepOpen = next
+  }
+
   onGameChanged: {
-    openStep = -1
+    stepOpen = ({})
     var index = {}
     if (game) game.achievements.forEach(function(a) { index[a.api] = a })
     byApi = index
@@ -489,7 +500,10 @@ Item {
     return (step.achievements || []).map(function(api) {
       var a = byApi[api] || { name: api }
       var secret = a.hidden && !a.unlocked && !revealed[api] && !revealAll
-      return (missables.indexOf(api) >= 0 && !guideDone(api) ? "⚠ " : "") + (secret ? "Hidden achievement" : a.name)
+      // The item's own missable flag counts too: MGSV's walkthrough left
+      // War Buddy out of every step's missables.
+      var item = guide && guide.items ? guide.items[api] || {} : {}
+      return ((missables.indexOf(api) >= 0 || item.missable) && !guideDone(api) ? "⚠ " : "") + (secret ? "Hidden achievement" : a.name)
              + (guideDone(api) ? " ✓" : "")
     }).join("  ·  ")
   }
@@ -1941,7 +1955,9 @@ Item {
         Item {
           width: parent.width
           visible: root.hasGuide && !root.makerOpen && !root.making
-          height: madeText.implicitHeight + Commons.Style.space(4)
+          // The chip is taller than the caption; sized to the caption,
+          // the pane's clip cut the chip's top off.
+          height: Math.max(madeText.implicitHeight, againButton.visible ? againButton.height : 0) + Commons.Style.space(4)
           Caption {
             id: madeText
             anchors.left: parent.left
@@ -2216,22 +2232,25 @@ Item {
               id: walkRow
               required property var modelData
               required property int index
-              readonly property bool open: root.shownStep === index
-              readonly property bool here: root.guide.step === index
+              readonly property bool open: root.stepIsOpen(index)
+              readonly property bool here: root.currentStep === index
+              // Behind the current step counts as passed, achievements or
+              // not (a prologue with none never got its ✓).
+              readonly property bool passed: modelData.done || (root.currentStep > index)
               width: parent.width
               height: walkBody.height + Commons.Style.space(12)
               radius: Commons.Style.cornerRadius
               color: here ? Qt.alpha(Commons.Color.accent, 0.10) : walkHover.hovered ? Commons.Style.hoverFill : "transparent"
-              opacity: modelData.done && !open ? 0.5 : 1
+              opacity: passed && !open ? 0.5 : 1
               HoverHandler { id: walkHover; cursorShape: Qt.PointingHandCursor }
-              TapHandler { onTapped: root.openStep = walkRow.open ? -2 : walkRow.index }
+              TapHandler { onTapped: root.toggleStep(walkRow.index) }
               Text {
                 textFormat: Text.PlainText
                 id: walkNumber
                 x: Commons.Style.space(8)
                 y: Commons.Style.space(6)
                 width: Commons.Style.space(22)
-                text: walkRow.modelData.done ? "✓" : String(walkRow.index + 1)
+                text: walkRow.passed ? "✓" : String(walkRow.index + 1)
                 color: walkRow.here ? Commons.Color.accent : root.foreground
                 opacity: walkRow.here ? 1 : 0.5
                 font.family: Commons.Style.font.family
@@ -2352,12 +2371,14 @@ Item {
 
         Item {
           width: parent.width
-          height: allTitle.implicitHeight
+          height: Math.max(allTitle.implicitHeight, allReveal.visible ? allReveal.height : 0)
           SectionLabel {
             id: allTitle
+            anchors.verticalCenter: parent.verticalCenter
             text: root.hasGuide ? "ALL TROPHIES · IN THE GUIDE'S ORDER" : root.making && root.jobHere ? "THE GUIDE WILL COVER" : "ALL TROPHIES"
           }
           Chip {
+            id: allReveal
             anchors.right: doneCount.left
             anchors.rightMargin: Commons.Style.space(12)
             anchors.verticalCenter: allTitle.verticalCenter
