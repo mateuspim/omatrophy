@@ -38,8 +38,10 @@ open; the watcher and `Tracker.qml` are unchanged, so no restart is needed.
   a lock check follows the agent's own binary, not mise's.
 - A quote that only repeats the achievement's name, description or DLC no
   longer counts as verified, and search result pages are no source.
-- First bench results on three games in the README and
-  `docs/guide/guide-models.md`.
+- `guide bench --no-jail` runs outside ai-jail whatever the Sandbox
+  setting says.
+- Bench results for seven agent and model pairs on three games in the
+  README and `docs/guide/guide-models.md`.
 
 ## 0.5.2 - 2026-11-04
 

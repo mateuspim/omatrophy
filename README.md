@@ -209,19 +209,23 @@ omatrophy.py guide bench steam 620 claude:haiku claude:sonnet:medium \
   claude:my-local-model@http://127.0.0.1:8080 --pick
 ```
 
-One bench on three games (2026-11-05, unreleased guides build, web
-research on, inside ai-jail). Results vary per game and machine; full
-numbers and caveats in [docs/guide/guide-models.md](docs/guide/guide-models.md).
+One bench on three games (2026-11-06, unreleased guides build, web
+research on). Results vary per game, per run and per machine; full numbers
+and caveats in [docs/guide/guide-models.md](docs/guide/guide-models.md).
 
-| Agent · model | Where it runs | Score (small / DLC / big game) | Verified quotes | Coverage | Time (small / DLC / big) | Cost (3 games) | Notes |
+| Agent · model | Where it runs | Score (small / DLC / big game) | Verified quotes | Coverage | Time (3 games) | Cost (3 games) | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Claude Code · Haiku | cloud | 86.9 / 69.6 / 94.1 | 88% | 100% | 3 / 3 / 10 min | $0.30 | best verified share; tagged few DLC items |
-| Claude Code · Sonnet, medium | cloud | 87.1 / 70.2 / 81.7 | 69% | 100% | 2 / 2 / 4 min | $1.14 | fastest; left one section empty each time |
-| OpenCode · Qwen3.8 Flash Next, Q2 | local | 95.0 / 82.3 / 77.8 | 60% | 100% | 8 / 5 / 24 min | $0 | its web search was down; fetched pages only |
+| Claude Code · Opus 5.5, medium | cloud | 95.0 / 88.6 / 88.6 | 90% | 100% | 14 min | $3.15 | best average and verified share |
+| Codex · GPT-6.1 Terra, medium | cloud | 88.8 / 91.4 / 85.0 | 77% | 100% | 6 min | plan | fastest; best on the DLC game |
+| OpenCode · Qwen3.8 Flash Next, Q2 | local | 86.9 / 82.3 / 87.0 | 75% | 100% | 32 min | $0 | needs working web search |
+| Claude Code · Sonnet, medium | cloud | 89.8 / 67.1 / 78.7 | 61% | 100% | 8 min | $1.27 | left one section empty each time |
+| Claude Code · Haiku | cloud | 86.9 / 58.6 / 88.4 | 76% | 100% | 14 min | $0.28 | cheapest per-use; uneven |
+| Codex · GPT-6 Luna | cloud | 89.6 / 60.0 / 76.1 | 46% | 100% | 8 min | plan | |
+| Codex · GPT-6.1 Sol, medium | cloud | 88.8 / 52.5 / 81.5 | 60% | 100% | 12 min | plan | missed every DLC tag on RE7 |
 
 Games: METAL GEAR SOLID V: GROUND ZEROES (13 open), Resident Evil 7
-Biohazard (11 open, all DLC), Rise of the Tomb Raider (81 open). Without
-web research no entry could back a single claim on RE7.
+Biohazard (11 open, all DLC), Rise of the Tomb Raider (81 open). "plan":
+Codex reports no cost; it bills your ChatGPT plan.
 
 Format and stages: [docs/specs/guides.md](docs/specs/guides.md).
 
