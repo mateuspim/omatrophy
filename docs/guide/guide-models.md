@@ -95,7 +95,10 @@ marked missable.
 - **Codex's search runs on OpenAI's side**, so no page text comes back;
   only the pages it cites, fetched by OmaTrophy, can verify its quotes.
   On RE7, Sol and Luna cited no page OmaTrophy could fetch and verified
-  nothing.
+  nothing. Since then OmaTrophy also fetches the trusted-site links in
+  Codex's search results: rerun on RE7 (2026-11-06, in ai-jail 3.1),
+  Sol verified 8 of 11 (score 84.1, from 52.5); Luna got five PowerPyx
+  pages but still cited none of them (0 of 11), so its gap is the model.
 - **DLC.** Every RE7 open item is DLC: all entries but GPT-6.1 Sol tagged
   all 11 (Sol tagged none). That run couldn't test whether DLC stays out
   of the main-story route step.

@@ -41,6 +41,10 @@ open; the watcher and `Tracker.qml` are unchanged, so no restart is needed.
 - The Sandbox works with ai-jail 3.x, which refused every agent: OmaTrophy
   passes the network and the agent's login itself and starts from a clean
   policy, so there is nothing to approve in `ai-jail configure`.
+- Codex's guides verify: OmaTrophy fetches the trusted-site pages in its
+  web search results (its search runs on OpenAI's side and gave no page),
+  best site first, skipping Steam players' own pages. GPT-6.1 Sol went
+  from 0 to 8 of 11 verified on RE7.
 - Settings > Guides marks the guide bench's best model for the picked
   agent with ★, right under the agent's default.
 - `guide bench --no-jail` runs outside ai-jail whatever the Sandbox

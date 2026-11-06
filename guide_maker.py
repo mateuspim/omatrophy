@@ -203,6 +203,16 @@ def search_page(url):
     return parts.path.rstrip('/').endswith('/search') and 'q=' in parts.query
 
 
+def player_page(url):
+    """A Steam player's own page (`/profiles/<id>/...`, `/id/<name>/...`):
+    it lists the achievements, not how to get them, and a search names
+    dozens of them."""
+    parts = urllib.parse.urlsplit(url)
+    host = (parts.hostname or '').lower()
+    first = parts.path.strip('/').split('/')[0]
+    return (host == 'steamcommunity.com' or host.endswith('.steamcommunity.com')) and first in ('profiles', 'id')
+
+
 def site_rank(url):
     host = (urllib.parse.urlsplit(url).hostname or '').lower()
     for i, site in enumerate(SITE_HOSTS):
@@ -711,7 +721,9 @@ class Job:
                             lambda a, b: b if b['notes'] or b['pages'] else a)
         found = found or {'pages': [], 'notes': []}
         # Pages the agent cites first, then trusted sites its searches named.
-        trusted = [u for u in self.links if site_rank(u) < len(SITE_HOSTS)]
+        # Best site first: the fetch budget is FETCH_PAGES.
+        trusted = sorted((u for u in self.links if site_rank(u) < len(SITE_HOSTS) and not player_page(u)),
+                         key=site_rank)
         for url in found['pages'] + [n['url'] for n in found['notes']] + trusted:
             self.fetch_into(url, 'research')
         hints = {}
