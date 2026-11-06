@@ -487,7 +487,9 @@ Item {
   Component.onCompleted: Qt.callLater(function() { keys.forceActiveFocus() })
 
   FileView {
-    path: Quickshell.env("HOME") + "/.config/omatrophy/config.json"
+    // Only when live: an offscreen render (dev/render.sh) shows the
+    // samples, not the owner's settings and model picks.
+    path: root.live ? Quickshell.env("HOME") + "/.config/omatrophy/config.json" : ""
     printErrors: false
     onLoaded: {
       var c = {}
