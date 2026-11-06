@@ -647,6 +647,26 @@ def resolve(picked):
     return adapter
 
 
+# The best model per agent in the guide bench (docs/guide/guide-models.md,
+# 2026-11-06: 7 pairs on 3 games). The panel offers it; nothing picks it
+# on its own, since the agent's default may be what the user pays for.
+BENCH_PICKS = {
+    'claude': {'model': 'opus', 'effort': 'medium', 'why': 'Best in the guide bench: most quotes verified'},
+    'codex': {'model': 'gpt-6.1-terra', 'effort': 'medium', 'why': 'Close to the best in the guide bench, and fastest'},
+}
+
+
+def suggested(agent_id, models):
+    """The bench pick for `agent_id` when its model list has it (or the
+    agent lists none), else {}."""
+    pick = BENCH_PICKS.get(agent_id)
+    if not pick:
+        return {}
+    if models and not any(m.get('id') == pick['model'] for m in models):
+        return {}
+    return dict(pick)
+
+
 def picks(cfg):
     """{agent: {model, effort}} from config.json's `guide-models`, cleaned."""
     found = cfg.get('guide-models') if isinstance(cfg, dict) else None
@@ -669,14 +689,16 @@ def listing(cfg):
         supported = checked(a)
         ok = installed and supported
         lock = recorded_locks().get(a.id) if installed and not a.checked else None
+        # Only agents that can run: a listing command can be slow
+        # (opencode's took over 20 s once), and the panel waits on it.
+        models = a.models() if ok else []
         out.append({'agent': a.id, 'name': a.name, 'installed': installed, 'supported': supported,
                     'headless': headless(a),
                     # A check that passed for an earlier binary: an update relocked it.
                     'relocked': bool(isinstance(lock, dict) and lock.get('passed') and not ok),
                     'default': a.id == default, 'web': a.web,
-                    # Only agents that can run: a listing command can be slow
-                    # (opencode's took over 20 s once), and the panel waits on it.
-                    'models': a.models() if ok else [],
+                    'models': models,
+                    'suggested': suggested(a.id, models) if ok else {},
                     'model': pick.get('model', ''), 'effort': pick.get('effort', ''),
                     'endpoint': pick.get('endpoint', ''), 'source': a.models_source,
                     'jail': jail, 'jail_version': version, 'jail_options': saved_jail_options(a.id, cfg)})

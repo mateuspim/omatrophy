@@ -59,7 +59,12 @@
   "jail_version": "2.15.0",
   "jail_options": [],
   "headless": true,
-  "relocked": false
+  "relocked": false,
+  "suggested": {
+   "model": "opus",
+   "effort": "medium",
+   "why": "Best in the guide bench: most quotes verified"
+  }
  },
  {
   "agent": "codex",
@@ -76,7 +81,8 @@
   "jail_version": "2.15.0",
   "jail_options": [],
   "headless": true,
-  "relocked": false
+  "relocked": false,
+  "suggested": {}
  },
  {
   "agent": "opencode",
@@ -93,7 +99,8 @@
   "jail_version": "2.15.0",
   "jail_options": [],
   "headless": true,
-  "relocked": false
+  "relocked": false,
+  "suggested": {}
  },
  {
   "agent": "gemini",
@@ -110,7 +117,8 @@
   "jail_version": "2.15.0",
   "jail_options": [],
   "headless": false,
-  "relocked": false
+  "relocked": false,
+  "suggested": {}
  },
  {
   "agent": "pi",
@@ -127,6 +135,7 @@
   "jail_version": "2.15.0",
   "jail_options": [],
   "headless": false,
-  "relocked": false
+  "relocked": false,
+  "suggested": {}
  }
 ]

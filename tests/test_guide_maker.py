@@ -532,6 +532,12 @@ class JailOptions(unittest.TestCase):
                 for flag in ('--clean', '--agent-state', '--harness'):
                     self.assertNotIn(flag, argv)
 
+    def test_suggested_is_the_bench_pick_when_the_agent_lists_it(self):
+        self.assertEqual(guide_agents.suggested('claude', [{'id': 'opus'}, {'id': 'haiku'}])['model'], 'opus')
+        self.assertEqual(guide_agents.suggested('claude', [])['model'], 'opus')
+        self.assertEqual(guide_agents.suggested('claude', [{'id': 'haiku'}]), {})
+        self.assertEqual(guide_agents.suggested('opencode', [{'id': 'x'}]), {})
+
     def test_jail_major(self):
         self.assertEqual(guide_agents.jail_major('3.1.0'), 3)
         self.assertEqual(guide_agents.jail_major('2.15.0'), 2)

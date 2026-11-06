@@ -222,8 +222,15 @@ Column {
     var rows = []
     if (!q) rows.push({ id: "", name: "Agent's default", detail: (guideRow ? guideRow.name : "The agent") + " picks it" })
     var models = guideRow ? guideRow.models : []
+    var pick = guideSuggested()
+    // The bench pick comes right after the default, with why.
+    if (pick.model && !q) {
+      var listed = models.find(function(m) { return m.id === pick.model })
+      rows.push({ id: pick.model, name: (listed ? listed.name : pick.model) + "  ★", detail: pick.why, effort: pick.effort })
+    }
     models.forEach(function(m) {
       if (low && m.id.toLowerCase().indexOf(low) < 0 && m.name.toLowerCase().indexOf(low) < 0) return
+      if (!q && m.id === pick.model) return
       var bits = []
       if (m.name.toLowerCase() !== m.id.toLowerCase()) bits.push(m.id)
       if (m.efforts && m.efforts.length) bits.push(m.efforts.join(" · "))
@@ -234,8 +241,14 @@ Column {
     return rows
   }
 
+  // The guide bench's best model for the picked agent ({model, effort,
+  // why}), or {} when the bench has none for it.
+  function guideSuggested() {
+    return (guideRow && guideRow.suggested) || ({})
+  }
+
   function chooseModel(row) {
-    setGuideModel(row.id, row.id ? guidePick.effort : "")
+    setGuideModel(row.id, row.id ? (guidePick.effort || row.effort || "") : "")
     guideMenu = ""
     guideModelSearch = ""
     guideModelField.focus = false
@@ -4218,6 +4231,9 @@ Column {
           var id = root.guidePick.model
           var m = id && root.guideRow ? root.guideRow.models.find(function(x) { return x.id === id }) : null
           if (!id) parts.push((root.guideRow ? root.guideRow.name : "The agent") + " picks it")
+          var pick = root.guideSuggested().model
+          var listed = pick && root.guideRow ? root.guideRow.models.find(function(x) { return x.id === pick }) : null
+          if (!id && pick) parts.push("★ bench pick: " + (listed ? listed.name : pick))
           else if (!m) parts.push("Typed by you")
           else if (m.name.toLowerCase() !== m.id.toLowerCase()) parts.push(m.id)
           if (root.guidePick.effort) parts.push(root.guidePick.effort + " effort")
