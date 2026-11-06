@@ -55,23 +55,84 @@ def version():
 
 # ------------------------------------------------------------ status, stop
 
-def status_path(folder=None):
-    return os.path.join(folder or guides.guides_dir(), 'status.json')
+# Guides are made in parallel, one job per game, each with its own status
+# and stop file under jobs/: with one status.json, a second game's make had
+# to wait, and Stop stopped whatever ran. MAX_JOBS keeps a cloud agent's
+# rate limit (or a local model) from being flooded.
+MAX_JOBS = 3
+# Ended jobs older than this leave the listing (and the disk).
+JOBS_KEPT = 7 * 86400
 
 
-def stop_path(folder=None):
-    return os.path.join(folder or guides.guides_dir(), '.stop')
+def job_key(store, app):
+    return re.sub(r'[^A-Za-z0-9_.-]', '_', f'{store}-{app}')
 
 
-def status(folder=None):
-    """The latest job, or {} before any. A job that died without saying so
-    (killed, a crash) reads as failed rather than running forever."""
-    found = read_json(status_path(folder), {})
+def jobs_dir(folder=None):
+    return os.path.join(folder or guides.guides_dir(), 'jobs')
+
+
+def status_path(folder=None, store='', app=''):
+    return os.path.join(jobs_dir(folder), job_key(store, app) + '.json')
+
+
+def stop_path(folder=None, store='', app=''):
+    return os.path.join(jobs_dir(folder), job_key(store, app) + '.stop')
+
+
+def read_status(path):
+    """One job's status, or {}. A job that died without saying so (killed,
+    a crash) reads as failed rather than running forever."""
+    found = read_json(path, {})
     if not isinstance(found, dict):
         return {}
     if found.get('state') == 'running' and not alive(found.get('pid')):
         found = dict(found, state='failed', line='failed: the job ended without finishing; make it again')
     return found
+
+
+def jobs(folder=None, now=None):
+    """Every job kept, newest first; ended ones older than JOBS_KEPT are
+    removed."""
+    now = time.time() if now is None else now
+    out = []
+    try:
+        names = sorted(os.listdir(jobs_dir(folder)))
+    except OSError:
+        return []
+    for name in names:
+        if not name.endswith('.json'):
+            continue
+        path = os.path.join(jobs_dir(folder), name)
+        found = read_status(path)
+        if found.get('state') != 'running' and now - (found.get('time') or 0) > JOBS_KEPT:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+            continue
+        if found:
+            out.append(found)
+    return sorted(out, key=lambda j: j.get('started') or 0, reverse=True)
+
+
+def status(folder=None, store='', app=''):
+    """One game's job, or with no game the newest job of any; {} when none."""
+    if store:
+        return read_status(status_path(folder, store, app))
+    found = jobs(folder)
+    return found[0] if found else {}
+
+
+def running(folder=None):
+    return [j for j in jobs(folder) if j.get('state') == 'running']
+
+
+def busy(folder=None, store='', app=''):
+    """This game's guide is being made; with no game, any is."""
+    if store:
+        return status(folder, store, app).get('state') == 'running'
+    return bool(running(folder))
 
 
 def alive(pid):
@@ -86,24 +147,23 @@ def alive(pid):
     return True
 
 
-def busy(folder=None):
-    return status(folder).get('state') == 'running'
+def request_stop(folder=None, store='', app=''):
+    """Stops one game's job, or with no game every running one."""
+    targets = [(store, app)] if store else [(j.get('store'), j.get('app')) for j in running(folder)]
+    os.makedirs(jobs_dir(folder), exist_ok=True)
+    for st, ap in targets:
+        with open(stop_path(folder, st, ap), 'w'):
+            pass
+    return len(targets)
 
 
-def request_stop(folder=None):
-    folder = folder or guides.guides_dir()
-    os.makedirs(folder, exist_ok=True)
-    with open(stop_path(folder), 'w'):
-        pass
+def stop_requested(folder=None, store='', app=''):
+    return os.path.exists(stop_path(folder, store, app))
 
 
-def stop_requested(folder=None):
-    return os.path.exists(stop_path(folder))
-
-
-def clear_stop(folder=None):
+def clear_stop(folder=None, store='', app=''):
     try:
-        os.remove(stop_path(folder))
+        os.remove(stop_path(folder, store, app))
     except FileNotFoundError:
         pass
 
@@ -777,7 +837,8 @@ class Job:
 
     # status
     def report(self, line, state='running'):
-        write_json(status_path(self.folder), {
+        os.makedirs(jobs_dir(self.folder), exist_ok=True)
+        write_json(status_path(self.folder, self.store, self.app), {
             'state': state, 'store': self.store, 'app': self.app, 'game': self.game, 'stage': self.stage,
             'done': self.done, 'total': self.total, 'line': line, 'started': self.started,
             'time': int(self.clock()), 'agent': self.adapter.id, 'model': self.model, 'pid': os.getpid(),
@@ -787,7 +848,7 @@ class Job:
             self.say(line)
 
     def step(self, stage, line=''):
-        if stop_requested(self.folder):
+        if stop_requested(self.folder, self.store, self.app):
             raise Stopped()
         self.stage = stage
         self.report(line or stage)
@@ -803,7 +864,7 @@ class Job:
                 text = (text + '\n\nYour last answer had these problems:\n' + '\n'.join(f'- {e}' for e in errors[:20])
                         + '\nAnswer again in full, inside the tags.')
             found = guide_agents.run(self.adapter, text, web=self.web and stage == 'research', model=self.model,
-                                     effort=self.effort, stopped=lambda: stop_requested(self.folder), jail=self.jail,
+                                     effort=self.effort, stopped=lambda: stop_requested(self.folder, self.store, self.app), jail=self.jail,
                                      env=self.env)
             self.usage.append({'engine': self.adapter.id, 'model': self.model, 'stage': stage,
                                'input': found['usage'].get('input', 0), 'output': found['usage'].get('output', 0),
@@ -944,7 +1005,7 @@ class Job:
 
     def run(self):
         os.makedirs(self.folder, exist_ok=True)
-        clear_stop(self.folder)
+        clear_stop(self.folder, self.store, self.app)
         name = guide_name(self.store, self.app, self.game, self.folder)
         open_achs = [a for a in self.achs if not a.get('unlocked')]
         batches = (len(open_achs) + BATCH_SIZE - 1) // BATCH_SIZE
@@ -1052,7 +1113,7 @@ def make(job, announce=False):
     try:
         name, problems = job.run()
     except Stopped:
-        clear_stop(job.folder)
+        clear_stop(job.folder, job.store, job.app)
         job.report('stopped: the old guide is unchanged', 'stopped')
         return {'state': 'stopped'}
     except (RuntimeError, OSError) as e:

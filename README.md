@@ -233,7 +233,8 @@ omatrophy.py guide model claude sonnet medium  # that agent's model and effort; 
 omatrophy.py guide jail                        # is ai-jail installed, the sandbox on, each agent's options
 omatrophy.py guide jail-options opencode --map ~/path/to/key  # extra ai-jail options; none clears
 omatrophy.py guide make steam 620              # make one; --no-web, --model, --effort for this run
-omatrophy.py guide status                      # the running job, as JSON; guide stop ends it
+omatrophy.py guide jobs                        # every guide being made, as JSON (up to 3 at once)
+omatrophy.py guide stop steam 1774580          # stop one game's; guide stop alone stops them all
 omatrophy.py guide steam 620                   # the guide, as JSON
 ```
 

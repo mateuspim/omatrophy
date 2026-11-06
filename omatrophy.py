@@ -872,11 +872,14 @@ def guide_job(args):
     cmd = args[0]
     cfg = read_json(config_path(), {})
     cfg = cfg if isinstance(cfg, dict) else {}
-    if cmd == 'stop':
-        guide_maker.request_stop()
-        print('stop requested')
-    elif cmd == 'status':
-        print(json.dumps(guide_maker.status()))
+    game_args = args[1:3] if len(args) == 3 else ['', '']
+    if cmd == 'stop' and len(args) in (1, 3):
+        n = guide_maker.request_stop(None, *game_args)
+        print('stop requested' if n else 'no guide is being made')
+    elif cmd == 'status' and len(args) in (1, 3):
+        print(json.dumps(guide_maker.status(None, *game_args)))
+    elif cmd == 'jobs':
+        print(json.dumps({'jobs': guide_maker.jobs(), 'max': guide_maker.MAX_JOBS}))
     elif cmd == 'agents':
         print(json.dumps(guide_agents.listing(cfg)))
     elif cmd == 'model' and 3 <= len(args) <= 5 and args[1] in guide_agents.BY_ID:
@@ -1077,8 +1080,11 @@ def guide_make(store_id, app, flags, cfg):
     adapter = guide_agents.resolve(opts.get('agent', cfg.get('guide-agent') or ''))
     jail = use_jail(opts.get('jail'), cfg)
     pick = guide_agents.picks(cfg).get(adapter.id, {})
-    if guide_maker.busy():
-        raise SystemExit('omatrophy: guide: another guide is being made; stop it with: omatrophy.py guide stop')
+    if guide_maker.busy(None, store_id, app):
+        raise SystemExit(f'omatrophy: guide: this game\'s guide is being made; stop it with: omatrophy.py guide stop {store_id} {app}')
+    if len(guide_maker.running()) >= guide_maker.MAX_JOBS:
+        raise SystemExit(f'omatrophy: guide: {guide_maker.MAX_JOBS} guides are being made already; make this one when one ends, '
+                         'or stop one with: omatrophy.py guide stop <store> <app>')
     store, achs, minutes = guide_target(store_id, app)
     # Nothing open: a make only spent the agent's tokens on filler.
     if all(a.get('unlocked') for a in achs):

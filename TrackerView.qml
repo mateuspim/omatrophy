@@ -114,9 +114,13 @@ Item {
   property string makerMenu: ""
   readonly property bool hasGuide: !!guide && !!guide.items && (Object.keys(guide.items).length > 0 || !!guide.notes)
   readonly property bool making: job.state === "running"
+  // Guides are made in parallel (up to `jobsMax`), one job per game: `job`
+  // is this game's, `othersRunning` counts the rest.
+  property int othersRunning: 0
+  property int jobsMax: 3
+  readonly property bool jobsFull: othersRunning + (making ? 1 : 0) >= jobsMax
   readonly property bool jobHere: !!game && job.store === game.store && String(job.app) === String(game.app)
-  // A make for this game. One for another game only holds Make back (one
-  // job at a time): its progress card showed over another game's Guide tab.
+  // `job` is always this game's now; kept as a name for the views below.
   readonly property bool makingHere: making && jobHere
   readonly property var runnable: agents.filter(function(a) { return a.installed && a.supported })
   readonly property var pickedRow: agents.find(function(a) { return a.agent === pickAgent }) || null
@@ -489,7 +493,7 @@ Item {
 
   // Runs detached: the job outlives this card, which only shows it.
   function makeGuide() {
-    if (!game || !pickAgent || making) return
+    if (!game || !pickAgent || making || jobsFull) return
     // --notify: the owner may close this long before it ends.
     var args = ["python3", helperPath, "guide", "make", String(game.store), String(game.app), "--notify", "--agent", pickAgent]
     if (pickModel) args = args.concat(["--model", pickModel])
@@ -627,11 +631,18 @@ Item {
 
   Process {
     id: jobReader
-    command: ["python3", root.helperPath, "guide", "status"]
+    command: ["python3", root.helperPath, "guide", "jobs"]
     stdout: StdioCollector {
       onStreamFinished: {
         var was = root.job
-        try { root.job = JSON.parse(text) || {} } catch (e) { return }
+        var found = {}
+        try { found = JSON.parse(text) || {} } catch (e) { return }
+        var list = Array.isArray(found.jobs) ? found.jobs : []
+        var g = root.game
+        var mine = g ? list.find(function(j) { return j.store === g.store && String(j.app) === String(g.app) }) : null
+        root.job = mine || {}
+        root.othersRunning = list.filter(function(j) { return j.state === "running" && j !== mine }).length
+        if (found.max) root.jobsMax = found.max
         if (!root.jobSeen) {
           root.jobSeen = true
           var fresh = root.job.state === "done" && Date.now() / 1000 - (root.job.time || 0) < 900
@@ -652,7 +663,7 @@ Item {
     id: jobPoll
     interval: 1500
     repeat: true
-    running: root.live && root.making
+    running: root.live && (root.making || root.othersRunning > 0)
     onTriggered: if (!jobReader.running) jobReader.running = true
   }
 
@@ -1850,15 +1861,14 @@ Item {
         width: guidePane.width
         spacing: Commons.Style.space(12)
 
-        // Another game's make: one line, so this game's guide stays.
+        // Other games' makes: one line, only when they hold Make back.
         Caption {
           textFormat: Text.PlainText
           width: parent.width
-          visible: root.making && !root.jobHere
+          visible: !root.making && root.jobsFull
           wrapMode: Text.Wrap
           elide: Text.ElideNone
-          text: "Making the guide for " + (root.job.game || root.job.app || "another game") + " (" + (root.job.line || "running")
-                + "). One guide at a time: Make guide waits until it's done."
+          text: root.othersRunning + " guides are being made for other games, the most at once: Make guide waits until one is done."
         }
 
         // This game's make job, while it runs.
@@ -2201,8 +2211,8 @@ Item {
               visible: root.runnable.length > 0
               spacing: Commons.Style.space(10)
               ActionButton {
-                text: root.making ? "Waiting for the other guide" : root.hasGuide ? "Make it again" : "Make guide"
-                accent: !root.making
+                text: root.jobsFull ? "Waiting for a free slot" : root.hasGuide ? "Make it again" : "Make guide"
+                accent: !root.jobsFull
                 onClicked: root.makeGuide()
               }
               ActionButton {

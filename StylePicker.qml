@@ -136,6 +136,12 @@ Column {
   readonly property bool jailCheckShown: guideCheck.jail === true && guideRow !== null && guideCheck.agent === guideRow.agent
   readonly property bool jailChecking: jailCheckShown && guideCheck.state === "running"
   property var guideJob: ({})
+  // Every guide job (`guide jobs`), newest first; `guideJob` is the newest.
+  // Guides are made in parallel, so each running one gets its own strip.
+  property var guideJobs: []
+  readonly property var shownJobs: guideJobs.filter(function(j) {
+    return j.state === "running" || ((j.state === "done" || j.state === "failed") && Date.now() / 1000 - (j.time || 0) < 900)
+  })
   // Which guide picker is unfolded in Settings: "", "agent" or "model".
   property string guideMenu: ""
   property string guideModelSearch: ""
@@ -723,9 +729,15 @@ Column {
   Process {
     id: guideJobReader
     running: root.live
-    command: ["python3", root.helperPath, "guide", "status"]
+    command: ["python3", root.helperPath, "guide", "jobs"]
     stdout: StdioCollector {
-      onStreamFinished: { try { root.guideJob = JSON.parse(text) || {} } catch (e) {} }
+      onStreamFinished: {
+        try {
+          var found = JSON.parse(text) || {}
+          root.guideJobs = Array.isArray(found.jobs) ? found.jobs : []
+          root.guideJob = root.guideJobs.find(function(j) { return j.state === "running" }) || root.guideJobs[0] || {}
+        } catch (e) {}
+      }
     }
   }
 
@@ -1738,132 +1750,144 @@ Column {
   // A 100% guide being made (or just made, for a quarter of an hour), on
   // every tab: the job runs detached, so this is where it shows once its
   // tracker is closed. Open goes to the game's tracker.
-  Rectangle {
-    id: guideStrip
-    readonly property var job: root.guideJob
-    readonly property bool jobRunning: job.state === "running"
-    readonly property bool justEnded: (job.state === "done" || job.state === "failed")
-                                   && Date.now() / 1000 - (job.time || 0) < 900
+  Column {
     width: root.width
-    height: visible ? guideStripBody.height + Commons.Style.space(20) : 0
-    // Not `running`/`recent`: this file has an id `recent`, and ids win over
-    // a component's own properties.
-    visible: jobRunning || justEnded
-    radius: Commons.Style.cornerRadius
-    color: Qt.alpha(Commons.Color.accent, 0.05)
-    border.width: 1
-    border.color: Qt.alpha(Commons.Color.accent, 0.22)
+    spacing: Commons.Style.space(6)
+    visible: root.shownJobs.length > 0
+    Repeater {
+      model: root.shownJobs
+      delegate: Rectangle {
+        id: guideStrip
+        required property var modelData
+        readonly property var job: modelData
+        readonly property bool jobRunning: job.state === "running"
+        readonly property bool justEnded: (job.state === "done" || job.state === "failed")
+                                       && Date.now() / 1000 - (job.time || 0) < 900
+        width: root.width
+        height: visible ? guideStripBody.height + Commons.Style.space(20) : 0
+        // Not `running`/`recent`: this file has an id `recent`, and ids win over
+        // a component's own properties.
+        visible: jobRunning || justEnded
+        radius: Commons.Style.cornerRadius
+        color: Qt.alpha(Commons.Color.accent, 0.05)
+        border.width: 1
+        border.color: Qt.alpha(Commons.Color.accent, 0.22)
 
-    Column {
-      id: guideStripBody
-      x: Commons.Style.space(10)
-      y: Commons.Style.space(10)
-      width: parent.width - Commons.Style.space(20)
-      spacing: Commons.Style.space(8)
-
-      Item {
-        width: parent.width
-        height: guideStripTitle.implicitHeight
-        MiniLabel {
-          id: guideStripTitle
-          text: guideStrip.jobRunning ? "MAKING A 100% GUIDE" : guideStrip.job.state === "done" ? "GUIDE READY" : "GUIDE FAILED"
-          color: Commons.Color.accent
-        }
-        Caption {
-          textFormat: Text.PlainText
-          anchors.right: parent.right
-          anchors.verticalCenter: guideStripTitle.verticalCenter
-          // Ends before the title: a local model's id
-          // ("provider/model-q2_0") ran over it.
-          width: Math.min(implicitWidth, parent.width - guideStripTitle.width - Commons.Style.space(12))
-          horizontalAlignment: Text.AlignRight
-          opacity: 0.6
-          visible: guideStrip.jobRunning
-          text: (guideStrip.job.total ? Math.round(100 * guideStrip.job.done / guideStrip.job.total) : 0) + "%"
-                + (guideStrip.job.agent ? " · " + guideStrip.job.agent
-                   + (guideStrip.job.model ? " " + String(guideStrip.job.model).split("/").pop() : "") : "")
-        }
-      }
-
-      Item {
-        width: parent.width
-        height: Math.max(guideArt.height, guideStripText.height)
-        Rectangle {
-          id: guideArt
-          width: Commons.Style.space(92)
-          height: Commons.Style.space(43)
-          radius: 4
-          color: Qt.alpha(root.foreground, 0.06)
-          clip: true
-          Image {
-            anchors.fill: parent
-            fillMode: Image.PreserveAspectCrop
-            asynchronous: true
-            // The job's own poster first: the store URL built here is a 404
-            // for newer apps (2025 on).
-            source: guideStrip.job.header ? guideStrip.job.header
-                    : guideStrip.job.store === "steam" && /^\d+$/.test(String(guideStrip.job.app || ""))
-                    ? "https://cdn.fastly.steamstatic.com/steam/apps/" + guideStrip.job.app + "/header.jpg" : ""
-            opacity: status === Image.Ready ? 1 : 0
-          }
-        }
         Column {
-          id: guideStripText
-          anchors.left: guideArt.right
-          anchors.leftMargin: Commons.Style.space(10)
-          anchors.right: guideStripButtons.left
-          anchors.rightMargin: Commons.Style.space(8)
-          anchors.verticalCenter: parent.verticalCenter
-          spacing: Commons.Style.space(2)
-          Text {
-            textFormat: Text.PlainText
+          id: guideStripBody
+          x: Commons.Style.space(10)
+          y: Commons.Style.space(10)
+          width: parent.width - Commons.Style.space(20)
+          spacing: Commons.Style.space(8)
+
+          Item {
             width: parent.width
-            text: guideStrip.job.game || ("App " + (guideStrip.job.app || ""))
-            color: root.foreground
-            elide: Text.ElideRight
-            font.family: Commons.Style.font.family
-            font.pixelSize: Commons.Style.font.bodySmall
-            font.bold: true
-          }
-          Caption {
-            textFormat: Text.PlainText
-            width: parent.width
-            text: guideStrip.job.line || ""
-            opacity: 0.6
-          }
-        }
-        Row {
-          id: guideStripButtons
-          anchors.right: parent.right
-          anchors.verticalCenter: parent.verticalCenter
-          spacing: Commons.Style.space(4)
-          PillButton {
-            label: "Stop"
-            visible: guideStrip.jobRunning
-            onClicked: {
-              runner.exec(["python3", root.helperPath, "guide", "stop"])
-              root.guideJob = Object.assign({}, root.guideJob, { line: "stopping…" })
+            height: guideStripTitle.implicitHeight
+            MiniLabel {
+              id: guideStripTitle
+              text: guideStrip.jobRunning ? "MAKING A 100% GUIDE" : guideStrip.job.state === "done" ? "GUIDE READY" : "GUIDE FAILED"
+              color: Commons.Color.accent
+            }
+            Caption {
+              textFormat: Text.PlainText
+              anchors.right: parent.right
+              anchors.verticalCenter: guideStripTitle.verticalCenter
+              // Ends before the title: a local model's id
+              // ("provider/model-q2_0") ran over it.
+              width: Math.min(implicitWidth, parent.width - guideStripTitle.width - Commons.Style.space(12))
+              horizontalAlignment: Text.AlignRight
+              opacity: 0.6
+              visible: guideStrip.jobRunning
+              text: (guideStrip.job.total ? Math.round(100 * guideStrip.job.done / guideStrip.job.total) : 0) + "%"
+                    + (guideStrip.job.agent ? " · " + guideStrip.job.agent
+                       + (guideStrip.job.model ? " " + String(guideStrip.job.model).split("/").pop() : "") : "")
             }
           }
-          PillButton {
-            label: "Open"
-            onClicked: root.track(String(guideStrip.job.store), String(guideStrip.job.app), "")
-          }
-        }
-      }
 
-      Rectangle {
-        visible: guideStrip.jobRunning
-        width: parent.width
-        height: 4
-        radius: 2
-        color: Qt.alpha(root.foreground, 0.08)
-        Rectangle {
-          width: guideStrip.job.total ? parent.width * Math.min(1, (guideStrip.job.done + 0.5) / guideStrip.job.total) : 0
-          height: parent.height
-          radius: parent.radius
-          color: Commons.Color.accent
-          Behavior on width { NumberAnimation { duration: 400; easing.type: Easing.OutCubic } }
+          Item {
+            width: parent.width
+            height: Math.max(guideArt.height, guideStripText.height)
+            Rectangle {
+              id: guideArt
+              width: Commons.Style.space(92)
+              height: Commons.Style.space(43)
+              radius: 4
+              color: Qt.alpha(root.foreground, 0.06)
+              clip: true
+              Image {
+                anchors.fill: parent
+                fillMode: Image.PreserveAspectCrop
+                asynchronous: true
+                // The job's own poster first: the store URL built here is a 404
+                // for newer apps (2025 on).
+                source: guideStrip.job.header ? guideStrip.job.header
+                        : guideStrip.job.store === "steam" && /^\d+$/.test(String(guideStrip.job.app || ""))
+                        ? "https://cdn.fastly.steamstatic.com/steam/apps/" + guideStrip.job.app + "/header.jpg" : ""
+                opacity: status === Image.Ready ? 1 : 0
+              }
+            }
+            Column {
+              id: guideStripText
+              anchors.left: guideArt.right
+              anchors.leftMargin: Commons.Style.space(10)
+              anchors.right: guideStripButtons.left
+              anchors.rightMargin: Commons.Style.space(8)
+              anchors.verticalCenter: parent.verticalCenter
+              spacing: Commons.Style.space(2)
+              Text {
+                textFormat: Text.PlainText
+                width: parent.width
+                text: guideStrip.job.game || ("App " + (guideStrip.job.app || ""))
+                color: root.foreground
+                elide: Text.ElideRight
+                font.family: Commons.Style.font.family
+                font.pixelSize: Commons.Style.font.bodySmall
+                font.bold: true
+              }
+              Caption {
+                textFormat: Text.PlainText
+                width: parent.width
+                text: guideStrip.job.line || ""
+                opacity: 0.6
+              }
+            }
+            Row {
+              id: guideStripButtons
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              spacing: Commons.Style.space(4)
+              PillButton {
+                label: "Stop"
+                visible: guideStrip.jobRunning
+                onClicked: {
+                  runner.exec(["python3", root.helperPath, "guide", "stop", String(guideStrip.job.store), String(guideStrip.job.app)])
+                  var key = guideStrip.job.store + ":" + guideStrip.job.app
+                  root.guideJobs = root.guideJobs.map(function(j) {
+                    return j.store + ":" + j.app === key ? Object.assign({}, j, { line: "stopping…" }) : j
+                  })
+                }
+              }
+              PillButton {
+                label: "Open"
+                onClicked: root.track(String(guideStrip.job.store), String(guideStrip.job.app), "")
+              }
+            }
+          }
+
+          Rectangle {
+            visible: guideStrip.jobRunning
+            width: parent.width
+            height: 4
+            radius: 2
+            color: Qt.alpha(root.foreground, 0.08)
+            Rectangle {
+              width: guideStrip.job.total ? parent.width * Math.min(1, (guideStrip.job.done + 0.5) / guideStrip.job.total) : 0
+              height: parent.height
+              radius: parent.radius
+              color: Commons.Color.accent
+              Behavior on width { NumberAnimation { duration: 400; easing.type: Easing.OutCubic } }
+            }
+          }
         }
       }
     }
@@ -4545,7 +4569,10 @@ Column {
         Caption {
           textFormat: Text.PlainText
           anchors.verticalCenter: parent ? parent.verticalCenter : undefined
-          text: root.guideKeyState.bound ? root.guideKeyState.bound : root.guideKeyState.error ? "Not bound" : "No key"
+          // No state yet: the shell hasn't started the service that binds
+          // it (0.6 to this version needs one restart).
+          text: root.guideKeyState.bound ? root.guideKeyState.bound : root.guideKeyState.error ? "Not bound"
+                : root.guideKeyState.key === "" ? "No key" : "Needs a shell restart"
           color: root.guideKeyState.error ? Commons.Color.accent : root.foreground
         }
       }

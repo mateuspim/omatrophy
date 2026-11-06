@@ -175,7 +175,8 @@ class Job(unittest.TestCase):
         write(self.guides, 'starfall-odyssey-1.md', 'old guide\n')
         job = self.job()
         real = guide_maker.stop_requested
-        with mock.patch.object(guide_maker, 'stop_requested', lambda folder=None: job.stage == 'gather' or real(folder)):
+        with mock.patch.object(guide_maker, 'stop_requested',
+                               lambda folder=None, store='', app='': job.stage == 'gather' or real(folder, store, app)):
             self.assertEqual(guide_maker.make(job)['state'], 'stopped')
         self.assertEqual(read(os.path.join(self.guides, 'starfall-odyssey-1.md')), 'old guide\n')
         self.assertEqual(guide_maker.status(self.guides)['state'], 'stopped')
@@ -351,9 +352,31 @@ class Checks(unittest.TestCase):
 
     def test_dead_running_job_reads_failed(self):
         with tempfile.TemporaryDirectory() as d:
-            guide_maker.write_json(guide_maker.status_path(d), {'state': 'running', 'pid': 2 ** 22 + 12345})
-            self.assertEqual(guide_maker.status(d)['state'], 'failed')
+            os.makedirs(guide_maker.jobs_dir(d))
+            guide_maker.write_json(guide_maker.status_path(d, 'steam', '1'),
+                                   {'state': 'running', 'store': 'steam', 'app': '1', 'pid': 2 ** 22 + 12345, 'time': 9e9})
+            self.assertEqual(guide_maker.status(d, 'steam', '1')['state'], 'failed')
             self.assertFalse(guide_maker.busy(d))
+
+    def test_jobs_are_per_game_and_stop_one_or_all(self):
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(guide_maker.jobs_dir(d))
+            me = os.getpid()
+            for app, started in (('1', 10), ('2', 20)):
+                guide_maker.write_json(guide_maker.status_path(d, 'steam', app),
+                                       {'state': 'running', 'store': 'steam', 'app': app, 'pid': me, 'started': started})
+            guide_maker.write_json(guide_maker.status_path(d, 'gog', '9'),
+                                   {'state': 'done', 'store': 'gog', 'app': '9', 'time': 1, 'started': 1})
+            self.assertEqual([j['app'] for j in guide_maker.jobs(d)], ['2', '1'])  # the old done one is pruned
+            self.assertFalse(os.path.exists(guide_maker.status_path(d, 'gog', '9')))
+            self.assertTrue(guide_maker.busy(d, 'steam', '1'))
+            self.assertFalse(guide_maker.busy(d, 'steam', '3'))
+            self.assertEqual(guide_maker.status(d)['app'], '2')
+            guide_maker.request_stop(d, 'steam', '1')
+            self.assertEqual((guide_maker.stop_requested(d, 'steam', '1'), guide_maker.stop_requested(d, 'steam', '2')),
+                             (True, False))
+            self.assertEqual(guide_maker.request_stop(d), 2)
+            self.assertTrue(guide_maker.stop_requested(d, 'steam', '2'))
 
 
 class Agents(unittest.TestCase):
@@ -612,7 +635,7 @@ class JobStatus(unittest.TestCase):
             job = guide_maker.Job('steam', '1', 'Game', [dict(a) for a in ACHS], guide_agents.BY_ID['claude'],
                                   folder=d, header='file:///art/1_header.jpg')
             job.report('gather')
-            status = json.loads(read(guide_maker.status_path(d)))
+            status = json.loads(read(guide_maker.status_path(d, 'steam', '1')))
         self.assertEqual(status['header'], 'file:///art/1_header.jpg')
 
 

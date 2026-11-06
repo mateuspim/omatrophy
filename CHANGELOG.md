@@ -20,6 +20,8 @@
   Change it under **Guide key** in Omarchy's plugin settings; a key in
   use is refused with a notification (ADR 18). Needs one
   `omarchy restart shell`, with no game running.
+- Guides for several games are made at once, up to 3: each game has its
+  own job, the panel shows a strip per job, and Stop stops only that one.
 - **Reveal all** is remembered (`reveal-hidden`) for every game and
   every open, sits next to Up next too, and Shift+Enter flips it.
 
