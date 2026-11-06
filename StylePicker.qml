@@ -305,6 +305,12 @@ Column {
   property var draftKeyCheck: ({})
   property bool keyEditing: false
   property string keyDraft: ""
+  // The field holds a key other than the installed one (same key, written
+  // another way, counts as the same).
+  readonly property bool keyChanged: {
+    var draft = String(keyDraft).toUpperCase().replace(/\s+/g, "")
+    return draft !== "" && draft !== guideKeyInstalled.toUpperCase().replace(/\s+/g, "")
+  }
 
   function keyLabel(spec) {
     return String(spec || "").split(" + ").map(function(p) { return p.length > 1 ? p.charAt(0) + p.slice(1).toLowerCase() : p }).join("+")
@@ -4625,9 +4631,9 @@ Column {
           Caption {
             textFormat: Text.PlainText
             anchors.verticalCenter: parent.verticalCenter
-            visible: root.guideKeyInstalled !== ""
-            text: root.guideKeyState.bound === root.guideKeyInstalled ? root.guideKeyInstalled
-                  : root.guideKeyState.error ? "Not bound" : root.guideKeyInstalled
+            visible: root.guideKeyInstalled !== "" && !root.keyEditing
+            text: root.guideKeyState.error && root.guideKeyState.bound !== root.guideKeyInstalled ? "Not bound"
+                  : root.keyLabel(root.guideKeyInstalled)
             color: root.guideKeyState.error ? Commons.Color.accent : root.foreground
           }
           PillButton {
@@ -4662,7 +4668,8 @@ Column {
         visible: root.keyEditing
         spacing: Commons.Style.space(6)
         Rectangle {
-          width: root.width - keyInstall.width - keyCancel.width - Commons.Style.space(12)
+          width: root.width - (keyInstall.visible ? keyInstall.width + Commons.Style.space(6) : 0) - keyCancel.width
+                 - Commons.Style.space(6)
           height: Commons.Style.space(32)
           radius: Commons.Style.cornerRadius
           color: Qt.alpha(root.foreground, 0.03)
@@ -4682,7 +4689,7 @@ Column {
             font.pixelSize: Commons.Style.font.bodySmall
             text: root.keyDraft
             onTextEdited: { root.keyDraft = text; root.draftKeyCheck = ({}) }
-            onAccepted: root.tryGuideKey(text)
+            onAccepted: if (root.keyChanged) root.tryGuideKey(text)
             Keys.onEscapePressed: { root.keyEditing = false; focus = false }
             Text {
               textFormat: Text.PlainText
@@ -4695,9 +4702,12 @@ Column {
             }
           }
         }
+        // Changing an installed key: Save, and only once the field holds
+        // another key; the owner read "Install" over the key they had.
         PillButton {
           id: keyInstall
-          label: "Install"
+          visible: root.keyChanged
+          label: root.guideKeyInstalled !== "" ? "Save" : "Install"
           onClicked: root.tryGuideKey(root.keyDraft)
         }
         PillButton {
