@@ -76,6 +76,7 @@ Scope {
       if (["omatrophy", "classic"].indexOf(c.chimes) >= 0) root.chimes = c.chimes
       if (["omarchy", "vector", "painted"].indexOf(c.icons) >= 0) root.iconSet = c.icons
       if (["clear", "frosted", "solid"].indexOf(c.glass) >= 0) root.glass = c.glass
+      root.guideKey = typeof c["guide-key"] === "string" ? c["guide-key"] : ""
     }
   }
 
@@ -182,14 +183,15 @@ Scope {
     }
   }
 
-  // ---- The Guide key (ADR 18): the plugin setting `guideKey`, handed
-  // over by Panel.qml, bound at runtime by `omatrophy.py guide-key`, which
-  // refuses a key another bind uses. Hyprland drops runtime binds on a
-  // config reload, so it binds again then.
+  // ---- The Guide key (ADR 18): config.json's `guide-key`, which the owner
+  // installs from Settings > Guides ("" until then: nothing is bound
+  // unasked), bound at runtime by `omatrophy.py guide-key`, which refuses a
+  // key another bind uses. Hyprland drops runtime binds on a config
+  // reload, so it binds again then.
   // dev/preview.sh turns it off: a throwaway shell must neither bind the
   // key nor, closing, unbind the live shell's.
   property bool bindsGuideKey: true
-  property string guideKey: "SUPER + CTRL + G"
+  property string guideKey: ""
   property string guideKeyError: ""
   property string notifiedKeyError: ""
 

@@ -24,32 +24,6 @@ Panel {
       root.bar.shell.summon("pym.omatrophy", JSON.stringify(request))
   }
 
-  // The Guide key setting (manifest schema, Omarchy's plugin settings
-  // page), handed to the service, which binds it (ADR 18).
-  readonly property string guideKey: String(setting("guideKey", "SUPER + CTRL + G"))
-  property QtObject service: null
-
-  function findService() {
-    if (service) return
-    var shell = bar ? bar.shell : null
-    service = shell && typeof shell.serviceFor === "function" ? shell.serviceFor(moduleName) : null
-  }
-
-  // The service may load after the widget.
-  Timer {
-    interval: 1000
-    repeat: true
-    running: root.service === null && root.manageIpc
-    onTriggered: root.findService()
-  }
-
-  Binding {
-    target: root.service
-    property: "guideKey"
-    value: root.guideKey
-    when: root.service !== null && root.manageIpc
-  }
-
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
 

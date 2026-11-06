@@ -74,6 +74,10 @@ Item {
   // The 100% guide view (filter "guide"; docs/specs/guides.md). `live`
   // is set by load(): dev/render.sh fills these from samples instead.
   property bool live: false
+  // Opened on a named game (a panel row), not "the game running now": with
+  // nothing running the latter falls back to the last game played, and the
+  // owner saw RE7 open with no word why.
+  property bool pickedGame: false
   // `guide <store> <app>`: null until read, {} when there is none.
   property var guide: null
   // `guide agents`: every agent, with its models and the saved picks.
@@ -148,6 +152,7 @@ Item {
   function load(request) {
     live = true
     focusApi = request && request.api ? String(request.api) : ""
+    pickedGame = !!(request && request.store && request.app)
     if (request && request.view === "guide") filter = "guide"
     var args = ["python3", helperPath, "game"]
     if (request && request.store && request.app) args = args.concat([String(request.store), String(request.app)])
@@ -1368,6 +1373,26 @@ Item {
               id: playingText
               anchors.centerIn: parent
               text: "PLAYING NOW"
+              color: root.foreground
+              font.family: Commons.Style.font.family
+              font.pixelSize: Commons.Style.font.caption
+              font.letterSpacing: 1.5
+              font.bold: true
+            }
+          }
+          Rectangle {
+            visible: root.game !== null && !root.game.playing && !root.pickedGame && root.live
+            width: lastText.width + Commons.Style.space(12)
+            height: lastText.height + Commons.Style.space(4)
+            radius: height / 2
+            color: Qt.alpha(root.background, 0.55)
+            border.width: 1
+            border.color: Qt.alpha(root.foreground, 0.35)
+            Text {
+              textFormat: Text.PlainText
+              id: lastText
+              anchors.centerIn: parent
+              text: "NOTHING RUNNING · LAST PLAYED"
               color: root.foreground
               font.family: Commons.Style.font.family
               font.pixelSize: Commons.Style.font.caption

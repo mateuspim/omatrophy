@@ -24,7 +24,9 @@ installed.
 | `set icons omarchy\|vector\|painted` | Trophy art set. |
 | `set glass clear\|frosted\|solid` | How see-through toasts are. |
 | `set tracker-sort recent\|rarity\|name\|game` | The tracker's sort; the tracker writes it when you change it. |
-| `guide-key [key]` | Binds the Guide key (default `SUPER + CTRL + G`; `""` unbinds) through `hyprctl`, refusing a key in use; prints and saves `{key, bound, error}` to `~/.local/state/omatrophy/guide-key.json` ([ADR 18](../adr/0018-bind-the-guide-key-at-runtime.md)). `Service.qml` runs it. |
+| `guide-key <key>` | Binds the Guide key (`""` unbinds) through `hyprctl`, refusing a key in use; prints and saves `{key, bound, error}` to `~/.local/state/omatrophy/guide-key.json` ([ADR 18](../adr/0018-bind-the-guide-key-at-runtime.md)). `Service.qml` runs it with config.json's `guide-key`. |
+| `guide-key check <key>` | `{key, valid, taken}`: whether the key parses and what else uses it (`""` when free), without binding. Settings > Guides asks before Install. |
+| `set guide-key <key>\|none` | Installs or removes the Guide key. |
 | `set reveal-hidden on\|off` | The tracker's Reveal all; the tracker writes it when you change it. |
 | `set games-sort recent\|closest\|name`, `set rarest ever\|month\|platinum`, `set settings-section overview\|toasts\|now\|guides\|stores` | The panel's last Games sort and rarest list; the panel writes them when you pick one, so the next open shows the same view. |
 | `set now-metals\|now-recent\|now-rarest\|now-shelf on\|off` | Shows or hides that section of the panel's Now tab. |

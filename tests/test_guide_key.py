@@ -48,6 +48,26 @@ class GuideKey(unittest.TestCase):
         self.assertEqual(result['bound'], 'SUPER + CTRL + G')
         self.assertEqual(calls[1][0], 'eval')
 
+    def test_check_says_what_holds_a_key_without_binding(self):
+        run = lambda *a: json.dumps([GROUP, OURS]) if a[0] == '-j' else self.fail('check must not bind')
+        self.assertEqual(guide_key.check('super+alt+g', run), {'key': 'SUPER + ALT + G', 'valid': True,
+                                                               'taken': 'Move active window out of group'})
+        self.assertEqual(guide_key.check('SUPER + CTRL + G', run)['taken'], '')
+        self.assertFalse(guide_key.check('nope nope', run)['valid'])
+
+    def test_set_guide_key_writes_the_spec_or_nothing(self):
+        import io, omatrophy
+        from contextlib import redirect_stdout
+        with tempfile.TemporaryDirectory() as home, mock.patch.dict(os.environ, {'HOME': home}), redirect_stdout(io.StringIO()):
+            omatrophy.set_option('guide-key', 'super+alt+t')
+            with open(f'{home}/.config/omatrophy/config.json') as f:
+                self.assertEqual(json.load(f)['guide-key'], 'SUPER + ALT + T')
+            omatrophy.set_option('guide-key', 'none')
+            with open(f'{home}/.config/omatrophy/config.json') as f:
+                self.assertEqual(json.load(f)['guide-key'], '')
+            with self.assertRaises(SystemExit):
+                omatrophy.set_option('guide-key', 'SUPER + ')
+
     def test_sync_without_hyprland(self):
         with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {'XDG_STATE_HOME': d}):
             self.assertIn('did not answer', guide_key.sync('SUPER + CTRL + G', lambda *a: None)['error'])

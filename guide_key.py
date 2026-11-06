@@ -1,6 +1,7 @@
 """The Guide key: a Hyprland bind that opens the running game's guide over
-it (ADR 16, ADR 18). OmaTrophy binds it at runtime with `hyprctl eval`,
-from the plugin setting `guideKey`, and never writes the owner's config.
+it (ADR 16, ADR 18). Nothing is bound until the owner installs a key in
+Settings > Guides (`guide-key` in config.json); OmaTrophy then binds it at
+runtime with `hyprctl eval` and never writes the owner's Hyprland config.
 A key another bind already uses is refused, with the reason."""
 import json, os, re, subprocess
 
@@ -96,6 +97,20 @@ def plan(text, binds):
     if not here:
         steps.append(bind_lua(parsed['spec']))
     return steps, {'key': parsed['spec'], 'bound': parsed['spec'], 'error': ''}
+
+
+def check(text, run=None):
+    """Whether a key can be installed, without binding it: {key, valid,
+    taken} (`taken`: what else uses it, "" when free or ours)."""
+    parsed = parse(text)
+    if not parsed or not parsed['spec']:
+        return {'key': str(text or ''), 'valid': False, 'taken': ''}
+    raw = (run or hyprctl)('-j', 'binds')
+    try:
+        binds = json.loads(raw) if raw else []
+    except ValueError:
+        binds = []
+    return {'key': parsed['spec'], 'valid': True, 'taken': conflict(binds if isinstance(binds, list) else [], parsed)}
 
 
 def hyprctl(*args):

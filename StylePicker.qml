@@ -296,6 +296,33 @@ Column {
   // How the service's last bind of the Guide key went (guide_key.py):
   // {key, bound, error}.
   property var guideKeyState: ({})
+  // The Guide key the owner installed (config.json `guide-key`), "" none.
+  property string guideKeyInstalled: ""
+  readonly property string defaultGuideKey: "SUPER + CTRL + G"
+  // `guide-key check` answers, {key, valid, taken}: the default's, read
+  // when Guides opens, and the typed key's, on Install.
+  property var defaultKeyCheck: ({})
+  property var draftKeyCheck: ({})
+  property bool keyEditing: false
+  property string keyDraft: ""
+
+  function keyLabel(spec) {
+    return String(spec || "").split(" + ").map(function(p) { return p.length > 1 ? p.charAt(0) + p.slice(1).toLowerCase() : p }).join("+")
+  }
+
+  function installGuideKey(spec) {
+    keyEditing = false
+    guideKeyInstalled = spec
+    runner.exec(["python3", helperPath, "set", "guide-key", spec])
+  }
+
+  // Checks a typed key against the owner's binds, then installs it if free.
+  function tryGuideKey(text) {
+    if (!String(text).trim()) return
+    keyChecker.forInstall = true
+    keyChecker.command = ["python3", helperPath, "guide-key", "check", String(text)]
+    keyChecker.running = true
+  }
 
   signal track(string store, string app, string api)
 
@@ -309,6 +336,7 @@ Column {
     if (key === "guide-web") guideWeb = value === "on"
     if (key === "guide-jail") guideJail = value === "on"
     if (key === "guide-agent") guideAgent = value === "default" ? "" : value
+    if (key === "guide-key") guideKeyInstalled = value === "none" ? "" : value
     if (key.indexOf("now-") === 0) {
       var shows = Object.assign({}, nowShows)
       shows[key.slice(4)] = value === "on"
@@ -584,6 +612,7 @@ Column {
       root.guideAgent = typeof c["guide-agent"] === "string" ? c["guide-agent"] : ""
       root.guideModels = c["guide-models"] && typeof c["guide-models"] === "object" ? c["guide-models"] : {}
       root.guideWeb = c["guide-web"] !== false
+      root.guideKeyInstalled = typeof c["guide-key"] === "string" ? c["guide-key"] : ""
       root.guideJail = c["guide-jail"] === true
       if (c["games-sort"]) root.sort = c["games-sort"]
       if (c.rarest) root.rarestRange = c.rarest
@@ -677,6 +706,30 @@ Column {
   }
 
   Process { id: runner }
+
+  // Is the default Guide key free? Asked once Guides is open, so a taken
+  // default shows its warning instead of an Install button.
+  Process {
+    id: defaultKeyChecker
+    running: root.live && root.tab === "settings" && root.settingsSection === "guides" && root.defaultKeyCheck.key === undefined
+    command: ["python3", root.helperPath, "guide-key", "check", root.defaultGuideKey]
+    stdout: StdioCollector {
+      onStreamFinished: { try { root.defaultKeyCheck = JSON.parse(text) } catch (e) {} }
+    }
+  }
+
+  Process {
+    id: keyChecker
+    property bool forInstall: false
+    stdout: StdioCollector {
+      onStreamFinished: {
+        var r = {}
+        try { r = JSON.parse(text) } catch (e) { return }
+        root.draftKeyCheck = r
+        if (keyChecker.forInstall && r.valid && !r.taken) root.installGuideKey(r.key)
+      }
+    }
+  }
 
   // A guide being made runs out of sight once its tracker closes; the strip
   // under the tabs follows it with a light poll.
@@ -4562,18 +4615,95 @@ Column {
         text: root.guideText()
       }
 
-      // The guide over a running game (ADR 18): the service binds the
-      // plugin setting and writes how that went to guide-key.json.
+      // The guide over a running game (ADR 18). Nothing is bound until
+      // the owner installs a key here: the default when it's free, else
+      // one they type, checked against their binds first.
       SettingRow {
         label: "IN GAME"
-        Caption {
-          textFormat: Text.PlainText
-          anchors.verticalCenter: parent ? parent.verticalCenter : undefined
-          // No state yet: the shell hasn't started the service that binds
-          // it (0.6 to this version needs one restart).
-          text: root.guideKeyState.bound ? root.guideKeyState.bound : root.guideKeyState.error ? "Not bound"
-                : root.guideKeyState.key === "" ? "No key" : "Needs a shell restart"
-          color: root.guideKeyState.error ? Commons.Color.accent : root.foreground
+        Row {
+          spacing: Commons.Style.space(6)
+          Caption {
+            textFormat: Text.PlainText
+            anchors.verticalCenter: parent.verticalCenter
+            visible: root.guideKeyInstalled !== ""
+            text: root.guideKeyState.bound === root.guideKeyInstalled ? root.guideKeyInstalled
+                  : root.guideKeyState.error ? "Not bound" : root.guideKeyInstalled
+            color: root.guideKeyState.error ? Commons.Color.accent : root.foreground
+          }
+          PillButton {
+            visible: root.guideKeyInstalled === "" && !root.keyEditing && root.defaultKeyCheck.valid === true
+                     && root.defaultKeyCheck.taken === ""
+            label: "Install " + root.keyLabel(root.defaultGuideKey)
+            onClicked: root.installGuideKey(root.defaultGuideKey)
+          }
+          PillButton {
+            visible: !root.keyEditing && (root.guideKeyInstalled !== "" || root.defaultKeyCheck.taken !== "")
+            label: root.guideKeyInstalled !== "" ? "Change" : "Pick a key"
+            onClicked: { root.keyEditing = true; root.keyDraft = root.guideKeyInstalled || "" }
+          }
+          PillButton {
+            visible: root.guideKeyInstalled !== "" && !root.keyEditing
+            label: "Remove"
+            onClicked: root.set("guide-key", "none")
+          }
+        }
+      }
+      // The default is taken: say by what, before any key is offered.
+      Caption {
+        textFormat: Text.PlainText
+        width: root.width
+        visible: root.guideKeyInstalled === "" && root.defaultKeyCheck.taken !== "" && root.defaultKeyCheck.taken !== undefined
+        wrapMode: Text.WordWrap
+        elide: Text.ElideNone
+        color: Commons.Color.accent
+        text: "⚠ " + root.keyLabel(root.defaultGuideKey) + " is already used by " + root.defaultKeyCheck.taken + ". Pick another key."
+      }
+      Row {
+        visible: root.keyEditing
+        spacing: Commons.Style.space(6)
+        Rectangle {
+          width: root.width - keyInstall.width - keyCancel.width - Commons.Style.space(12)
+          height: Commons.Style.space(32)
+          radius: Commons.Style.cornerRadius
+          color: Qt.alpha(root.foreground, 0.03)
+          border.width: 1
+          border.color: Qt.alpha(root.foreground, keyField.activeFocus ? 0.3 : 0.08)
+          TextInput {
+            id: keyField
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.leftMargin: Commons.Style.space(12)
+            anchors.rightMargin: Commons.Style.space(12)
+            anchors.verticalCenter: parent.verticalCenter
+            clip: true
+            color: root.foreground
+            selectionColor: Qt.alpha(Commons.Color.accent, 0.4)
+            font.family: Commons.Style.font.family
+            font.pixelSize: Commons.Style.font.bodySmall
+            text: root.keyDraft
+            onTextEdited: { root.keyDraft = text; root.draftKeyCheck = ({}) }
+            onAccepted: root.tryGuideKey(text)
+            Keys.onEscapePressed: { root.keyEditing = false; focus = false }
+            Text {
+              textFormat: Text.PlainText
+              anchors.verticalCenter: parent.verticalCenter
+              visible: !keyField.text
+              text: "Like SUPER + ALT + G"
+              color: root.foreground
+              opacity: 0.4
+              font: keyField.font
+            }
+          }
+        }
+        PillButton {
+          id: keyInstall
+          label: "Install"
+          onClicked: root.tryGuideKey(root.keyDraft)
+        }
+        PillButton {
+          id: keyCancel
+          label: "Cancel"
+          onClicked: root.keyEditing = false
         }
       }
       Caption {
@@ -4581,10 +4711,21 @@ Column {
         width: root.width
         wrapMode: Text.WordWrap
         elide: Text.ElideNone
-        opacity: root.guideKeyState.error ? 0.8 : 0.4
-        text: (root.guideKeyState.error ? root.guideKeyState.error + " " : "")
-              + "The key opens the guide of the game running now over it, and closes it again, like Steam's Shift+Tab. "
-              + "Change it under Guide key in Omarchy's plugin settings for OmaTrophy."
+        visible: text !== ""
+        color: Commons.Color.accent
+        text: root.keyEditing && root.draftKeyCheck.key !== undefined
+              ? (!root.draftKeyCheck.valid ? "⚠ \"" + root.keyDraft + "\" is not a key. Write it like SUPER + ALT + G."
+                 : root.draftKeyCheck.taken ? "⚠ " + root.keyLabel(root.draftKeyCheck.key) + " is already used by " + root.draftKeyCheck.taken + "." : "")
+              : (root.guideKeyInstalled !== "" && root.guideKeyState.error ? root.guideKeyState.error : "")
+      }
+      Caption {
+        textFormat: Text.PlainText
+        width: root.width
+        wrapMode: Text.WordWrap
+        elide: Text.ElideNone
+        opacity: 0.4
+        text: "A key that opens the guide of the game running now over it, and closes it again, like Steam's Shift+Tab. "
+              + "OmaTrophy binds it while the shell runs and never edits your Hyprland config."
       }
     }
 
