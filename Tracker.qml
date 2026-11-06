@@ -19,6 +19,22 @@ Item {
   property bool opened: false
   property var request: ({})
 
+  // Builds the view once the shell has settled, so even the first Guide key
+  // press after a start skips the compile (FreshObject's keep). Not live:
+  // it reads nothing until opened.
+  Timer {
+    interval: 4000
+    running: true
+    onTriggered: {
+      if (root.opened || view.item) return
+      var item = view.load("TrackerView.qml")
+      if (!item) return
+      item.maxWidth = Qt.binding(function() { return panel.width - Commons.Style.gapsOut * 4 })
+      item.maxHeight = Qt.binding(function() { return panel.height - Commons.Style.gapsOut * 4 })
+      item.closeRequested.connect(root.dismiss)
+    }
+  }
+
   // Called by the shell's summon with the payload JSON.
   function open(payloadJson) {
     var r = {}
@@ -27,16 +43,22 @@ Item {
     root.opened = true
     var item = view.load("TrackerView.qml")
     if (!item) return
-    item.maxWidth = Qt.binding(function() { return panel.width - Commons.Style.gapsOut * 4 })
-    item.maxHeight = Qt.binding(function() { return panel.height - Commons.Style.gapsOut * 4 })
-    item.closeRequested.connect(root.dismiss)
+    // A view kept from the last open (unchanged text) is already wired;
+    // its load() resets it.
+    if (!view.reused) {
+      item.maxWidth = Qt.binding(function() { return panel.width - Commons.Style.gapsOut * 4 })
+      item.maxHeight = Qt.binding(function() { return panel.height - Commons.Style.gapsOut * 4 })
+      item.closeRequested.connect(root.dismiss)
+    }
     item.load(root.request)
   }
 
   // Called by the shell's hide.
+  // The view stays built for the next open (FreshObject's keep); `live`
+  // off stops its polls while hidden.
   function close() {
     root.opened = false
-    view.clear()
+    if (view.item) view.item.live = false
   }
 
   function dismiss() {
@@ -67,6 +89,7 @@ Item {
 
     FreshObject {
       id: view
+      keep: true
       anchors.centerIn: parent
       width: item ? item.width : 0
       height: item ? item.height : 0

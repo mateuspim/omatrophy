@@ -24,6 +24,8 @@
   (**Nothing running · last played**).
 - Guides for several games are made at once, up to 3: each game has its
   own job, the panel shows a strip per job, and Stop stops only that one.
+- The tracker opens faster, the Guide key above all: it stays built
+  between opens, and reads the game and its guide in one go (ADR 19).
 - **Reveal all** is remembered (`reveal-hidden`) for every game and
   every open, sits next to Up next too, and Shift+Enter flips it.
 

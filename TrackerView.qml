@@ -78,6 +78,8 @@ Item {
   // nothing running the latter falls back to the last game played, and the
   // owner saw RE7 open with no word why.
   property bool pickedGame: false
+  // The last game read came with its guide (`game --guide`).
+  property bool guideWithGame: false
   // `guide <store> <app>`: null until read, {} when there is none.
   property var guide: null
   // `guide agents`: every agent, with its models and the saved picks.
@@ -150,13 +152,29 @@ Item {
   // Called by Tracker.qml with the summon payload: {store, app}, or empty
   // for the game running now (or played last).
   function load(request) {
+    // A view kept from the last open starts as a fresh one would.
+    error = ""
+    search = ""
+    appliedSearch = ""
+    revealed = ({})
+    highlightApi = ""
+    guide = null
+    job = ({})
+    jobSeen = false
+    makerOpen = false
+    makerMenu = ""
+    othersRunning = 0
+    filter = request && request.view === "guide" ? "guide" : "all"
+    game = null
+    forceKeys()
     live = true
     focusApi = request && request.api ? String(request.api) : ""
     pickedGame = !!(request && request.store && request.app)
-    if (request && request.view === "guide") filter = "guide"
+    // The game and its guide in one process: two in a row (game, then its
+    // guide) made the Guide key slow to show anything.
     var args = ["python3", helperPath, "game"]
     if (request && request.store && request.app) args = args.concat([String(request.store), String(request.app)])
-    loader.command = args
+    loader.command = args.concat(["--guide"])
     loader.running = true
   }
 
@@ -181,7 +199,8 @@ Item {
     rebuild()
     cascadeEnd.restart()
     if (focusApi) Qt.callLater(focusRequested)
-    if (live && game) readGuide()
+    if (live && game) readGuide(guideWithGame)
+    guideWithGame = false
   }
   onFilterChanged: rebuild()
   onSearchChanged: {
@@ -416,9 +435,13 @@ Item {
              .sort(function(a, b) { return b.time - a.time }).map(function(a) { return a.api })
   }
 
-  function readGuide() {
-    guideReader.command = ["python3", helperPath, "guide", String(game.store), String(game.app)]
-    guideReader.running = true
+  // `known`: the guide came with the game (load()); only the agents and
+  // jobs are left to read.
+  function readGuide(known) {
+    if (!known) {
+      guideReader.command = ["python3", helperPath, "guide", String(game.store), String(game.app)]
+      guideReader.running = true
+    }
     if (!agentsReader.running && agents.length === 0) agentsReader.running = true
     jobReader.running = true
   }
@@ -693,7 +716,16 @@ Item {
     stdout: StdioCollector {
       onStreamFinished: {
         if (!text) return
-        try { root.game = JSON.parse(text) } catch (e) { root.error = "Couldn't read the game's achievements." }
+        var found = null
+        try { found = JSON.parse(text) } catch (e) { root.error = "Couldn't read the game's achievements."; return }
+        var guide = found.guide
+        delete found.guide
+        root.guideWithGame = guide !== undefined
+        root.game = found
+        if (guide !== undefined) {
+          root.guide = guide || {}
+          root.makerOpen = !root.hasGuide
+        }
       }
     }
     stderr: StdioCollector {

@@ -832,14 +832,23 @@ def game_detail(store, game):
 
 
 def game(args):
+    """`game [store app] [--guide]`: one game for the tracker; with --guide,
+    its guide too (`guide`'s answer), so opening the Guide tab costs one
+    process instead of two in a row."""
+    with_guide = '--guide' in args
+    args = [a for a in args if a != '--guide']
     found = found_stores()
     if not args:
         store, app = pick_game(found)
     elif len(args) == 2 and args[0] in [s.id for s in found]:
         store, app = next(s for s in found if s.id == args[0]), args[1]
     else:
-        raise SystemExit(f'usage: omatrophy.py game [{"|".join(s.id for s in found)} <game id>]')
-    print_with_images(game_detail(store, app))
+        raise SystemExit(f'usage: omatrophy.py game [{"|".join(s.id for s in found)} <game id>] [--guide]')
+    detail = game_detail(store, app)
+    if with_guide:
+        import guides
+        detail['guide'] = guides.guide_answer(store.id, app, store.achievements(app))
+    print_with_images(detail)
 
 
 def guide(args):
