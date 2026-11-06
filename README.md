@@ -144,7 +144,7 @@ omarchy-shell shell summon pym.omatrophy '{}'   # the running or last game
 
 ## 100% guides
 
-![The tracker's Guide tab for a sample game: up next, the overview and route on the left, every open achievement by phase on the right](docs/brand/captures/guide.png)
+![The tracker's Guide tab for a sample game: up next and the walkthrough on the left, every open achievement by phase on the right](docs/brand/captures/guide.png)
 
 The tracker's **Guide** tab shows a game's path to 100%: what to do next,
 an overview and the recommended route, then every open achievement by
@@ -156,6 +156,35 @@ next and the trophy list, or Shift+Enter) shows every one, in every game,
 until you hide them again.
 Anything no source backs says
 "(unverified)". With a guide, the Now tab's **Up next** follows its route.
+
+A guide with a **walkthrough** leads with it, under a short overview: the
+game's chapters or missions in play order, each with its progress
+("1 / 3") and its trophies in full, done ones ticked, a ⚠ on the ones you
+lose by moving on. The step you're on (the first with a trophy left, at
+or after your latest unlock) is open; click a step's title to open or
+fold it. Trophies no step holds follow under **Not in a step**. Without
+a walkthrough, Up next and the route show as before
+([ADR 17](docs/adr/0017-walkthrough-is-a-maker-stage.md)). A guide made
+before 0.7.0 has none: the tracker says "older maker", and **Make again**
+adds one.
+
+### The guide over your game
+
+Like Steam's Shift+Tab overlay: **Super+Ctrl+G** opens the guide of the
+game you're playing over it, and the same key (or Escape) closes it. No
+guide yet? **Make guide** is right there. Change the key under **Guide
+key** in Omarchy's plugin settings for OmaTrophy; a key another binding
+already uses is refused, with a notification and a note in
+**Settings > Guides**. Leave it empty to bind none and keep your own bind
+to `omarchy-shell shell toggle pym.omatrophy '{"view":"guide"}'`.
+OmaTrophy binds the key at runtime and never edits your Hyprland config
+([ADR 18](docs/adr/0018-bind-the-guide-key-at-runtime.md)).
+
+While the guide is open it takes the keyboard, like the Steam overlay; a
+game that pauses when it loses focus pauses
+([ADR 16](docs/adr/0016-in-game-guide-is-the-tracker-on-a-key.md)).
+
+### Making a guide
 
 No guide yet? **Make guide** asks your coding agent to write one. OmaTrophy
 gathers what it can fetch itself (Steam community guides, pages you saved
@@ -204,7 +233,8 @@ omatrophy.py guide model claude sonnet medium  # that agent's model and effort; 
 omatrophy.py guide jail                        # is ai-jail installed, the sandbox on, each agent's options
 omatrophy.py guide jail-options opencode --map ~/path/to/key  # extra ai-jail options; none clears
 omatrophy.py guide make steam 620              # make one; --no-web, --model, --effort for this run
-omatrophy.py guide status                      # the running job, as JSON; guide stop ends it
+omatrophy.py guide jobs                        # every guide being made, as JSON (up to 3 at once)
+omatrophy.py guide stop steam 1774580          # stop one game's; guide stop alone stops them all
 omatrophy.py guide steam 620                   # the guide, as JSON
 ```
 

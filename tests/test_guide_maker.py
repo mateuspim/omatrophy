@@ -19,7 +19,8 @@ here = os.path.dirname(os.path.abspath(__file__))
 prompt = sys.stdin.read()
 with open(os.path.join(here, 'calls'), 'a') as f:
     f.write('x')
-stage = 'research' if '<research>' in prompt else 'items' if '<items>' in prompt else 'route'
+stage = ('research' if '<research>' in prompt else 'items' if '<items>' in prompt
+         else 'walkthrough' if '<walkthrough>' in prompt else 'route')
 retry = 'last answer had these problems' in prompt
 name = os.path.join(here, stage + ('.retry' if retry else ''))
 if not os.path.exists(name):
@@ -56,6 +57,12 @@ ITEMS = ('<items>[{"name": "Last Lantern", "phase": "missable", "difficulty": 2,
          ' "tips": "Look up.", "cites": [{"source": "S1.1", "quote": "this quote is not anywhere at all"}]},'
          ' {"name": "Quiet Hours", "phase": "quick", "difficulty": 3}]</items>')
 ROUTE = '<route>{"order": ["Last Lantern", "Quiet Hours", "Star Counter"], "sections": {"overview": "Short and gentle."}}</route>'
+WALK = ('<walkthrough>{"steps": ['
+        '{"title": "Chapter four", "text": "Carry the lantern.", "achievements": ["Last Lantern", "Nope"],'
+        ' "missables": ["Last Lantern", "Star Counter"],'
+        ' "cites": [{"source": "file:notes.txt", "quote": "carry the lantern before chapter four ends"}]},'
+        '{"title": "Nights", "text": "Look up.", "achievements": ["Star Counter"], "missables": [], "cites": []}]}'
+        '</walkthrough>')
 
 
 class Job(unittest.TestCase):
@@ -66,6 +73,7 @@ class Job(unittest.TestCase):
         write(self.agent_dir, 'fake.py', FAKE)
         write(self.agent_dir, 'items', ITEMS)
         write(self.agent_dir, 'route', ROUTE)
+        write(self.agent_dir, 'walkthrough', WALK)
         write(self.guides, 'sources/starfall-odyssey-1/notes.txt',
               'You must carry the lantern before chapter four ends. Stars come out at night.')
 
@@ -131,7 +139,31 @@ class Job(unittest.TestCase):
         write(self.agent_dir, 'items', 'no tags at all')
         write(self.agent_dir, 'items.retry', ITEMS)
         self.assertEqual(guide_maker.make(self.job())['state'], 'done')
-        self.assertEqual(self.calls(), 3)  # items twice, route once
+        self.assertEqual(self.calls(), 5)  # items twice, route once, walkthrough twice (it names "Nope")
+
+    def test_walkthrough_steps_are_checked_and_verified(self):
+        self.assertEqual(guide_maker.make(self.job())['state'], 'done')
+        plan = json.loads(read(os.path.join(self.guides, 'starfall-odyssey-1.plan.json')))
+        first, second = plan['walkthrough']
+        self.assertEqual(first['achievements'], ['Last Lantern'])
+        self.assertEqual(first['missables'], ['Last Lantern'])
+        self.assertTrue(first['cites'][0]['verified'])
+        self.assertFalse(first['unverified'])
+        self.assertTrue(second['unverified'])
+
+    def test_walkthrough_is_told_the_unlocked_ones(self):
+        job = self.job()
+        seen = []
+        job.ask = lambda stage, text, check, merge: (seen.append(text) or ([], []))
+        job.walkthrough({'Last Lantern': {'phase': 'story'}}, ['Last Lantern'], [])
+        self.assertIn('- First Light [unlocked]: done — Light the first beacon', seen[0])
+
+    def test_a_failed_walkthrough_keeps_the_guide(self):
+        write(self.agent_dir, 'walkthrough', 'no tags')
+        self.assertEqual(guide_maker.make(self.job())['state'], 'done')
+        plan = json.loads(read(os.path.join(self.guides, 'starfall-odyssey-1.plan.json')))
+        self.assertEqual(plan['walkthrough'], [])
+        self.assertIn('Last Lantern', plan['items'])
 
     def test_unparsable_answers_fail_and_write_nothing(self):
         write(self.agent_dir, 'items', 'nothing useful')
@@ -143,7 +175,8 @@ class Job(unittest.TestCase):
         write(self.guides, 'starfall-odyssey-1.md', 'old guide\n')
         job = self.job()
         real = guide_maker.stop_requested
-        with mock.patch.object(guide_maker, 'stop_requested', lambda folder=None: job.stage == 'gather' or real(folder)):
+        with mock.patch.object(guide_maker, 'stop_requested',
+                               lambda folder=None, store='', app='': job.stage == 'gather' or real(folder, store, app)):
             self.assertEqual(guide_maker.make(job)['state'], 'stopped')
         self.assertEqual(read(os.path.join(self.guides, 'starfall-odyssey-1.md')), 'old guide\n')
         self.assertEqual(guide_maker.status(self.guides)['state'], 'stopped')
@@ -218,6 +251,29 @@ class Checks(unittest.TestCase):
         text = guide_maker.prompt('route', game='G', progress='0 of 1', table='- A: story')
         self.assertNotIn('chunk id (like', text)
         self.assertIn('no quotes and no citations', text)
+
+    def test_check_walkthrough(self):
+        steps, errors = guide_maker.check_walkthrough(
+            '<walkthrough>{"steps": [{"title": "Act 1", "text": "The provided table says go.", '
+            '"achievements": ["A", "Z"], "missables": ["A", "B"]}, {"text": "no title"}]}</walkthrough>', {'A', 'B'})
+        self.assertEqual(steps, [{'title': 'Act 1', 'text': '', 'achievements': ['A'], 'missables': ['A'], 'cites': []}])
+        self.assertEqual(len(errors), 3)  # meta talk, Z unknown, step 2 untitled
+        self.assertEqual(guide_maker.check_walkthrough('<walkthrough>[]</walkthrough>', {'A'})[0], [])
+
+    def test_walkthrough_excerpts_prefer_chapters(self):
+        pieces = guide_maker.chunks({'https://x.example': {'text': 'unrelated words only'},
+                                     'https://www.powerpyx.com/g': {'text': 'Chapter 2: the bridge. Mission 3 next.'}})
+        self.assertEqual([p['url'] for p in guide_maker.walkthrough_excerpts([], pieces)], ['https://www.powerpyx.com/g'])
+
+    def test_kept_sources_drop_old_and_listing_pages(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, 'g.sources.json')
+            write(d, 'g.sources.json', json.dumps({
+                'https://a.example/guide': {'kind': 'research', 'fetched': 100, 'text': 'ok'},
+                'https://a.example/page/3/': {'kind': 'research', 'fetched': 100, 'text': 'list'},
+                'https://b.example/old': {'kind': 'research', 'fetched': 0, 'text': 'stale'}}))
+            kept = guide_maker.kept_sources(path, guide_maker.SOURCES_KEPT)
+            self.assertEqual(list(kept), ['https://a.example/guide'])
 
     def test_listing_page(self):
         self.assertTrue(guide_maker.listing_page('https://www.powerpyx.com/guide/page/1132/'))
@@ -296,9 +352,31 @@ class Checks(unittest.TestCase):
 
     def test_dead_running_job_reads_failed(self):
         with tempfile.TemporaryDirectory() as d:
-            guide_maker.write_json(guide_maker.status_path(d), {'state': 'running', 'pid': 2 ** 22 + 12345})
-            self.assertEqual(guide_maker.status(d)['state'], 'failed')
+            os.makedirs(guide_maker.jobs_dir(d))
+            guide_maker.write_json(guide_maker.status_path(d, 'steam', '1'),
+                                   {'state': 'running', 'store': 'steam', 'app': '1', 'pid': 2 ** 22 + 12345, 'time': 9e9})
+            self.assertEqual(guide_maker.status(d, 'steam', '1')['state'], 'failed')
             self.assertFalse(guide_maker.busy(d))
+
+    def test_jobs_are_per_game_and_stop_one_or_all(self):
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(guide_maker.jobs_dir(d))
+            me = os.getpid()
+            for app, started in (('1', 10), ('2', 20)):
+                guide_maker.write_json(guide_maker.status_path(d, 'steam', app),
+                                       {'state': 'running', 'store': 'steam', 'app': app, 'pid': me, 'started': started})
+            guide_maker.write_json(guide_maker.status_path(d, 'gog', '9'),
+                                   {'state': 'done', 'store': 'gog', 'app': '9', 'time': 1, 'started': 1})
+            self.assertEqual([j['app'] for j in guide_maker.jobs(d)], ['2', '1'])  # the old done one is pruned
+            self.assertFalse(os.path.exists(guide_maker.status_path(d, 'gog', '9')))
+            self.assertTrue(guide_maker.busy(d, 'steam', '1'))
+            self.assertFalse(guide_maker.busy(d, 'steam', '3'))
+            self.assertEqual(guide_maker.status(d)['app'], '2')
+            guide_maker.request_stop(d, 'steam', '1')
+            self.assertEqual((guide_maker.stop_requested(d, 'steam', '1'), guide_maker.stop_requested(d, 'steam', '2')),
+                             (True, False))
+            self.assertEqual(guide_maker.request_stop(d), 2)
+            self.assertTrue(guide_maker.stop_requested(d, 'steam', '2'))
 
 
 class Agents(unittest.TestCase):
@@ -514,6 +592,19 @@ class Bench(unittest.TestCase):
             self.assertEqual(read(os.path.join(guides_dir, 'starfall-odyssey-1.md.prev')), 'mine\n')
 
 
+class JobsCommand(unittest.TestCase):
+    # Regression: `guide jobs` printed the usage, as the dispatcher didn't
+    # route it, and the tracker and panel saw no job at all.
+    def test_guide_jobs_runs_through_main(self):
+        import io, omatrophy
+        from contextlib import redirect_stdout
+        out = io.StringIO()
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {'HOME': d, 'XDG_DATA_HOME': d}), \
+                redirect_stdout(out):
+            omatrophy.main(['x', 'guide', 'jobs'])
+        self.assertEqual(json.loads(out.getvalue()), {'jobs': [], 'max': guide_maker.MAX_JOBS})
+
+
 class ModelPick(unittest.TestCase):
     def test_guide_model_saves_effort_and_endpoint_and_clears(self):
         import io, omatrophy
@@ -557,7 +648,7 @@ class JobStatus(unittest.TestCase):
             job = guide_maker.Job('steam', '1', 'Game', [dict(a) for a in ACHS], guide_agents.BY_ID['claude'],
                                   folder=d, header='file:///art/1_header.jpg')
             job.report('gather')
-            status = json.loads(read(guide_maker.status_path(d)))
+            status = json.loads(read(guide_maker.status_path(d, 'steam', '1')))
         self.assertEqual(status['header'], 'file:///art/1_header.jpg')
 
 

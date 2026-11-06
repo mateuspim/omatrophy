@@ -26,8 +26,8 @@ OmaTrophy writes only here.
 | `<name>.plan.json` | The structured guide, next to its `.md`. |
 | `<name>.sources.json` | Every source the guide quotes: `{url: {kind, fetched, text}}`. |
 | `sources/<name>/` | Pages the owner saved by hand (`.html`, `.txt`, `.md`), read as sources on the next make. |
-| `status.json` | The latest make job, like `steam-load/status.json`. |
-| `.stop` | A stop request for the running job, removed when the job sees it. |
+| `jobs/<store>-<app>.json` | One make job per game, like `steam-load/status.json`; ended ones older than 7 days are removed. Guides are made in parallel, up to 3 at once (`MAX_JOBS`). |
+| `jobs/<store>-<app>.stop` | A stop request for that game's job, removed when the job sees it. |
 | `<name>.md.prev`, `<name>.plan.json.prev` | The guide as it was before the last make, so a worse new one never costs the old. |
 
 `<slug>` is the game name lowercased, with runs of anything but `a-z0-9`
@@ -93,6 +93,9 @@ OmaTrophy doesn't know survive a rewrite.
     }
   },
   "sections": {"overview": "...", "route": "...", "missables": "...", "combos": "..."},
+  "walkthrough": [{"title": "Chapter 2: The Veil", "text": "...", "achievements": ["Name"],
+                   "missables": ["Name"], "cites": [{"source": "https://...", "quote": "...", "verified": true}],
+                   "unverified": false}],
   "usage": [{"engine": "claude", "stage": "classify", "input": 0, "output": 0,
              "cost_usd": 0.17, "seconds": 43, "ok": true, "ts": 1793059700}],
   "progress": {},
@@ -126,7 +129,7 @@ OmaTrophy doesn't know survive a rewrite.
 
 | Command | Does |
 | --- | --- |
-| `guide [store app]` | Prints the guide as JSON for the tracker: `{store, app, file, generated, order, items: {api: item}, sections, notes, ticks: [api], next: [api], agent, cost_usd, outdated}` (`agent` is the plan's, `cost_usd` the sum of its `usage`, `outdated` true when OmaTrophy made it with a `maker` older than `guides.MAKER`, so the tracker says "older maker" and lights Make again), or `{}` when there is none. The reader is `guides.py`. `items` holds only the plan items that match a store achievement (by `api`, then name); `ticks` are the `api`s of hand ticks; `ticks` and the store's unlocks both count as done for `next`. `next` is the first three open items in `order`, missables first. Without arguments, the game running now, else the last one played. |
+| `guide [store app]` | Prints the guide as JSON for the tracker: `{store, app, file, generated, order, items: {api: item}, sections, notes, ticks: [api], next: [api], agent, cost_usd, outdated, walkthrough, step}` (`agent` is the plan's, `cost_usd` the sum of its `usage`, `walkthrough` the plan's steps with `achievements` and `missables` as `api`s and `done` when none is left open, `step` the index of the first step with one open or -1, `outdated` true when OmaTrophy made it with a `maker` older than `guides.MAKER`, so the tracker says "older maker" and lights Make again), or `{}` when there is none. The reader is `guides.py`. `items` holds only the plan items that match a store achievement (by `api`, then name); `ticks` are the `api`s of hand ticks; `ticks` and the store's unlocks both count as done for `next`. `next` is the first three open items in `order`, missables first. Without arguments, the game running now, else the last one played. |
 | `guide import <folder>` | Copies every `*-<app>.md` with its `.plan.json` and `.sources.json` from another folder (the games app's `games/`), skipping files we already have (`--replace` overwrites). Read-only on `<folder>`. Prints `imported N, skipped M`. |
 | `guide agents` | Every agent with its models and picks (see Settings). |
 | `guide model <agent> <model> [effort] [@http://endpoint]`, `guide model <agent> default` | Sets or clears that agent's pick in `guide-models`; `@endpoint` points claude at a local Anthropic-compatible server (`ANTHROPIC_BASE_URL`) for that model. |
@@ -134,9 +137,10 @@ OmaTrophy doesn't know survive a rewrite.
 | `guide jail-options <agent> [options...]` | Sets that agent's extra ai-jail options in `guide-jail-options`; none (or `""`) clears them. One argument with spaces (the panel's) is split like a shell would. Only `--map`, `--rw-map`, `--env`, `--env-from-file` (each with a value; `--opt=value` works) and `--allow-loopback-listen`; anything else fails with the list. `--forward-port`, `--allow-host`, `--allow-private-host` and `--publish-port` fail with why: ai-jail refuses them next to the `--network` we pass, and with it the host's `127.0.0.1` (a local model's server) is reachable already. Prints `<agent> in ai-jail: <options>`. |
 | `guide bench <store> <app> <agent:model[:effort][@endpoint]>... [--no-web] [--jail\|--no-jail] [--pick] [--keep]` | [Compares](#benchmark) agents and models on one game. |
 | `guide check <agent> [model] [--jail]` | The lock check on a real run (below); prints a line per run and `PASS`/`FAIL`, exits non-zero on a fail. Progress in `~/.cache/omatrophy/guide/check.json` (`{agent, jail, state: running\|passed\|failed, lines, time, runs}`; `jail`: a `--jail` check, which Settings shows under Sandbox) for Settings > Guides' Check. |
-| `guide make <store> <app> [--no-web] [--notify] [--jail\|--no-jail] [--agent a] [--model m] [--effort e]` | Runs the job below; the flags override the settings for this run only. `--notify` (the tracker passes it) sends a desktop notification when the job is done or failed. `--jail` runs the agent inside ai-jail (see Settings). One line per stage, then `done: N items, M verified`, or `stopped`/`failed: <what to do>`. Exits non-zero with no agent, an unsupported agent, another job running, or a game already at 100% (nothing open to plan; the tracker says so instead of offering a make). A saved sandbox setting without ai-jail installed runs without it and prints a `note:`; an explicit `--jail` fails. |
-| `guide stop` | Stops the job within half a second (the agent's process group is killed); nothing is written, so the old guide stays. |
-| `guide status` | `status.json`: `{state, store, app, game, stage, done, total, line, started, time, agent, model, pid, web, jail, header, open}` (`web`: the research stage runs; `jail`: inside ai-jail; `header`: the game's poster URL, `""` when unknown; `open`: achievements the guide covers); `state` is `running`, `done`, `stopped` or `failed`, and a `running` job whose `pid` is gone reads as `failed`. `{}` before any job. `done`/`total` count steps: gather, research (with web), one per classify batch, route, verify. |
+| `guide make <store> <app> [--no-web] [--notify] [--jail\|--no-jail] [--agent a] [--model m] [--effort e]` | Runs the job below; the flags override the settings for this run only. `--notify` (the tracker passes it) sends a desktop notification when the job is done or failed. `--jail` runs the agent inside ai-jail (see Settings). One line per stage, then `done: N items, M verified`, or `stopped`/`failed: <what to do>`. Exits non-zero with no agent, an unsupported agent, this game's guide already being made, 3 guides being made already, or a game already at 100% (nothing open to plan; the tracker says so instead of offering a make). A saved sandbox setting without ai-jail installed runs without it and prints a `note:`; an explicit `--jail` fails. |
+| `guide stop [store app]` | Stops that game's job, or every running one without a game, within half a second (the agent's process group is killed); nothing is written, so the old guide stays. |
+| `guide jobs` | `{jobs: [status...], max}`: every kept job, newest first, and how many may run at once. The tracker and the panel read it. |
+| `guide status [store app]` | That game's job, or the newest of any without a game: `{state, store, app, game, stage, done, total, line, started, time, agent, model, pid, web, jail, header, open}` (`web`: the research stage runs; `jail`: inside ai-jail; `header`: the game's poster URL, `""` when unknown; `open`: achievements the guide covers); `state` is `running`, `done`, `stopped` or `failed`, and a `running` job whose `pid` is gone reads as `failed`. `{}` before any job. `done`/`total` count steps: gather, research (with web), one per classify batch, route, walkthrough, verify. |
 
 ## Settings (config.json)
 
@@ -191,7 +195,15 @@ it.
    "`table`", "chunk ids"). Such talk is an error that asks again; what
    is left after the second answer is cut (the citation, else the
    sentence).
-5. **Verify** (no model). Validates the shape. Drops names not in the
+5. **Walkthrough** (model, no tools; [ADR 17](../adr/0017-walkthrough-is-a-maker-stage.md)).
+   The items in the route's order, their best excerpts, then chunks that
+   read like a walkthrough (chapter, mission, act...), trusted sites
+   first, up to 16,000 characters. Answers
+   `<walkthrough>{"steps": [{title, text, achievements, missables, cites}]}</walkthrough>`,
+   5 to 30 steps in play order (40 kept at most). Unknown names and talk
+   about the input are errors that ask again. A failure here keeps the
+   rest of the guide and the earlier walkthrough.
+6. **Verify** (no model). Validates the shape. Drops names not in the
    game. Matches each quote against the source text after folding case,
    whitespace and quotes. Writes the files atomically.
 
@@ -255,9 +267,9 @@ but rank lower in excerpts.
 - Plain, short sentences. One JSON block between the stage's tags, nothing
   else needed outside it.
 - The prompt text lives in `prompts/guide/<stage>.md` (`research`,
-  `classify`, `route`), with `{{name}}` placeholders; `rules.md` holds
-  these rules and fills `{{rules}}` (research and classify; route has its
-  own, as it has nothing to quote).
+  `classify`, `route`, `walkthrough`), with `{{name}}` placeholders;
+  `rules.md` holds these rules and fills `{{rules}}` (research, classify
+  and walkthrough; route has its own, as it has nothing to quote).
 
 ### Agent adapters
 

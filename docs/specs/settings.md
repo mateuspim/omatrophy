@@ -56,3 +56,12 @@ Kinds `service` (`Service.qml`), `bar-widget` (`Panel.qml`) and `overlay`
 The panel's IPC target is `pym.omatrophy` (`open`, `close`, `toggle`, from
 Omarchy's `Panel`). `omarchy-shell shell summon pym.omatrophy '<json>'` opens
 the tracker ([payload](cli.md#overlay), ADR 9).
+
+## Omarchy's plugin settings
+
+Set on Omarchy's plugin settings page for OmaTrophy (the bar widget's
+`schema` in `manifest.json`), not in `config.json`.
+
+| Key | Values | Default |
+| --- | --- | --- |
+| `guideKey` | The key that opens the running game's guide over it, written like `SUPER + CTRL + G`; `""` binds none. A key in use is refused ([ADR 18](../adr/0018-bind-the-guide-key-at-runtime.md)). | `"SUPER + CTRL + G"` |

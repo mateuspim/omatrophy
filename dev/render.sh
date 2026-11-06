@@ -52,7 +52,8 @@ case $target in
     [[ $target == loading ]] && feed=""
     if [[ $target == now ]]; then
       extra="FileView { id: jobSample; path: \"$repo/dev/samples/guide-job.json\"; blockLoading: true }"
-      feed="$feed; item.guideJob = JSON.parse(jobSample.text())"
+      # Two jobs at once: guides are made in parallel.
+      feed="$feed; var j = JSON.parse(jobSample.text()); item.guideJobs = [j, Object.assign({}, j, { app: \"2\", game: \"Ember Tide\", line: \"route: order and notes\", done: 4 })]"
     fi
     if [[ $target == settings ]]; then
       extra="FileView { id: agentSample; path: \"$repo/dev/samples/agents.json\"; blockLoading: true }"

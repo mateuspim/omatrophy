@@ -14,7 +14,7 @@ installed.
 | `games` | Prints [every game with achievements](#games) for the panel's Games tab. Uncached names are looked up eight at a time; the watcher warms that cache in the background after `ready`, so this is usually a file read. Keeps a copy in `~/.cache/omatrophy/panel/games.json`, like `now`. |
 | `game [store app]` | Prints [one game's every achievement](#game) for the tracker. Without arguments: the game running now, else the one played last. Exits non-zero, with what to do, when the game has no cached achievements. |
 | `guide [store app]`, `guide import <folder> [--replace]` | One game's 100% guide as JSON for the tracker, or copy guides in from another folder ([guides](guides.md#command-line)). |
-| `guide make <store> <app> [--no-web] [--agent a] [--model m] [--effort e]`, `guide stop`, `guide status` | Make a guide through your agent (ADR 14), stop it, or read its progress ([guides](guides.md#the-make-job)). |
+| `guide make <store> <app> [--no-web] [--agent a] [--model m] [--effort e]`, `guide stop [store app]`, `guide status [store app]`, `guide jobs` | Make a guide through your agent (ADR 14), up to 3 games at once; stop one (or all), or read their progress ([guides](guides.md#the-make-job)). |
 | `guide agents`, `guide model <agent> <model> [effort] [@endpoint]\|default` | The agents, their models and your picks; set or clear one agent's pick. |
 | `guide jail-options <agent> [options...]` | Extra ai-jail options for that agent, such as a local model's key file (`--map`); none clears. `guide jail` says whether ai-jail is installed and what each agent adds ([guides](guides.md#command-line)). |
 | `guide bench <store> <app> <agent:model[:effort][@endpoint]>... [--pick] [--keep]` | Make one game's guide with each entry and rank them ([benchmark](guides.md#benchmark)). |
@@ -24,6 +24,7 @@ installed.
 | `set icons omarchy\|vector\|painted` | Trophy art set. |
 | `set glass clear\|frosted\|solid` | How see-through toasts are. |
 | `set tracker-sort recent\|rarity\|name\|game` | The tracker's sort; the tracker writes it when you change it. |
+| `guide-key [key]` | Binds the Guide key (default `SUPER + CTRL + G`; `""` unbinds) through `hyprctl`, refusing a key in use; prints and saves `{key, bound, error}` to `~/.local/state/omatrophy/guide-key.json` ([ADR 18](../adr/0018-bind-the-guide-key-at-runtime.md)). `Service.qml` runs it. |
 | `set reveal-hidden on\|off` | The tracker's Reveal all; the tracker writes it when you change it. |
 | `set games-sort recent\|closest\|name`, `set rarest ever\|month\|platinum`, `set settings-section overview\|toasts\|now\|guides\|stores` | The panel's last Games sort and rarest list; the panel writes them when you pick one, so the next open shows the same view. |
 | `set now-metals\|now-recent\|now-rarest\|now-shelf on\|off` | Shows or hides that section of the panel's Now tab. |

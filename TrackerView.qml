@@ -91,13 +91,37 @@ Item {
   // The trophy picked on the guide side (an Up next row): the trophy list
   // scrolls to it and lights it.
   property string highlightApi: ""
+  // Walkthrough steps the player opened or folded, by index: true or
+  // false. Unset, the current step (the first with an achievement left)
+  // is open, so the in-game guide opens on where the player is (ADR 17).
+  // Several stay open at once: with one, opening a later step folded the
+  // current one, and the owner saw a lit step with no text.
+  property var stepOpen: ({})
+  readonly property var walkSteps: guide && Array.isArray(guide.walkthrough) ? guide.walkthrough : []
+  readonly property int currentStep: guide && guide.step >= 0 ? guide.step : -1
+  readonly property bool walked: hasGuide && walkSteps.length > 0
+  // Open trophies of the guide that no step holds, listed after the steps
+  // so none is lost track of.
+  readonly property var unplaced: {
+    if (!walked) return []
+    var placed = {}
+    walkSteps.forEach(function(s) { (s.achievements || []).forEach(function(a) { placed[a] = true }) })
+    return (guide.order || []).filter(function(api) { return !placed[api] && byApi[api] && !guideDone(api) })
+  }
   // The agent and model picker; folded away under a made guide.
   property bool makerOpen: false
   // Which Make-guide picker is unfolded: "agent", "model", "effort" or "".
   property string makerMenu: ""
   readonly property bool hasGuide: !!guide && !!guide.items && (Object.keys(guide.items).length > 0 || !!guide.notes)
   readonly property bool making: job.state === "running"
+  // Guides are made in parallel (up to `jobsMax`), one job per game: `job`
+  // is this game's, `othersRunning` counts the rest.
+  property int othersRunning: 0
+  property int jobsMax: 3
+  readonly property bool jobsFull: othersRunning + (making ? 1 : 0) >= jobsMax
   readonly property bool jobHere: !!game && job.store === game.store && String(job.app) === String(game.app)
+  // `job` is always this game's now; kept as a name for the views below.
+  readonly property bool makingHere: making && jobHere
   readonly property var runnable: agents.filter(function(a) { return a.installed && a.supported })
   readonly property var pickedRow: agents.find(function(a) { return a.agent === pickAgent }) || null
   readonly property var phases: ["missable", "story", "quick", "challenge", "grind", "collect", "online"]
@@ -131,7 +155,18 @@ Item {
     loader.running = true
   }
 
+  function stepIsOpen(index) {
+    return stepOpen[index] !== undefined ? stepOpen[index] : index === currentStep
+  }
+
+  function toggleStep(index) {
+    var next = Object.assign({}, stepOpen)
+    next[index] = !stepIsOpen(index)
+    stepOpen = next
+  }
+
   onGameChanged: {
+    stepOpen = ({})
     var index = {}
     if (game) game.achievements.forEach(function(a) { index[a.api] = a })
     byApi = index
@@ -351,6 +386,7 @@ Item {
     if (job.web) out.push({ key: "research", label: "Search the web for guides" })
     out.push({ key: "classify", label: "Classify " + (job.open || "the open") + " achievements" })
     out.push({ key: "route", label: "Plan the route and write the notes" })
+    out.push({ key: "walkthrough", label: "Walk through the game, step by step" })
     out.push({ key: "verify", label: "Check every quote against its page" })
     return out
   }
@@ -457,7 +493,7 @@ Item {
 
   // Runs detached: the job outlives this card, which only shows it.
   function makeGuide() {
-    if (!game || !pickAgent || making) return
+    if (!game || !pickAgent || making || jobsFull) return
     // --notify: the owner may close this long before it ends.
     var args = ["python3", helperPath, "guide", "make", String(game.store), String(game.app), "--notify", "--agent", pickAgent]
     if (pickModel) args = args.concat(["--model", pickModel])
@@ -472,6 +508,25 @@ Item {
   function stopGuide() {
     Quickshell.execDetached(["python3", helperPath, "guide", "stop"])
     job = Object.assign({}, job, { line: "stopping…" })
+  }
+
+  // A walkthrough step's achievements in one line: a hidden one stays
+  // secret like its row, a missable one is marked, a done one ticked.
+  function stepDone(step) {
+    return (step.achievements || []).filter(function(api) { return guideDone(api) }).length
+  }
+
+  function stepNames(step) {
+    var missables = step.missables || []
+    return (step.achievements || []).map(function(api) {
+      var a = byApi[api] || { name: api }
+      var secret = a.hidden && !a.unlocked && !revealed[api] && !revealAll
+      // The item's own missable flag counts too: MGSV's walkthrough left
+      // War Buddy out of every step's missables.
+      var item = guide && guide.items ? guide.items[api] || {} : {}
+      return ((missables.indexOf(api) >= 0 || item.missable) && !guideDone(api) ? "⚠ " : "") + (secret ? "Hidden achievement" : a.name)
+             + (guideDone(api) ? " ✓" : "")
+    }).join("  ·  ")
   }
 
   function guideDone(api) {
@@ -576,11 +631,18 @@ Item {
 
   Process {
     id: jobReader
-    command: ["python3", root.helperPath, "guide", "status"]
+    command: ["python3", root.helperPath, "guide", "jobs"]
     stdout: StdioCollector {
       onStreamFinished: {
         var was = root.job
-        try { root.job = JSON.parse(text) || {} } catch (e) { return }
+        var found = {}
+        try { found = JSON.parse(text) || {} } catch (e) { return }
+        var list = Array.isArray(found.jobs) ? found.jobs : []
+        var g = root.game
+        var mine = g ? list.find(function(j) { return j.store === g.store && String(j.app) === String(g.app) }) : null
+        root.job = mine || {}
+        root.othersRunning = list.filter(function(j) { return j.state === "running" && j !== mine }).length
+        if (found.max) root.jobsMax = found.max
         if (!root.jobSeen) {
           root.jobSeen = true
           var fresh = root.job.state === "done" && Date.now() / 1000 - (root.job.time || 0) < 900
@@ -601,7 +663,7 @@ Item {
     id: jobPoll
     interval: 1500
     repeat: true
-    running: root.live && root.making
+    running: root.live && (root.making || root.othersRunning > 0)
     onTriggered: if (!jobReader.running) jobReader.running = true
   }
 
@@ -1799,10 +1861,20 @@ Item {
         width: guidePane.width
         spacing: Commons.Style.space(12)
 
-        // The make job, this game's or another's, while it runs.
+        // Other games' makes: one line, only when they hold Make back.
+        Caption {
+          textFormat: Text.PlainText
+          width: parent.width
+          visible: !root.making && root.jobsFull
+          wrapMode: Text.Wrap
+          elide: Text.ElideNone
+          text: root.othersRunning + " guides are being made for other games, the most at once: Make guide waits until one is done."
+        }
+
+        // This game's make job, while it runs.
         Rectangle {
           width: parent.width
-          visible: root.making
+          visible: root.makingHere
           height: jobBody.height + Commons.Style.space(24)
           radius: Commons.Style.cornerRadius
           color: Qt.alpha(Commons.Color.accent, 0.08)
@@ -1819,7 +1891,11 @@ Item {
               height: stopButton.height
               SectionLabel {
                 anchors.verticalCenter: parent.verticalCenter
-                text: root.jobHere ? "MAKING THIS GAME'S GUIDE" : "MAKING A GUIDE · " + (root.job.game || root.job.app || "")
+                anchors.left: parent.left
+                anchors.right: stopButton.left
+                anchors.rightMargin: Commons.Style.space(10)
+                elide: Text.ElideRight
+                text: "MAKING THIS GAME'S GUIDE"
                 color: Commons.Color.accent
                 opacity: 1
               }
@@ -1920,8 +1996,10 @@ Item {
         // What made the guide, and Make again; or the picker itself.
         Item {
           width: parent.width
-          visible: root.hasGuide && !root.makerOpen && !root.making
-          height: madeText.implicitHeight + Commons.Style.space(4)
+          visible: root.hasGuide && !root.makerOpen && !root.makingHere
+          // The chip is taller than the caption; sized to the caption,
+          // the pane's clip cut the chip's top off.
+          height: Math.max(madeText.implicitHeight, againButton.visible ? againButton.height : 0) + Commons.Style.space(4)
           Caption {
             id: madeText
             anchors.left: parent.left
@@ -1945,7 +2023,7 @@ Item {
         Item {
           width: parent.width
           height: guidePane.height
-          visible: root.complete && !root.hasGuide && !root.making && root.guide !== null
+          visible: root.complete && !root.hasGuide && !root.makingHere && root.guide !== null
           Column {
             anchors.centerIn: parent
             width: Math.min(parent.width, Commons.Style.space(420))
@@ -1980,7 +2058,7 @@ Item {
         Rectangle {
           id: maker
           width: parent.width
-          visible: root.makerOpen && !root.making && root.guide !== null && !root.complete
+          visible: root.makerOpen && !root.makingHere && root.guide !== null && !root.complete
           height: makerBody.height + Commons.Style.space(24)
           radius: Commons.Style.cornerRadius
           color: Qt.alpha(root.foreground, 0.04)
@@ -2133,7 +2211,8 @@ Item {
               visible: root.runnable.length > 0
               spacing: Commons.Style.space(10)
               ActionButton {
-                text: root.hasGuide ? "Make it again" : "Make guide"
+                text: root.jobsFull ? "Waiting for a free slot" : root.hasGuide ? "Make it again" : "Make guide"
+                accent: !root.jobsFull
                 onClicked: root.makeGuide()
               }
               ActionButton {
@@ -2151,7 +2230,7 @@ Item {
         Item {
           width: parent.width
           height: Math.max(upNextTitle.implicitHeight, upNextReveal.visible ? upNextReveal.height : 0)
-          visible: root.hasGuide && (root.guide.next || []).length > 0 && !root.appliedSearch
+          visible: root.hasGuide && (root.guide.next || []).length > 0 && !root.appliedSearch && !root.walked
           SectionLabel {
             id: upNextTitle
             anchors.verticalCenter: parent.verticalCenter
@@ -2172,7 +2251,7 @@ Item {
         }
         Column {
           width: parent.width
-          visible: root.hasGuide && !root.appliedSearch
+          visible: root.hasGuide && !root.appliedSearch && !root.walked
           spacing: Commons.Style.space(2)
           Repeater {
             model: root.hasGuide ? root.guide.next || [] : []
@@ -2180,8 +2259,147 @@ Item {
           }
         }
 
+        // With a walkthrough, the overview leads and the steps carry the
+        // rest: route, combos and Up next said the same things again.
+        Item {
+          width: parent.width
+          height: walkOverview.height
+          visible: root.walked && !root.appliedSearch && walkOverview.text !== ""
+          Column {
+            id: walkOverview
+            property string text: root.guide && root.guide.sections ? root.guide.sections.overview || "" : ""
+            width: parent.width
+            spacing: Commons.Style.space(4)
+            Row {
+              width: parent.width
+              SectionLabel { text: "OVERVIEW"; width: parent.width - walkReveal.width }
+              Chip {
+                id: walkReveal
+                visible: root.secretCount > 0
+                chosen: root.revealAll
+                text: root.revealAll ? "Hide secrets" : "Reveal all"
+                onClicked: root.toggleRevealAll()
+              }
+            }
+            Prose { width: parent.width; text: root.safeMarkdown(walkOverview.text) }
+          }
+        }
+
+        // The walkthrough (ADR 17): the game's chapters in play order, each
+        // with its trophies, the current one open; a click opens another.
+        SectionLabel {
+          visible: root.hasGuide && root.walkSteps.length > 0 && !root.appliedSearch
+          text: "WALKTHROUGH" + (root.guide && root.guide.step >= 0 ? " · STEP " + (root.guide.step + 1) + " OF " + root.walkSteps.length : "")
+        }
+        Column {
+          width: parent.width
+          visible: root.hasGuide && root.walkSteps.length > 0 && !root.appliedSearch
+          spacing: Commons.Style.space(2)
+          Repeater {
+            model: root.hasGuide && !root.appliedSearch ? root.walkSteps : []
+            delegate: Rectangle {
+              id: walkRow
+              required property var modelData
+              required property int index
+              readonly property bool open: root.stepIsOpen(index)
+              readonly property bool here: root.currentStep === index
+              // Behind the current step counts as passed, achievements or
+              // not (a prologue with none never got its ✓).
+              // An earlier step with something still open keeps its number.
+              readonly property bool passed: modelData.done || (root.currentStep > index && modelData.achievements.length === 0)
+              width: parent.width
+              height: walkBody.height + Commons.Style.space(12)
+              radius: Commons.Style.cornerRadius
+              color: here ? Qt.alpha(Commons.Color.accent, 0.10) : walkHover.hovered ? Commons.Style.hoverFill : "transparent"
+              opacity: passed && !open ? 0.5 : 1
+              HoverHandler { id: walkHover }
+              Text {
+                textFormat: Text.PlainText
+                id: walkNumber
+                x: Commons.Style.space(8)
+                y: Commons.Style.space(6)
+                width: Commons.Style.space(22)
+                text: walkRow.passed ? "✓" : String(walkRow.index + 1)
+                color: walkRow.here ? Commons.Color.accent : root.foreground
+                opacity: walkRow.here ? 1 : 0.5
+                font.family: Commons.Style.font.family
+                font.pixelSize: Commons.Style.font.bodySmall
+                font.bold: true
+              }
+              Column {
+                id: walkBody
+                anchors.left: walkNumber.right
+                anchors.right: parent.right
+                anchors.rightMargin: Commons.Style.space(8)
+                y: Commons.Style.space(6)
+                spacing: Commons.Style.space(3)
+                Text {
+                  textFormat: Text.PlainText
+                  width: parent.width
+                  wrapMode: Text.Wrap
+                  rightPadding: walkCount.implicitWidth + Commons.Style.space(8)
+                  text: walkRow.modelData.title
+                  // Only the title folds: a click on a trophy row finds it
+                  // in the list instead.
+                  HoverHandler { cursorShape: Qt.PointingHandCursor }
+                  TapHandler { onTapped: root.toggleStep(walkRow.index) }
+                  Caption {
+                    id: walkCount
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    visible: walkRow.modelData.achievements.length > 0
+                    text: root.stepDone(walkRow.modelData) + " / " + walkRow.modelData.achievements.length
+                  }
+                  color: walkRow.here ? Commons.Color.accent : root.foreground
+                  font.family: Commons.Style.font.family
+                  font.pixelSize: Commons.Style.font.bodySmall
+                  font.bold: true
+                }
+                Prose {
+                  width: parent.width
+                  visible: walkRow.open && text !== ""
+                  text: root.safeMarkdown(walkRow.modelData.text)
+                }
+                Caption {
+                  textFormat: Text.PlainText
+                  width: parent.width
+                  visible: !walkRow.open && text !== ""
+                  text: root.stepNames(walkRow.modelData)
+                }
+                // Open, a step lists its trophies in full, done ones too,
+                // so every one can be followed where the game asks for it.
+                Repeater {
+                  model: walkRow.open ? walkRow.modelData.achievements : []
+                  delegate: GuideRow { required property string modelData; api: modelData }
+                }
+                Caption {
+                  textFormat: Text.PlainText
+                  visible: walkRow.open && walkRow.modelData.unverified
+                  text: "(unverified: no source backs this step)"
+                  font.italic: true
+                  opacity: 0.45
+                }
+              }
+            }
+          }
+        }
+
+        SectionLabel {
+          visible: root.unplaced.length > 0 && !root.appliedSearch
+          text: "NOT IN A STEP · " + root.unplaced.length
+        }
+        Column {
+          width: parent.width
+          visible: root.unplaced.length > 0 && !root.appliedSearch
+          spacing: Commons.Style.space(2)
+          Repeater {
+            model: root.appliedSearch ? [] : root.unplaced
+            delegate: GuideRow { required property string modelData; api: modelData }
+          }
+        }
+
         Repeater {
-          model: root.hasGuide && !root.appliedSearch
+          model: root.hasGuide && !root.appliedSearch && !root.walked
                  ? [{ key: "overview", title: "OVERVIEW" }, { key: "route", title: "RECOMMENDED ROUTE" },
                     { key: "missables", title: "MISSABLES" }, { key: "combos", title: "COMBOS" }] : []
           delegate: Column {
@@ -2253,12 +2471,14 @@ Item {
 
         Item {
           width: parent.width
-          height: allTitle.implicitHeight
+          height: Math.max(allTitle.implicitHeight, allReveal.visible ? allReveal.height : 0)
           SectionLabel {
             id: allTitle
+            anchors.verticalCenter: parent.verticalCenter
             text: root.hasGuide ? "ALL TROPHIES · IN THE GUIDE'S ORDER" : root.making && root.jobHere ? "THE GUIDE WILL COVER" : "ALL TROPHIES"
           }
           Chip {
+            id: allReveal
             anchors.right: doneCount.left
             anchors.rightMargin: Commons.Style.space(12)
             anchors.verticalCenter: allTitle.verticalCenter

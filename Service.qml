@@ -181,4 +181,57 @@ Scope {
       }
     }
   }
+
+  // ---- The Guide key (ADR 18): the plugin setting `guideKey`, handed
+  // over by Panel.qml, bound at runtime by `omatrophy.py guide-key`, which
+  // refuses a key another bind uses. Hyprland drops runtime binds on a
+  // config reload, so it binds again then.
+  // dev/preview.sh turns it off: a throwaway shell must neither bind the
+  // key nor, closing, unbind the live shell's.
+  property bool bindsGuideKey: true
+  property string guideKey: "SUPER + CTRL + G"
+  property string guideKeyError: ""
+  property string notifiedKeyError: ""
+
+  onGuideKeyChanged: keySync.restart()
+  Component.onCompleted: if (bindsGuideKey) keySync.restart()
+  // Unbinds ours, so a disabled plugin leaves no key behind.
+  Component.onDestruction: if (bindsGuideKey) Quickshell.execDetached(["python3", helperPath, "guide-key", ""])
+
+  onGuideKeyErrorChanged: {
+    if (guideKeyError === "" || guideKeyError === notifiedKeyError) return
+    notifiedKeyError = guideKeyError
+    Quickshell.execDetached(["notify-send", "--app-name=OmaTrophy", "OmaTrophy", guideKeyError])
+  }
+
+  // Coalesces typing in the setting, and lets a previous service's unbind
+  // land first on a plugin reload.
+  Timer {
+    id: keySync
+    interval: 600
+    onTriggered: {
+      if (!root.bindsGuideKey) return
+      if (keyBinder.running) return keySync.restart()
+      keyBinder.command = ["python3", root.helperPath, "guide-key", root.guideKey]
+      keyBinder.running = true
+    }
+  }
+
+  Process {
+    id: keyBinder
+    stdout: StdioCollector {
+      onStreamFinished: {
+        var r = {}
+        try { r = JSON.parse(text) } catch (e) { return }
+        root.guideKeyError = r.error || ""
+      }
+    }
+  }
+
+  Connections {
+    target: Hyprland
+    function onRawEvent(event) {
+      if (event.name === "configreloaded") keySync.restart()
+    }
+  }
 }

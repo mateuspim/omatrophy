@@ -94,6 +94,42 @@ class GuideAnswer(unittest.TestCase):
         self.assertEqual(out['sections']['route'], 'Lantern first, then stars.')
         self.assertEqual(out['generated'], 1792990000)
 
+    def test_walkthrough_steps_map_names_and_find_the_current_step(self):
+        plan = {'walkthrough': [
+            {'title': 'Act 1', 'text': 'Go.', 'achievements': ['a', 'gone'], 'missables': ['a']},
+            {'title': 'Act 2', 'text': 'On.', 'achievements': ['b'], 'missables': [], 'unverified': True},
+            {'title': 'Credits', 'achievements': []}, 'junk']}
+        steps = guides.walkthrough_steps(plan, {'a': 'A1', 'b': 'B1'}, {'A1'})
+        self.assertEqual([(s['title'], s['achievements'], s['done']) for s in steps],
+                         [('Act 1', ['A1'], True), ('Act 2', ['B1'], False), ('Credits', [], False)])
+        self.assertEqual(steps[0]['missables'], ['A1'])
+        self.assertTrue(steps[1]['unverified'])
+        self.assertEqual(guides.current_step(steps), 1)
+        self.assertEqual(guides.current_step(steps[:1]), -1)
+
+    def test_walkthrough_maps_unlocked_trophies_not_in_the_plan(self):
+        with tempfile.TemporaryDirectory() as d:
+            guides.import_guides(SAMPLES, folder=d)
+            path = guides.find_guide('steam', '1', d)
+            plan = guides.load_plan(path)
+            plan['walkthrough'] = [{'title': 'Start', 'achievements': ['First Light']}]
+            with open(guides.plan_path(path), 'w') as f:
+                json.dump(plan, f)
+            out = guides.guide_answer('steam', '1', ACHS, d)
+        self.assertEqual(out['walkthrough'][0]['achievements'], ['A1'])
+
+    def test_current_step_follows_the_latest_unlock(self):
+        # Regression: MGSV put a player past mission 13 at step 2, where
+        # a horse bond was still open.
+        plan = {'walkthrough': [{'title': 'Prologue', 'achievements': ['awake']},
+                                {'title': 'C2W', 'achievements': ['horse']},
+                                {'title': 'Hellbound', 'achievements': ['gears']},
+                                {'title': 'Mission 16', 'achievements': ['caravan']}]}
+        ids = {n: n for n in ('awake', 'horse', 'gears', 'caravan')}
+        steps = guides.walkthrough_steps(plan, ids, {'awake', 'gears'})
+        self.assertEqual(guides.current_step(steps), 3)
+        self.assertEqual(guides.current_step(guides.walkthrough_steps(plan, ids, set())), 0)
+
     def test_next_skips_done_and_puts_missables_first(self):
         items = {'a': {'name': 'a'}, 'b': {'name': 'b', 'missable': True}, 'c': {'name': 'c'}, 'd': {'name': 'd'}}
         done = {'c'}

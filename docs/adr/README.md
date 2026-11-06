@@ -27,6 +27,9 @@ made.
 | [13](0013-load-stats-through-the-steam-client.md) | Load played games' stats through the Steam client, on request | Accepted |
 | [14](0014-generate-guides-through-the-users-agent.md) | Make 100% guides through the user's own coding agent, on request | Accepted |
 | [15](0015-check-an-agents-lock-on-the-owners-machine.md) | Check an agent's lock on the owner's machine, per installed binary | Accepted |
+| [16](0016-in-game-guide-is-the-tracker-on-a-key.md) | The in-game guide is the tracker's Guide tab on a key | Accepted; binding superseded by 18 |
+| [17](0017-walkthrough-is-a-maker-stage.md) | The walkthrough is one more maker stage, checked like the rest | Accepted |
+| [18](0018-bind-the-guide-key-at-runtime.md) | Bind the Guide key at runtime from a plugin setting | Accepted |
 
 ## Rules
 

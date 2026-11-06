@@ -10,6 +10,18 @@
   OmaTrophy fetches the full page when the agent read only a summary,
   and skips a blog's lists of posts. A guide made before this says so
   next to **Make again**.
+- **Walkthrough**: a guide now goes through the game's chapters or
+  missions in play order, each with its progress and its trophies in
+  full (done ones too), missable ones marked, the step you're on open
+  (ADR 17). It replaces Up next and the route prose in the Guide tab.
+  One more agent call per guide.
+- **The guide over your game**: Super+Ctrl+G opens the running game's
+  guide over it and closes it again, like Steam's Shift+Tab (ADR 16).
+  Change it under **Guide key** in Omarchy's plugin settings; a key in
+  use is refused with a notification (ADR 18). Needs one
+  `omarchy restart shell`, with no game running.
+- Guides for several games are made at once, up to 3: each game has its
+  own job, the panel shows a strip per job, and Stop stops only that one.
 - **Reveal all** is remembered (`reveal-hidden`) for every game and
   every open, sits next to Up next too, and Shift+Enter flips it.
 
