@@ -185,7 +185,11 @@ it.
    `<items>[...]</items>`.
 4. **Route** (model, no tools). The compact table of every item (no
    excerpts), the player's progress, DLC. Answers
-   `<route>{order, sections}</route>`.
+   `<route>{order, sections}</route>`. Plain prose for the player: no
+   quotes, no citations, no talk about its input ("the provided table",
+   "`table`", "chunk ids"). Such talk is an error that asks again; what
+   is left after the second answer is cut (the citation, else the
+   sentence).
 5. **Verify** (no model). Validates the shape. Drops names not in the
    game. Matches each quote against the source text after folding case,
    whitespace and quotes. Writes the files atomically.
@@ -251,7 +255,8 @@ but rank lower in excerpts.
   else needed outside it.
 - The prompt text lives in `prompts/guide/<stage>.md` (`research`,
   `classify`, `route`), with `{{name}}` placeholders; `rules.md` holds
-  these rules and fills `{{rules}}`.
+  these rules and fills `{{rules}}` (research and classify; route has its
+  own, as it has nothing to quote).
 
 ### Agent adapters
 

@@ -419,6 +419,43 @@ def check_items(text, batch, every):
     return items, errors
 
 
+# Talk about the prompt's own input instead of the game. The MGSV guide of
+# 2026-11-04 read "The provided table has no source URLs or chunk ids, so
+# every quote below is cited as `table`" and quoted "(`table`: ...)" all
+# through: the route stage got the citation rules but nothing to cite.
+META_TALK = re.compile(
+    r"`table`|\bchunk ids?\b|\bsource urls?\b|\bthe classification\b"
+    r"|\b(?:provided|given|above|below)\s+(?:table|list|rows?|excerpts?|data|input)\b"
+    r"|\b(?:table|list|rows?|excerpts?)\s+(?:above|below)\b|\bopen list\b|\bin the combos\b"
+    r"|\b(?:does|do|did)\s+not\s+(?:state|mark|list|say|give)\b"
+    r"|\b(?:in|from|per|by|according to)\s+the\s+(?:table|rows?|excerpts?|input)\b"
+    r"|\bthe\s+(?:table|input)\s+(?:lists|says|shows|marks|has|does|gives|states|notes|is)\b", re.I)
+# A citation of the table: `(`table`)`, `(`table`: "...")`, `, `table``.
+TABLE_CITE = re.compile(r'\s*\(`?table`?(?::[^)]*)?\)|,\s*`table`(?=\))')
+
+
+def meta_talk(text):
+    """The phrases in `text` that talk about the prompt's input."""
+    return [m.group(0) for m in META_TALK.finditer(text or '')]
+
+
+def scrub_meta(text):
+    """`text` without table citations and without the sentences that still
+    talk about the input, for when the second answer has them too."""
+    lines = []
+    for line in TABLE_CITE.sub('', text).split('\n'):
+        lead = re.match(r'\s*(?:[-*]|\d+\.)\s+(?:\*\*[^*]+\*\*\s*)?', line)
+        lead = lead.group(0) if lead else ''
+        kept = [s for s in re.split(r'(?<=[.!?])\s+', line[len(lead):]) if not META_TALK.search(s)]
+        if not META_TALK.search(line):
+            lines.append(line)
+        elif ' '.join(kept).strip():
+            lines.append(lead + ' '.join(kept).strip())
+        elif not lead:
+            lines.append('')
+    return re.sub(r'\n{3,}', '\n\n', '\n'.join(lines)).strip()
+
+
 def check_route(text, names):
     try:
         raw = tagged(text, 'route')
@@ -437,7 +474,11 @@ def check_route(text, names):
     found = raw.get('sections') if isinstance(raw.get('sections'), dict) else {}
     for key in ('overview', 'route', 'missables', 'combos'):
         if isinstance(found.get(key), str):
-            sections[key] = found[key].strip()
+            talk = meta_talk(found[key])
+            if talk:
+                errors.append(f'sections.{key} talks about your input ({", ".join(sorted(set(talk))[:3])}); '
+                              'write for the player and never mention the table, sources, ids or quotes')
+            sections[key] = scrub_meta(found[key])
     if not order:
         errors.append('order is empty')
     if not sections.get('overview'):

@@ -1,7 +1,7 @@
 You are finishing a 100% achievement guide for **{{game}}**. The player has
 {{progress}}. Below is every achievement with its classification. Plan the
 route: the order to do the open ones in, and short prose sections. You have
-no tools and need none; use only this table.
+no tools and need none; use only what is listed below.
 
 {{table}}
 
@@ -21,7 +21,19 @@ Sections, in Markdown, a few short paragraphs or a list each:
 - `missables`: what can be missed and when; "" when nothing can.
 - `combos`: achievements worth doing together; "" when none.
 
-{{rules}}
+Rules for this answer:
+
+- Write for the player, about the game. Never mention this prompt or its
+  inputs: no "the table", "the list above", "classification", "row",
+  "source", "chunk" or "excerpt", no ids, no quotes and no citations. The quotes were
+  checked in an earlier stage; here you only plan.
+- Where something is unknown (a time shown as "?", no missable), leave it
+  out or say it plainly ("Times vary."); never explain what data is
+  missing.
+- Hidden achievements: keep it spoiler-light.
+- Plain, short sentences.
+- Answer with one JSON block between the tags below. Nothing outside the
+  tags is read.
 
 <route>
 {"order": ["<achievement name>", "..."],

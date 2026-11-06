@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Guides no longer talk about their own input: the route stage writes
+  plain prose for the player, with no "`table`" citations or "the
+  provided table has no chunk ids". Such talk asks the agent again, and
+  what is left is cut. Make a guide again to get the cleaner text.
+
 ## 0.6.0 - 2026-11-06
 
 100% guides (ADR 14). Needs one `omarchy restart shell`, with no game

@@ -180,6 +180,31 @@ class Checks(unittest.TestCase):
         self.assertEqual(route['order'], ['A'])
         self.assertEqual(len(errors), 2)  # Z unknown, no overview
 
+    def test_route_meta_talk_is_rejected_and_scrubbed(self):
+        # Regression: the MGSV guide of 2026-11-04 talked about "the
+        # provided table" and cited `table` all through its prose.
+        overview = ('You have 13 of 42. The provided table has no source URLs or chunk ids. '
+                    'Executed is hard (`table`: "challenge; difficulty 4").')
+        route = '1. **Story.** Play Skull. It "combines with Accomplished" (`table`).\n2. Do Hero, then Truth.'
+        answer = json.dumps({'order': ['A'], 'sections': {'overview': overview, 'route': route}})
+        found, errors = guide_maker.check_route(f'<route>{answer}</route>', {'A'})
+        self.assertEqual(len(errors), 2)
+        self.assertIn('sections.overview talks about your input', errors[0])
+        self.assertEqual(found['sections']['overview'], 'You have 13 of 42. Executed is hard.')
+        self.assertEqual(found['sections']['route'],
+                         '1. **Story.** Play Skull. It "combines with Accomplished".\n2. Do Hero, then Truth.')
+
+    def test_meta_talk_leaves_game_prose_alone(self):
+        for text in ('Put the key on the table in the lab.', 'A list of missables follows.',
+                     'Source the parts in chapter 2.'):
+            self.assertEqual(guide_maker.meta_talk(text), [], text)
+            self.assertEqual(guide_maker.scrub_meta(text), text)
+
+    def test_route_prompt_asks_for_no_citations(self):
+        text = guide_maker.prompt('route', game='G', progress='0 of 1', table='- A: story')
+        self.assertNotIn('chunk id (like', text)
+        self.assertIn('no quotes and no citations', text)
+
     def test_fold_matches_typographic_quotes(self):
         self.assertIn(guide_maker.fold('don’t  go — "now"'), guide_maker.fold('Don\'t go - “now”!'))
 
