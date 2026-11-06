@@ -1,18 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.6.1 - 2026-11-06
 
-- Long names wrap instead of being cut: game titles, achievement names
-  and descriptions (rows grow to fit), the guide's "Made ... with"
-  line (a local model's name hid "older maker"), and the guide strips.
-- Guides no longer talk about their own input: the route stage writes
-  plain prose for the player, with no "`table`" citations or "the
-  provided table has no chunk ids". Such talk asks the agent again, and
-  what is left is cut. Make a guide again to get the cleaner text.
-- Fuller guides: tips say where, how and what to watch out for;
-  OmaTrophy fetches the full page when the agent read only a summary,
-  and skips a blog's lists of posts. A guide made before this says so
-  next to **Make again**.
+Guides you can follow while you play: a walkthrough, and the guide over
+the running game on a key. Needs one `omarchy restart shell`, with no
+game running: `manifest.json`, `Service.qml`, `Panel.qml`, `Tracker.qml`
+and `FreshObject.qml` changed. Make a guide again to get the walkthrough
+and the cleaner text; the tracker marks older guides ("older maker").
+
 - **Walkthrough**: a guide now goes through the game's chapters or
   missions in play order, each with its progress and its trophies in
   full (done ones too), missable ones marked, the step you're on open
@@ -21,16 +16,25 @@
 - **The guide over your game**: a key opens the running game's guide
   over it and closes it again, like Steam's Shift+Tab (ADR 16). Nothing
   is bound until you install it in Settings > Guides: Super+Ctrl+G, or
-  a key you pick when that one is taken (a warning says by what)
-  (ADR 18). Needs one `omarchy restart shell`, with no game running.
+  a key you record when that one is taken; a warning says what holds it,
+  and free keys are offered (ADR 18).
 - With nothing running, the tracker says it's showing your last game
   (**Nothing running · last played**).
-- Guides for several games are made at once, up to 3: each game has its
-  own job, the panel shows a strip per job, and Stop stops only that one.
 - The tracker opens faster, the Guide key above all: it stays built
   between opens, and reads the game and its guide in one go (ADR 19).
+- Guides for several games are made at once, up to 3: each game has its
+  own job, the panel shows a strip per job, and Stop stops only that one.
+- Fuller guides: tips say where, how and what to watch out for;
+  OmaTrophy fetches the full page when the agent read only a summary,
+  and skips a blog's lists of posts.
+- Guides no longer talk about their own input: no "`table`" citations
+  or "the provided table has no chunk ids". Such talk asks the agent
+  again, and what is left is cut.
 - **Reveal all** is remembered (`reveal-hidden`) for every game and
   every open, sits next to Up next too, and Shift+Enter flips it.
+- Long names wrap instead of being cut: game titles, achievement names
+  and descriptions (rows grow to fit), the guide's "Made ... with"
+  line, and the guide strips.
 
 ## 0.6.0 - 2026-11-06
 
