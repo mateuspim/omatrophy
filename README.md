@@ -143,6 +143,8 @@ omarchy-shell shell summon pym.omatrophy '{}'   # the running or last game
 
 ## 100% guides
 
+![The tracker's Guide tab for a sample game: up next, the overview and route on the left, every open achievement by phase on the right](docs/brand/captures/guide.png)
+
 The tracker's **Guide** tab shows a game's path to 100%: what to do next,
 an overview and the recommended route, then every open achievement by
 phase (missable first, then story, quick, challenge, grind, collectibles,

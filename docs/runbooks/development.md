@@ -103,7 +103,7 @@ colours and layout; `design/hero/` holds the brief it was drawn from.
 1. Render the captures at 2×:
 
    ```sh
-   for v in now tracker gold platinum games; do
+   for v in now tracker guide gold platinum games; do
      QT_SCALE_FACTOR=2 dev/render.sh "$v" "docs/brand/captures/$v.png"
    done
    ```

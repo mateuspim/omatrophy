@@ -92,6 +92,8 @@ Item {
   property string highlightApi: ""
   // The agent and model picker; folded away under a made guide.
   property bool makerOpen: false
+  // Which Make-guide picker is unfolded: "agent", "model", "effort" or "".
+  property string makerMenu: ""
   readonly property bool hasGuide: !!guide && !!guide.items && (Object.keys(guide.items).length > 0 || !!guide.notes)
   readonly property bool making: job.state === "running"
   readonly property bool jobHere: !!game && job.store === game.store && String(job.app) === String(game.app)
@@ -400,6 +402,46 @@ Item {
     pickEffort = model ? effort : ""
     var args = ["python3", helperPath, "guide", "model", pickAgent, model || "default"]
     Quickshell.execDetached(model && effort ? args.concat([effort]) : args)
+  }
+
+  // The Make-guide pickers' rows ({value, name, detail}), the same lists
+  // Settings > Guides unfolds.
+  function agentRows() {
+    return runnable.map(function(a) {
+      return { value: a.agent, name: a.name + (a.default ? " · default" : ""),
+               detail: a.model ? "Model: " + modelName(a, a.model) : "Its default model" }
+    })
+  }
+
+  function modelName(row, id) {
+    var m = row ? row.models.find(function(x) { return x.id === id }) : null
+    return m ? m.name : id
+  }
+
+  function modelRows() {
+    var row = pickedRow
+    if (!row) return []
+    var pick = row.suggested || ({})
+    var rows = [{ value: "", name: "Agent's default", detail: row.name + " picks it" }]
+    // The guide bench's best pick right after the default, with why.
+    if (pick.model) rows.push({ value: pick.model, name: modelName(row, pick.model) + "  ★", detail: pick.why })
+    row.models.forEach(function(m) {
+      if (m.id === pick.model) return
+      var bits = []
+      if (m.name.toLowerCase() !== m.id.toLowerCase()) bits.push(m.id)
+      if (m.efforts && m.efforts.length) bits.push(m.efforts.join(" · "))
+      rows.push({ value: m.id, name: m.name, detail: bits.join("  ·  ") })
+    })
+    return rows
+  }
+
+  function effortRows() {
+    return [{ value: "", name: "Model's default", detail: "Whatever the model uses on its own" }].concat(
+      modelEfforts().map(function(e) { return { value: e, name: e.charAt(0).toUpperCase() + e.slice(1), detail: "" } }))
+  }
+
+  function toggleMakerMenu(name) {
+    makerMenu = makerMenu === name ? "" : name
   }
 
   function modelEfforts() {
@@ -775,6 +817,145 @@ Item {
       opacity: 0.45
       font.family: Commons.Style.font.family
       font.pixelSize: Commons.Style.font.caption
+    }
+  }
+
+  // A field that shows a choice and unfolds its list below (Make guide's
+  // agent, model and effort): repeated from StylePicker.qml, since views
+  // built by FreshObject.qml can't share types.
+  component PickerField: Rectangle {
+    id: picker
+    property string title: ""
+    property string detail: ""
+    property bool open: false
+    signal toggled()
+    width: parent ? parent.width : 0
+    height: pickerText.implicitHeight + Commons.Style.space(18)
+    radius: Commons.Style.cornerRadius
+    color: pickerHit.containsMouse ? Commons.Style.hoverFill : Qt.alpha(root.foreground, 0.04)
+    border.width: 1
+    border.color: open ? Qt.alpha(Commons.Color.accent, 0.6) : Qt.alpha(root.foreground, pickerHit.containsMouse ? 0.25 : 0.12)
+    Accessible.role: Accessible.ComboBox
+    Accessible.name: title + (detail ? ", " + detail : "")
+    Behavior on color { ColorAnimation { duration: 120 } }
+    Column {
+      id: pickerText
+      x: Commons.Style.space(12)
+      anchors.verticalCenter: parent.verticalCenter
+      width: parent.width - Commons.Style.space(48)
+      spacing: Commons.Style.space(1)
+      Text {
+        textFormat: Text.PlainText
+        width: parent.width
+        text: picker.title
+        color: root.foreground
+        elide: Text.ElideRight
+        font.family: Commons.Style.font.family
+        font.pixelSize: Commons.Style.font.body
+        font.bold: true
+      }
+      Caption {
+        width: parent.width
+        visible: text !== ""
+        text: picker.detail
+        opacity: 0.5
+      }
+    }
+    Text {
+      textFormat: Text.PlainText
+      anchors.right: parent.right
+      anchors.rightMargin: Commons.Style.space(14)
+      anchors.verticalCenter: parent.verticalCenter
+      text: "▾"
+      color: picker.open ? Commons.Color.accent : root.foreground
+      opacity: picker.open ? 1 : 0.5
+      rotation: picker.open ? 180 : 0
+      font.pixelSize: Commons.Style.font.title * 1.4
+      Behavior on rotation { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+    }
+    MouseArea {
+      id: pickerHit
+      anchors.fill: parent
+      hoverEnabled: true
+      cursorShape: Qt.PointingHandCursor
+      onClicked: picker.toggled()
+    }
+  }
+
+  // The list a PickerField unfolds: one row per choice, a dot on the
+  // current one, a line under each name.
+  component PickerList: Rectangle {
+    id: plist
+    property var rows: []
+    property string current: ""
+    signal picked(string value)
+    width: parent ? parent.width : 0
+    height: plistRows.height + Commons.Style.space(8)
+    radius: Commons.Style.cornerRadius
+    color: Qt.alpha(root.foreground, 0.03)
+    border.width: 1
+    border.color: Qt.alpha(root.foreground, 0.08)
+    Column {
+      id: plistRows
+      y: Commons.Style.space(4)
+      width: parent.width
+      Repeater {
+        model: plist.visible ? plist.rows : []
+        delegate: Rectangle {
+          id: prow
+          required property var modelData
+          readonly property bool chosen: plist.current === modelData.value
+          width: plistRows.width
+          height: prowName.implicitHeight + (prowDetail.visible ? prowDetail.implicitHeight : 0) + Commons.Style.space(14)
+          color: prowHit.containsMouse ? Commons.Style.hoverFill : "transparent"
+          Accessible.role: Accessible.RadioButton
+          Accessible.name: modelData.name
+          Accessible.checked: chosen
+          MouseArea {
+            id: prowHit
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: plist.picked(prow.modelData.value)
+          }
+          Text {
+            textFormat: Text.PlainText
+            id: prowDot
+            x: Commons.Style.space(12)
+            anchors.verticalCenter: parent.verticalCenter
+            text: prow.chosen ? "◉" : "○"
+            color: prow.chosen ? Commons.Color.accent : root.foreground
+            opacity: prow.chosen ? 1 : 0.5
+            font.pixelSize: Commons.Style.font.body
+          }
+          Column {
+            anchors.left: prowDot.right
+            anchors.leftMargin: Commons.Style.space(10)
+            anchors.right: parent.right
+            anchors.rightMargin: Commons.Style.space(12)
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: Commons.Style.space(1)
+            Text {
+              textFormat: Text.PlainText
+              id: prowName
+              width: parent.width
+              text: prow.modelData.name
+              color: root.foreground
+              elide: Text.ElideRight
+              font.family: Commons.Style.font.family
+              font.pixelSize: Commons.Style.font.bodySmall
+              font.bold: prow.chosen
+            }
+            Caption {
+              id: prowDetail
+              width: parent.width
+              visible: text !== ""
+              opacity: 0.5
+              text: prow.modelData.detail || ""
+            }
+          }
+        }
+      }
     }
   }
 
@@ -1821,107 +2002,94 @@ Item {
                       : "Looking for your coding agents…"
             }
 
-            Row {
+            SectionLabel { visible: root.runnable.length > 0; text: "AGENT" }
+            PickerField {
               visible: root.runnable.length > 0
-              spacing: Commons.Style.space(10)
-              SectionLabel { width: Commons.Style.space(56); anchors.verticalCenter: parent.verticalCenter; text: "AGENT" }
-              Flow {
-                width: makerBody.width - Commons.Style.space(66)
-                spacing: Commons.Style.space(6)
-                Repeater {
-                  model: root.runnable
-                  delegate: Chip {
-                    required property var modelData
-                    text: modelData.name + (modelData.default ? " · default" : "")
-                    chosen: root.pickAgent === modelData.agent
-                    onClicked: root.pickAgentNamed(modelData.agent)
-                  }
-                }
-              }
+              open: root.makerMenu === "agent"
+              title: root.pickedRow ? root.pickedRow.name : "Pick an agent"
+              detail: root.pickedRow && root.pickedRow.default ? "Omarchy's default agent" : ""
+              onToggled: root.toggleMakerMenu("agent")
+            }
+            PickerList {
+              visible: root.makerMenu === "agent"
+              rows: root.agentRows()
+              current: root.pickAgent
+              onPicked: value => { root.pickAgentNamed(value); root.makerMenu = "" }
             }
 
-            Row {
+            SectionLabel { visible: root.pickedRow !== null; text: "MODEL" }
+            PickerField {
               visible: root.pickedRow !== null
-              spacing: Commons.Style.space(10)
-              SectionLabel { width: Commons.Style.space(56); anchors.verticalCenter: parent.verticalCenter; text: "MODEL" }
-              Flow {
-                width: makerBody.width - Commons.Style.space(66)
-                spacing: Commons.Style.space(6)
-                Chip {
-                  text: "Default"
-                  chosen: root.pickModel === ""
-                  onClicked: root.pickModelNamed("", "")
-                }
-                Repeater {
-                  model: root.pickedRow ? root.pickedRow.models.slice(0, 8) : []
-                  delegate: Chip {
-                    required property var modelData
-                    text: modelData.name
-                    chosen: root.pickModel === modelData.id
-                    onClicked: root.pickModelNamed(modelData.id, root.pickEffort)
-                  }
-                }
-                // Any model the list doesn't name: a full id, an alias, a
-                // provider/model for a local endpoint.
-                Rectangle {
-                  readonly property bool custom: root.pickModel !== "" && root.pickedRow !== null
-                                                 && !root.pickedRow.models.some(function(m) { return m.id === root.pickModel })
-                  width: Commons.Style.space(150)
-                  height: Commons.Style.space(28)
-                  radius: height / 2
-                  color: Qt.alpha(root.foreground, 0.04)
-                  border.width: 1
-                  border.color: modelField.activeFocus || custom ? Qt.alpha(Commons.Color.accent, 0.6) : Qt.alpha(root.foreground, 0.1)
-                  TextInput {
-                    id: modelField
-                    anchors.fill: parent
-                    anchors.leftMargin: Commons.Style.space(12)
-                    anchors.rightMargin: Commons.Style.space(12)
-                    verticalAlignment: TextInput.AlignVCenter
-                    clip: true
-                    color: root.foreground
-                    selectionColor: Qt.alpha(Commons.Color.accent, 0.4)
-                    font.family: Commons.Style.font.family
-                    font.pixelSize: Commons.Style.font.bodySmall
-                    text: parent.custom ? root.pickModel : ""
-                    onAccepted: { root.pickModelNamed(text.trim(), root.pickEffort); root.forceKeys() }
-                    Keys.onEscapePressed: root.forceKeys()
-                    Text {
-                      textFormat: Text.PlainText
-                      anchors.verticalCenter: parent.verticalCenter
-                      visible: !modelField.text && !modelField.activeFocus
-                      text: "Other model…"
-                      color: root.foreground
-                      opacity: 0.4
-                      font: modelField.font
-                    }
-                  }
+              open: root.makerMenu === "model"
+              title: root.pickModel ? root.modelName(root.pickedRow, root.pickModel) : "Agent's default"
+              detail: {
+                var pick = root.pickedRow && root.pickedRow.suggested ? root.pickedRow.suggested.model : ""
+                if (!root.pickModel) return (root.pickedRow ? root.pickedRow.name + " picks it" : "")
+                                            + (pick ? " · ★ bench pick: " + root.modelName(root.pickedRow, pick) : "")
+                return root.pickEffort ? root.pickEffort + " effort" : ""
+              }
+              onToggled: root.toggleMakerMenu("model")
+            }
+            PickerList {
+              visible: root.makerMenu === "model"
+              rows: root.modelRows()
+              current: root.pickModel
+              onPicked: value => {
+                var pick = root.pickedRow && root.pickedRow.suggested ? root.pickedRow.suggested : ({})
+                root.pickModelNamed(value, root.pickEffort || (value === pick.model ? pick.effort || "" : ""))
+                root.makerMenu = ""
+              }
+            }
+            // Any model the list doesn't name: a full id, an alias, a
+            // provider/model for a local endpoint.
+            Rectangle {
+              readonly property bool custom: root.pickModel !== "" && root.pickedRow !== null
+                                             && !root.pickedRow.models.some(function(m) { return m.id === root.pickModel })
+              visible: root.makerMenu === "model" || custom
+              width: parent.width
+              height: Commons.Style.space(32)
+              radius: Commons.Style.cornerRadius
+              color: Qt.alpha(root.foreground, 0.04)
+              border.width: 1
+              border.color: modelField.activeFocus || custom ? Qt.alpha(Commons.Color.accent, 0.6) : Qt.alpha(root.foreground, 0.1)
+              TextInput {
+                id: modelField
+                anchors.fill: parent
+                anchors.leftMargin: Commons.Style.space(12)
+                anchors.rightMargin: Commons.Style.space(12)
+                verticalAlignment: TextInput.AlignVCenter
+                clip: true
+                color: root.foreground
+                selectionColor: Qt.alpha(Commons.Color.accent, 0.4)
+                font.family: Commons.Style.font.family
+                font.pixelSize: Commons.Style.font.bodySmall
+                text: parent.custom ? root.pickModel : ""
+                onAccepted: { root.pickModelNamed(text.trim(), root.pickEffort); root.makerMenu = ""; root.forceKeys() }
+                Keys.onEscapePressed: root.forceKeys()
+                Text {
+                  textFormat: Text.PlainText
+                  anchors.verticalCenter: parent.verticalCenter
+                  visible: !modelField.text && !modelField.activeFocus
+                  text: "Other model: type any model id, then Enter"
+                  color: root.foreground
+                  opacity: 0.4
+                  font: modelField.font
                 }
               }
             }
 
-            Row {
+            SectionLabel { visible: root.pickedRow !== null && root.modelEfforts().length > 0; text: "EFFORT" }
+            PickerField {
               visible: root.pickedRow !== null && root.modelEfforts().length > 0
-              spacing: Commons.Style.space(10)
-              SectionLabel { width: Commons.Style.space(56); anchors.verticalCenter: parent.verticalCenter; text: "EFFORT" }
-              Flow {
-                width: makerBody.width - Commons.Style.space(66)
-                spacing: Commons.Style.space(6)
-                Chip {
-                  text: "Default"
-                  chosen: root.pickEffort === ""
-                  onClicked: root.pickModelNamed(root.pickModel, "")
-                }
-                Repeater {
-                  model: root.modelEfforts()
-                  delegate: Chip {
-                    required property string modelData
-                    text: modelData
-                    chosen: root.pickEffort === modelData
-                    onClicked: root.pickModelNamed(root.pickModel, modelData)
-                  }
-                }
-              }
+              open: root.makerMenu === "effort"
+              title: root.pickEffort ? root.pickEffort.charAt(0).toUpperCase() + root.pickEffort.slice(1) : "Model's default"
+              onToggled: root.toggleMakerMenu("effort")
+            }
+            PickerList {
+              visible: root.makerMenu === "effort"
+              rows: root.effortRows()
+              current: root.pickEffort
+              onPicked: value => { root.pickModelNamed(root.pickModel, value); root.makerMenu = "" }
             }
 
             Caption {
