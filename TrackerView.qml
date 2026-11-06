@@ -957,6 +957,8 @@ Item {
         width: parent.width
         text: picker.title
         color: root.foreground
+        wrapMode: Text.Wrap
+        maximumLineCount: 2
         elide: Text.ElideRight
         font.family: Commons.Style.font.family
         font.pixelSize: Commons.Style.font.body
@@ -1049,6 +1051,8 @@ Item {
               width: parent.width
               text: prow.modelData.name
               color: root.foreground
+              wrapMode: Text.Wrap
+              maximumLineCount: 2
               elide: Text.ElideRight
               font.family: Commons.Style.font.family
               font.pixelSize: Commons.Style.font.bodySmall
@@ -1253,6 +1257,8 @@ Item {
         font.pixelSize: Commons.Style.font.body
         font.bold: !grow.done
         font.italic: grow.secret
+        wrapMode: Text.Wrap
+        maximumLineCount: 2
         elide: Text.ElideRight
       }
       Caption {
@@ -1496,6 +1502,8 @@ Item {
           font.family: Commons.Style.font.family
           font.pixelSize: Commons.Style.font.display
           font.bold: true
+          wrapMode: Text.Wrap
+          maximumLineCount: 2
           elide: Text.ElideRight
         }
         // What you've earned, by metal, in your trophy style.
@@ -1730,7 +1738,9 @@ Item {
         readonly property bool secret: ach.hidden && !ach.unlocked && !rowHover.containsMouse && !root.revealed[ach.api]
                                        && !root.revealAll
         width: list.width
-        height: Commons.Style.space(56)
+        // Grows for a name or description on two lines, instead of cutting
+        // them at one.
+        height: Math.max(Commons.Style.space(56), rowBody.implicitHeight + Commons.Style.space(16))
         radius: Commons.Style.cornerRadius
         color: ListView.isCurrentItem || rowHover.containsMouse ? Commons.Style.hoverFill
                : (ach.unlocked ? Qt.alpha(root.metalColors[ach.tier] || root.metalColors.bronze, 0.035) : "transparent")
@@ -1786,6 +1796,7 @@ Item {
         }
 
         Column {
+          id: rowBody
           anchors.left: iconFrame.right
           anchors.leftMargin: Commons.Style.space(12)
           anchors.right: rowPin.left
@@ -1802,10 +1813,14 @@ Item {
             font.pixelSize: Commons.Style.font.body
             font.bold: row.ach.unlocked
             font.italic: row.secret
+            wrapMode: Text.Wrap
+            maximumLineCount: 2
             elide: Text.ElideRight
           }
           Caption {
             width: parent.width
+            wrapMode: Text.Wrap
+            maximumLineCount: 2
             text: row.secret ? "Hover or press Enter to reveal" : row.ach.desc
             visible: text !== ""
           }
@@ -1977,6 +1992,8 @@ Item {
               width: parent.width
               text: root.job.line || ""
               color: root.foreground
+              wrapMode: Text.Wrap
+              maximumLineCount: 2
               elide: Text.ElideRight
               font.family: Commons.Style.font.family
               font.pixelSize: Commons.Style.font.body
@@ -2061,7 +2078,12 @@ Item {
             id: madeText
             anchors.left: parent.left
             anchors.right: againButton.left
+            anchors.rightMargin: Commons.Style.space(8)
             anchors.verticalCenter: parent.verticalCenter
+            // A local model's name is long ("strata/qwen3.8-flash-next-
+            // q2_0"): wrap, or "older maker" was cut off.
+            wrapMode: Text.Wrap
+            elide: Text.ElideNone
             text: root.madeLine()
           }
           Chip {
@@ -2421,6 +2443,8 @@ Item {
                   textFormat: Text.PlainText
                   width: parent.width
                   visible: !walkRow.open && text !== ""
+                  wrapMode: Text.Wrap
+                  maximumLineCount: 2
                   text: root.stepNames(walkRow.modelData)
                 }
                 // Open, a step lists its trophies in full, done ones too,

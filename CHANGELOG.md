@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Long names wrap instead of being cut: game titles, achievement names
+  and descriptions (rows grow to fit), the guide's "Made ... with"
+  line (a local model's name hid "older maker"), and the guide strips.
 - Guides no longer talk about their own input: the route stage writes
   plain prose for the player, with no "`table`" citations or "the
   provided table has no chunk ids". Such talk asks the agent again, and
