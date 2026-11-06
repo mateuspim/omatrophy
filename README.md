@@ -130,6 +130,7 @@ the game tracks the count. Its keys:
 | --- | --- |
 | Up, Down, Page Up/Down, Home, End | Move the highlight |
 | Enter (or Space, when not searching) | Reveal a hidden achievement |
+| Shift+Enter | Reveal all hidden achievements, or hide them again (remembered) |
 | Tab, Shift+Tab | All, Locked, Unlocked, Rare, Guide |
 | Left, Right | Sort: recent, rarest, A–Z, the game's own order (remembered) |
 | Any letter | Search; Backspace edits |
@@ -150,7 +151,9 @@ an overview and the recommended route, then every open achievement by
 phase (missable first, then story, quick, challenge, grind, collectibles,
 online), each with its time, difficulty, counter, where the point of no
 return is, a tip and what it combines with. A hidden achievement keeps its
-name and tip secret until you hover it, or **Reveal all** shows every one.
+name and tip secret until you hover it, or **Reveal all** (next to Up
+next and the trophy list, or Shift+Enter) shows every one, in every game,
+until you hide them again.
 Anything no source backs says
 "(unverified)". With a guide, the Now tab's **Up next** follows its route.
 

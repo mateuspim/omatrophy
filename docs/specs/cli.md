@@ -24,6 +24,7 @@ installed.
 | `set icons omarchy\|vector\|painted` | Trophy art set. |
 | `set glass clear\|frosted\|solid` | How see-through toasts are. |
 | `set tracker-sort recent\|rarity\|name\|game` | The tracker's sort; the tracker writes it when you change it. |
+| `set reveal-hidden on\|off` | The tracker's Reveal all; the tracker writes it when you change it. |
 | `set games-sort recent\|closest\|name`, `set rarest ever\|month\|platinum`, `set settings-section overview\|toasts\|now\|guides\|stores` | The panel's last Games sort and rarest list; the panel writes them when you pick one, so the next open shows the same view. |
 | `set now-metals\|now-recent\|now-rarest\|now-shelf on\|off` | Shows or hides that section of the panel's Now tab. |
 | `set community on\|off` | The opt-in backfill of games that never ran on this machine from your public Steam profile ([ADR 11](../adr/0011-backfill-from-the-community-profile.md)). With it on, the watcher fetches in the background after `ready`. |

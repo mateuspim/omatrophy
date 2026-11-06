@@ -6,6 +6,8 @@
   plain prose for the player, with no "`table`" citations or "the
   provided table has no chunk ids". Such talk asks the agent again, and
   what is left is cut. Make a guide again to get the cleaner text.
+- **Reveal all** is remembered (`reveal-hidden`) for every game and
+  every open, sits next to Up next too, and Shift+Enter flips it.
 
 ## 0.6.0 - 2026-11-06
 

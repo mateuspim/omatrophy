@@ -1112,12 +1112,14 @@ SETTINGS = {'position': ('top-center', 'top-left', 'top-right'),
             'settings-section': ('overview', 'toasts', 'now', 'guides', 'stores'),
             'community': ('on', 'off'),
             'guide-web': ('on', 'off'),
-            'guide-jail': ('on', 'off')}
+            'guide-jail': ('on', 'off'),
+            # The tracker's Reveal all, kept across opens and games.
+            'reveal-hidden': ('on', 'off')}
 # The Now tab's sections, each shown unless switched off in Settings.
 NOW_SECTIONS = ('metals', 'recent', 'rarest', 'shelf')
 SETTINGS.update({f'now-{name}': ('on', 'off') for name in NOW_SECTIONS})
 # Settings stored as true/false rather than the word given.
-SWITCHES = {'community', 'guide-web', 'guide-jail'} | {f'now-{name}' for name in NOW_SECTIONS}
+SWITCHES = {'community', 'guide-web', 'guide-jail', 'reveal-hidden'} | {f'now-{name}' for name in NOW_SECTIONS}
 
 
 def set_option(key, value):
@@ -1137,6 +1139,7 @@ def set_option(key, value):
                          f'       omatrophy.py set games-sort {"|".join(SETTINGS["games-sort"])}\n'
                          f'       omatrophy.py set rarest {"|".join(SETTINGS["rarest"])}\n'
                          f'       omatrophy.py set community on|off\n'
+                         f'       omatrophy.py set reveal-hidden on|off\n'
                          f'       omatrophy.py set now-{{{",".join(NOW_SECTIONS)}}} on|off')
     path = config_path()
     cfg = read_json(path, {})

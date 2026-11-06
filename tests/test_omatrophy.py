@@ -1210,6 +1210,10 @@ class Settings(unittest.TestCase):
                 omatrophy.set_option('glass', 'mirror')
             with self.assertRaises(SystemExit):
                 omatrophy.set_option('tracker-sort', 'random')
+            with redirect_stdout(io.StringIO()):
+                omatrophy.set_option('reveal-hidden', 'on')
+            with open(f'{home}/.config/omatrophy/config.json') as f:
+                self.assertIs(json.load(f)['reveal-hidden'], True)
 
 
     def test_now_sections_switch_on_and_off_as_booleans(self):

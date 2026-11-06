@@ -52,9 +52,10 @@ Item {
   property bool cascading: false
   // Hidden achievements revealed with Enter, by api name; hover reveals too.
   property var revealed: ({})
-  // The Guide tab's Reveal all: every hidden one shows its name and tip,
-  // for a player who'd rather plan than be surprised. Per open, like
-  // `revealed`; a new game starts hidden again.
+  // Reveal all: every hidden one shows its name and tip, for a player
+  // who'd rather plan than be surprised. Kept in config.json
+  // (`reveal-hidden`): the owner turned it on for every game and every
+  // open, and found clicking it again each time no better than one by one.
   property bool revealAll: false
   // Nothing left to unlock: a make would spend the owner's tokens on a
   // guide with nothing to plan (it did, for a platinum game).
@@ -131,7 +132,6 @@ Item {
   }
 
   onGameChanged: {
-    revealAll = false
     var index = {}
     if (game) game.achievements.forEach(function(a) { index[a.api] = a })
     byApi = index
@@ -293,6 +293,11 @@ Item {
 
   function pageRows() {
     return Math.max(1, Math.floor(list.height / Commons.Style.space(58)))
+  }
+
+  function toggleRevealAll() {
+    revealAll = !revealAll
+    if (live) saver.exec(["python3", helperPath, "set", "reveal-hidden", revealAll ? "on" : "off"])
   }
 
   function toggleReveal() {
@@ -541,6 +546,7 @@ Item {
       if (Array.isArray(c.showcase)) root.showcaseKeys = c.showcase
       if (Array.isArray(c.completionist)) root.completionistKeys = c.completionist
       if (typeof c["guide-agent"] === "string") root.configAgent = c["guide-agent"]
+      root.revealAll = c["reveal-hidden"] === true
     }
   }
 
@@ -1228,6 +1234,8 @@ Item {
           root.moveTo(0)
         } else if (event.key === Qt.Key_End) {
           root.moveTo(list.count - 1)
+        } else if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && (event.modifiers & Qt.ShiftModifier)) {
+          root.toggleRevealAll()
         } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
           root.toggleReveal()
         } else if (event.key === Qt.Key_Space && !root.search && list.currentIndex >= 0) {
@@ -2136,11 +2144,27 @@ Item {
 
         // ---- the guide itself
 
-        SectionLabel {
+        Item {
+          width: parent.width
+          height: Math.max(upNextTitle.implicitHeight, upNextReveal.visible ? upNextReveal.height : 0)
           visible: root.hasGuide && (root.guide.next || []).length > 0 && !root.appliedSearch
-          text: "UP NEXT"
-          color: Commons.Color.accent
-          opacity: 1
+          SectionLabel {
+            id: upNextTitle
+            anchors.verticalCenter: parent.verticalCenter
+            text: "UP NEXT"
+            color: Commons.Color.accent
+            opacity: 1
+          }
+          // Next to where the guide starts too: Up next can be all secrets.
+          Chip {
+            id: upNextReveal
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            visible: root.secretCount > 0
+            chosen: root.revealAll
+            text: root.revealAll ? "Hide secrets" : "Reveal all"
+            onClicked: root.toggleRevealAll()
+          }
         }
         Column {
           width: parent.width
@@ -2237,7 +2261,7 @@ Item {
             visible: root.secretCount > 0
             chosen: root.revealAll
             text: (root.revealAll ? "Hide secrets · " : "Reveal all · ") + root.secretCount
-            onClicked: root.revealAll = !root.revealAll
+            onClicked: root.toggleRevealAll()
           }
           Caption {
             id: doneCount
@@ -2370,6 +2394,7 @@ Item {
         spacing: Commons.Style.space(14)
         Key { cap: "↑↓"; action: "move" }
         Key { cap: "Enter"; action: "reveal" }
+        Key { cap: "⇧Enter"; action: "reveal all" }
         Key { cap: "Tab"; action: "filter" }
         Key { cap: "←→"; action: "sort" }
         Key { cap: "Esc"; action: "close" }
