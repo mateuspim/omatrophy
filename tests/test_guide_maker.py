@@ -163,6 +163,16 @@ class Checks(unittest.TestCase):
         self.assertEqual(item['combine_with'], ['B'])
         self.assertEqual(len(errors), 2)
         self.assertEqual(guide_maker.check_item({'name': 'Z'}, {'A'})[0], None)
+
+    def test_an_estimated_time_stays_unverified_beside_a_verified_quote(self):
+        raw = {'name': 'A', 'phase': 'quick', 'time': '~5 min', 'time_estimate': True, 'tips': 'Open the door twice.',
+               'cites': [{'source': 'https://x', 'quote': 'open the red door twice in chapter one'}]}
+        item, _ = guide_maker.check_item(raw, {'A'})
+        self.assertEqual(item['unverified'], ['time'])
+        sources = {'https://x': {'text': 'Tip: open the red door twice in chapter one to get it.'}}
+        self.assertEqual(guide_maker.verify_cites(item, sources, [])['unverified'], ['time'])
+        sourced, _ = guide_maker.check_item(dict(raw, time_estimate=False), {'A'})
+        self.assertEqual(guide_maker.verify_cites(sourced, sources, [])['unverified'], [])
         self.assertEqual(guide_maker.check_item({'name': 'A', 'difficulty': ' 3 '}, {'A'})[0]['difficulty'], 3)
 
     def test_check_route(self):
