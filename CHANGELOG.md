@@ -41,6 +41,9 @@ open; the watcher and `Tracker.qml` are unchanged, so no restart is needed.
 - The Sandbox works with ai-jail 3.x, which refused every agent: OmaTrophy
   passes the network and the agent's login itself and starts from a clean
   policy, so there is nothing to approve in `ai-jail configure`.
+- Guides give every achievement a time: with no source stating one, the
+  agent estimates it and the guide marks it "(unverified)" (before, no
+  guide had times, since sources rarely state them).
 - Codex's guides verify: OmaTrophy fetches the trusted-site pages in its
   web search results (its search runs on OpenAI's side and gave no page),
   best site first, skipping Steam players' own pages. GPT-6.1 Sol went

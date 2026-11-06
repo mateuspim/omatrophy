@@ -391,6 +391,11 @@ def check_item(raw, names):
     item['cites'] = check_cites(raw.get('cites'))
     unver = raw.get('unverified')
     item['unverified'] = [f for f in unver if isinstance(f, str)] if isinstance(unver, list) else []
+    # An estimated time stays unverified even when a quote backs the
+    # item's other claims: before estimates no guide had a time at all
+    # (no source states one for most achievements).
+    if raw.get('time_estimate') is True and item.get('time') and 'time' not in item['unverified']:
+        item['unverified'].append('time')
     return item, errors
 
 

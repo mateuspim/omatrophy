@@ -106,7 +106,10 @@ OmaTrophy doesn't know survive a rewrite.
 - `phase`: `missable`, `story`, `quick`, `challenge`, `grind`, `collect`,
   `online`. The tracker groups by phase in that order, missables first.
 - `difficulty` 1-5; `minutes` is `[low, high]` and comes with `time`, the
-  text the guide shows; either may be missing.
+  text the guide shows; either may be missing. With no source giving a
+  time, classify estimates one (`"time_estimate": true` in its answer,
+  not stored) and `time` is always in `unverified`, even when another
+  quote verifies the item.
 - `missable_note` says where the point of no return is; it's empty when
   that's unknown.
 - `counter` is set only for a target of 2 or more; `null` otherwise.

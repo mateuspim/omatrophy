@@ -26,7 +26,9 @@ For each achievement to classify, give:
   `online` for multiplayer.
 - `difficulty`: 1 (trivial) to 5 (very hard).
 - `time`: short text such as "~10-30 min", and `minutes`: `[low, high]`
-  as whole numbers. Leave both out when no source gives a time.
+  as whole numbers. When no source gives a time, estimate one from what
+  the achievement asks and the game's length, and set
+  `"time_estimate": true`; the guide shows it as unverified.
 - `missable`: true or false; `missable_note`: where the point of no return
   is, or "" when unknown.
 - `counter`: `{"target": 50, "label": "kills"}` for a count of 2 or more,
