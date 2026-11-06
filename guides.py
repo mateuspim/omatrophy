@@ -153,12 +153,36 @@ def guide_answer(store, app, achievements, folder=None):
     name_to_api = {i['name']: api for api, i in items.items()}
     order = [name_to_api[n] for n in plan.get('order', []) if n in name_to_api]
     order += [api for api in items if api not in order]
+    steps = walkthrough_steps(plan, name_to_api, done)
     return {'store': store, 'app': str(app), 'file': os.path.basename(path),
             'generated': plan.get('generated', 0), 'order': order, 'items': items,
             'sections': plan.get('sections') or {}, 'notes': notes, 'ticks': ticks,
             'next': open_order(order, items, done),
             'agent': plan.get('agent') if isinstance(plan.get('agent'), dict) else {},
-            'cost_usd': plan_cost(plan), 'outdated': outdated(plan)}
+            'cost_usd': plan_cost(plan), 'outdated': outdated(plan),
+            'walkthrough': steps, 'step': current_step(steps)}
+
+
+def walkthrough_steps(plan, name_to_api, done):
+    """The plan's walkthrough for the tracker: each step's achievements
+    and missables as `api`s (names the store doesn't know are dropped),
+    and `done` when none of its achievements is left open."""
+    steps = []
+    for s in plan.get('walkthrough') if isinstance(plan.get('walkthrough'), list) else []:
+        if not isinstance(s, dict) or not isinstance(s.get('title'), str):
+            continue
+        apis = [name_to_api[n] for n in s.get('achievements') or [] if n in name_to_api]
+        steps.append({'title': s['title'], 'text': s.get('text') if isinstance(s.get('text'), str) else '',
+                      'achievements': apis,
+                      'missables': [name_to_api[n] for n in s.get('missables') or [] if n in name_to_api],
+                      'unverified': s.get('unverified') is True,
+                      'done': bool(apis) and all(a in done for a in apis)})
+    return steps
+
+
+def current_step(steps):
+    """The index of the first step with an achievement still open, or -1."""
+    return next((i for i, s in enumerate(steps) if s['achievements'] and not s['done']), -1)
 
 
 def plan_cost(plan):

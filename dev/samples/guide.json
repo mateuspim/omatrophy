@@ -148,5 +148,65 @@
   "A4",
   "A3",
   "A5"
- ]
+ ],
+ "walkthrough": [
+  {
+   "title": "Chapter 1: Ember Station",
+   "text": "Light the first beacon on the way out of the station. The tutorial is short; nothing here can be missed.",
+   "achievements": [
+    "A0",
+    "A1"
+   ],
+   "missables": [],
+   "unverified": false,
+   "done": true
+  },
+  {
+   "title": "Chapters 2-5: The Veil",
+   "text": "Scan every system the first time you pass it; the map marks the ones left. Chapter 2 is the shortest, so try the pacifist run there.",
+   "achievements": [
+    "A3",
+    "A5"
+   ],
+   "missables": [
+    "A3"
+   ],
+   "unverified": false,
+   "done": false
+  },
+  {
+   "title": "Chapter 6: The Collapse",
+   "text": "The Veil closes for good when the chapter starts: finish scanning first. Relics glow on the map once a system is scanned.",
+   "achievements": [
+    "A6"
+   ],
+   "missables": [],
+   "unverified": false,
+   "done": false
+  },
+  {
+   "title": "The last choice",
+   "text": "Pick the quiet answer at the end. Save before the final conversation.",
+   "achievements": [
+    "A4",
+    "A2"
+   ],
+   "missables": [
+    "A4"
+   ],
+   "unverified": false,
+   "done": false
+  },
+  {
+   "title": "After the credits",
+   "text": "Nightmare with every upgrade carried over.",
+   "achievements": [
+    "A8"
+   ],
+   "missables": [],
+   "unverified": true,
+   "done": false
+  }
+ ],
+ "step": 1
 }

@@ -94,6 +94,19 @@ class GuideAnswer(unittest.TestCase):
         self.assertEqual(out['sections']['route'], 'Lantern first, then stars.')
         self.assertEqual(out['generated'], 1792990000)
 
+    def test_walkthrough_steps_map_names_and_find_the_current_step(self):
+        plan = {'walkthrough': [
+            {'title': 'Act 1', 'text': 'Go.', 'achievements': ['a', 'gone'], 'missables': ['a']},
+            {'title': 'Act 2', 'text': 'On.', 'achievements': ['b'], 'missables': [], 'unverified': True},
+            {'title': 'Credits', 'achievements': []}, 'junk']}
+        steps = guides.walkthrough_steps(plan, {'a': 'A1', 'b': 'B1'}, {'A1'})
+        self.assertEqual([(s['title'], s['achievements'], s['done']) for s in steps],
+                         [('Act 1', ['A1'], True), ('Act 2', ['B1'], False), ('Credits', [], False)])
+        self.assertEqual(steps[0]['missables'], ['A1'])
+        self.assertTrue(steps[1]['unverified'])
+        self.assertEqual(guides.current_step(steps), 1)
+        self.assertEqual(guides.current_step(steps[:1]), -1)
+
     def test_next_skips_done_and_puts_missables_first(self):
         items = {'a': {'name': 'a'}, 'b': {'name': 'b', 'missable': True}, 'c': {'name': 'c'}, 'd': {'name': 'd'}}
         done = {'c'}

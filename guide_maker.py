@@ -333,8 +333,10 @@ def kept_sources(path, now):
     found = read_json(path, {})
     if not isinstance(found, dict):
         return {}
+    # Lists of posts an older maker fetched are no source either.
     return {url: s for url, s in found.items()
-            if isinstance(s, dict) and isinstance(s.get('text'), str) and now - (s.get('fetched') or 0) < SOURCES_KEPT}
+            if isinstance(s, dict) and isinstance(s.get('text'), str) and now - (s.get('fetched') or 0) < SOURCES_KEPT
+            and not listing_page(url)}
 
 
 # ------------------------------------------------------------ answers
@@ -499,6 +501,44 @@ def check_route(text, names):
     return {'order': order, 'sections': sections}, errors
 
 
+WALK_STEPS = 40
+
+
+def check_walkthrough(text, names):
+    """(steps, errors) from a walkthrough answer: each step a title, text,
+    achievements and missables (names known here), and cites."""
+    try:
+        raw = tagged(text, 'walkthrough')
+    except ValueError as e:
+        return [], [str(e)]
+    found = raw.get('steps') if isinstance(raw, dict) else None
+    if not isinstance(found, list):
+        return [], ['the <walkthrough> block must be {"steps": [...]}']
+    steps, errors = [], []
+    for i, s in enumerate(found[:WALK_STEPS], 1):
+        if not isinstance(s, dict) or not isinstance(s.get('title'), str) or not s['title'].strip():
+            errors.append(f'step {i} has no title')
+            continue
+        body = s.get('text') if isinstance(s.get('text'), str) else ''
+        talk = meta_talk(s['title'] + ' ' + body)
+        if talk:
+            errors.append(f'step {i} talks about your input ({", ".join(sorted(set(talk))[:3])}); write for the player')
+        achs = []
+        for n in s.get('achievements') if isinstance(s.get('achievements'), list) else []:
+            if n in names and n not in achs:
+                achs.append(n)
+            elif n not in names:
+                errors.append(f'step {i} names {n!r}, which is not an achievement here')
+        miss = s.get('missables') if isinstance(s.get('missables'), list) else []
+        steps.append({'title': scrub_meta(s['title'].strip()), 'text': scrub_meta(body.strip()), 'achievements': achs,
+                      'missables': [n for n in miss if n in achs], 'cites': check_cites(s.get('cites'))})
+    if len(found) > WALK_STEPS:
+        errors.append(f'at most {WALK_STEPS} steps')
+    if not steps:
+        errors.append('no steps')
+    return steps, errors
+
+
 def check_research(text, names):
     try:
         raw = tagged(text, 'research')
@@ -526,15 +566,14 @@ def says_more_than(quote, given):
     return len(re.sub(r'[^a-z0-9]+', '', rest)) >= QUOTE_MIN - 2
 
 
-def verify_cites(item, sources, pieces, given=()):
-    """Mark each cite verified when its quote is in the source it names (a
-    URL or a chunk id), or else in any source we hold, and says more than
-    `given` (the store's own text for the achievement); then list the
-    item's claims as unverified when none verified."""
+def verify_quotes(raw, sources, pieces, given=()):
+    """Each cite marked verified when its quote is in the source it names
+    (a URL or a chunk id), or else in any source we hold, and says more
+    than `given` (the store's own text for the achievement)."""
     by_chunk = {p['id']: p['url'] for p in pieces}
     folded = {url: fold(s.get('text', '')) for url, s in sources.items()}
     cites = []
-    for c in item.get('cites', []):
+    for c in raw:
         quote = fold(c['quote'])
         url = by_chunk.get(c['source'], c['source'])
         # The prompt asks for 12-200 characters; a little over still checks.
@@ -545,6 +584,13 @@ def verify_cites(item, sources, pieces, given=()):
                 hit = next((u for u, t in folded.items() if quote in t), None)
                 url, ok = (hit, True) if hit else (url, False)
         cites.append({'source': url, 'quote': c['quote'][:QUOTE_MAX * 2], 'verified': bool(ok)})
+    return cites
+
+
+def verify_cites(item, sources, pieces, given=()):
+    """verify_quotes() for one item, then its claims listed as unverified
+    when no quote verified."""
+    cites = verify_quotes(item.get('cites', []), sources, pieces, given)
     item = dict(item, cites=cites)
     # Only claims the item makes can be unverified: a model also lists
     # fields it left empty, or judgments like difficulty, which would only
@@ -592,6 +638,32 @@ def table_line(name, item, unlocked, desc=''):
     if item.get('dlc'):
         parts.append(f'DLC {item["dlc"]}')
     return f'- {name}{" [unlocked]" if unlocked else ""}: ' + '; '.join(parts) + (f' — {desc}' if desc else '')
+
+
+# A walkthrough reads the game's chapters and missions; a chunk naming
+# them is worth more than one that only matches an achievement's words.
+WALK_WORDS = re.compile(r'\b(walkthrough|chapter|mission|episode|act|stage|level|area|before you|point of no return)\b', re.I)
+WALK_CHARS = 16000
+
+
+def walkthrough_excerpts(achs, pieces, limit=WALK_CHARS):
+    """Excerpts for the walkthrough stage: the best ones for each open
+    achievement in route order, then chunks that read like a walkthrough,
+    trusted sites first, until `limit` characters."""
+    picked, size = [], 0
+    def take(p):
+        nonlocal size
+        if p not in picked and size + len(p['text']) <= limit:
+            picked.append(p)
+            size += len(p['text'])
+    for a in achs:
+        for p in excerpts_for(a, pieces, n=2):
+            take(p)
+    ranked = sorted((p for p in pieces if WALK_WORDS.search(p['text'])),
+                    key=lambda p: (site_rank(p['url']), -len(WALK_WORDS.findall(p['text'])), p['id']))
+    for p in ranked:
+        take(p)
+    return picked
 
 
 def excerpt_block(pieces):
@@ -834,13 +906,41 @@ class Job:
                                  lambda a, b: b if b.get('order') else a)
         return found or {'order': [], 'sections': {}}, errors
 
+    def walkthrough(self, table, order, pieces):
+        """The walkthrough steps, cites verified; ([], errors) when the
+        answers didn't parse, so the guide still gets written."""
+        by_name = {a['name']: a for a in self.achs}
+        names = [n for n in order if n in table] + [n for n in table if n not in order]
+        rows = []
+        for n in names:
+            a = by_name.get(n, {})
+            secret = a.get('hidden') and not a.get('unlocked')
+            rows.append(table_line(n, table[n], a.get('unlocked'), '' if secret else a.get('desc', '')))
+        done = sum(1 for a in self.achs if a.get('unlocked'))
+        open_achs = [by_name[n] for n in names if n in by_name and not by_name[n].get('unlocked')]
+        picked = walkthrough_excerpts(open_achs, pieces)
+        text = prompt('walkthrough', game=self.game, progress=f'{done} of {len(self.achs)} unlocked',
+                      excerpts=excerpt_block(picked), table='\n'.join(rows))
+        try:
+            steps, errors = self.ask('walkthrough', text, lambda t: check_walkthrough(t, set(table)),
+                                     lambda a, b: b or a)
+        except RuntimeError as e:
+            # The items and route are made by now; a walkthrough that
+            # failed costs only the walkthrough.
+            return [], [str(e)]
+        out = []
+        for s in steps or []:
+            cites = verify_quotes(s['cites'], self.sources, pieces)
+            out.append(dict(s, cites=cites, unverified=not any(c['verified'] for c in cites)))
+        return out, errors
+
     def run(self):
         os.makedirs(self.folder, exist_ok=True)
         clear_stop(self.folder)
         name = guide_name(self.store, self.app, self.game, self.folder)
         open_achs = [a for a in self.achs if not a.get('unlocked')]
         batches = (len(open_achs) + BATCH_SIZE - 1) // BATCH_SIZE
-        self.total = 1 + int(self.web) + batches + 2
+        self.total = 1 + int(self.web) + batches + 3
         self.step('gather', f'gather: sources for {self.game}')
         self.gather(name)
         self.done += 1
@@ -865,12 +965,15 @@ class Job:
         table.update(items)
         route, route_errors = self.route(table)
         self.done += 1
-        self.step('verify', 'verify: checking every quote')
-        self.write(name, old, items, route, pieces)
+        self.step('walkthrough', 'walkthrough: steps through the game')
+        walk, walk_errors = self.walkthrough(table, route['order'], pieces)
         self.done += 1
-        return name, problems + route_errors
+        self.step('verify', 'verify: checking every quote')
+        self.write(name, old, items, route, pieces, walk)
+        self.done += 1
+        return name, problems + route_errors + walk_errors
 
-    def write(self, name, old, items, route, pieces):
+    def write(self, name, old, items, route, pieces, walk=()):
         md = os.path.join(self.folder, name + '.md')
         hand = []
         try:
@@ -905,6 +1008,7 @@ class Job:
                                'stages': stage_counts(self.usage)},
                      'order': route['order'] or list(items), 'items': plan_items,
                      'sections': route['sections'] or old.get('sections') or {},
+                     'walkthrough': list(walk) or old.get('walkthrough') or [],
                      'usage': (old.get('usage') if isinstance(old.get('usage'), list) else []) + self.usage})
         keep_previous(md)
         keep_previous(guides.plan_path(md))

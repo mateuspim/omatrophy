@@ -144,7 +144,7 @@ omarchy-shell shell summon pym.omatrophy '{}'   # the running or last game
 
 ## 100% guides
 
-![The tracker's Guide tab for a sample game: up next, the overview and route on the left, every open achievement by phase on the right](docs/brand/captures/guide.png)
+![The tracker's Guide tab for a sample game: up next and the walkthrough on the left, every open achievement by phase on the right](docs/brand/captures/guide.png)
 
 The tracker's **Guide** tab shows a game's path to 100%: what to do next,
 an overview and the recommended route, then every open achievement by
@@ -156,6 +156,14 @@ next and the trophy list, or Shift+Enter) shows every one, in every game,
 until you hide them again.
 Anything no source backs says
 "(unverified)". With a guide, the Now tab's **Up next** follows its route.
+
+Under Up next, the **walkthrough** goes through the game's chapters or
+missions in play order, with the achievements to get in each and a ⚠ on
+the ones you lose by moving on. The step you're on (the first with an
+achievement left) is open; click another to read it
+([ADR 17](docs/adr/0017-walkthrough-is-a-maker-stage.md)). A guide made
+before 0.7.0 has none: the tracker says "older maker", and **Make again**
+adds one.
 
 ### The guide over your game
 

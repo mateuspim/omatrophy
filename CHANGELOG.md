@@ -10,6 +10,10 @@
   OmaTrophy fetches the full page when the agent read only a summary,
   and skips a blog's lists of posts. A guide made before this says so
   next to **Make again**.
+- **Walkthrough**: a guide now goes through the game's chapters or
+  missions in play order, with the achievements to get in each and the
+  missable ones marked, the step you're on open (ADR 17). One more agent
+  call per guide.
 - **The guide over your game**: a key (Super+Ctrl+G suggested; copy
   the bind from Settings > Guides) opens the running game's guide over
   it and closes it again, like Steam's Shift+Tab (ADR 16).

@@ -28,6 +28,7 @@ made.
 | [14](0014-generate-guides-through-the-users-agent.md) | Make 100% guides through the user's own coding agent, on request | Accepted |
 | [15](0015-check-an-agents-lock-on-the-owners-machine.md) | Check an agent's lock on the owner's machine, per installed binary | Accepted |
 | [16](0016-in-game-guide-is-the-tracker-on-a-key.md) | The in-game guide is the tracker's Guide tab on a key | Accepted |
+| [17](0017-walkthrough-is-a-maker-stage.md) | The walkthrough is one more maker stage, checked like the rest | Accepted |
 
 ## Rules
 

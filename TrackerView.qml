@@ -91,6 +91,13 @@ Item {
   // The trophy picked on the guide side (an Up next row): the trophy list
   // scrolls to it and lights it.
   property string highlightApi: ""
+  // The walkthrough step shown open: -1 follows the guide's current step
+  // (the first with an achievement left), so the in-game guide opens on
+  // where the player is (ADR 17); -2 when the player folded every step.
+  property int openStep: -1
+  readonly property var walkSteps: guide && Array.isArray(guide.walkthrough) ? guide.walkthrough : []
+  readonly property int shownStep: openStep >= 0 ? openStep : openStep === -2 ? -1
+                                   : (guide && guide.step >= 0 ? guide.step : -1)
   // The agent and model picker; folded away under a made guide.
   property bool makerOpen: false
   // Which Make-guide picker is unfolded: "agent", "model", "effort" or "".
@@ -132,6 +139,7 @@ Item {
   }
 
   onGameChanged: {
+    openStep = -1
     var index = {}
     if (game) game.achievements.forEach(function(a) { index[a.api] = a })
     byApi = index
@@ -472,6 +480,18 @@ Item {
   function stopGuide() {
     Quickshell.execDetached(["python3", helperPath, "guide", "stop"])
     job = Object.assign({}, job, { line: "stopping…" })
+  }
+
+  // A walkthrough step's achievements in one line: a hidden one stays
+  // secret like its row, a missable one is marked, a done one ticked.
+  function stepNames(step) {
+    var missables = step.missables || []
+    return (step.achievements || []).map(function(api) {
+      var a = byApi[api] || { name: api }
+      var secret = a.hidden && !a.unlocked && !revealed[api] && !revealAll
+      return (missables.indexOf(api) >= 0 && !guideDone(api) ? "⚠ " : "") + (secret ? "Hidden achievement" : a.name)
+             + (guideDone(api) ? " ✓" : "")
+    }).join("  ·  ")
   }
 
   function guideDone(api) {
@@ -2177,6 +2197,85 @@ Item {
           Repeater {
             model: root.hasGuide ? root.guide.next || [] : []
             delegate: GuideRow { required property string modelData; api: modelData }
+          }
+        }
+
+        // The walkthrough (ADR 17): the game's chapters in play order, the
+        // current one open; a click opens another.
+        SectionLabel {
+          visible: root.hasGuide && root.walkSteps.length > 0 && !root.appliedSearch
+          text: "WALKTHROUGH" + (root.guide && root.guide.step >= 0 ? " · STEP " + (root.guide.step + 1) + " OF " + root.walkSteps.length : "")
+        }
+        Column {
+          width: parent.width
+          visible: root.hasGuide && root.walkSteps.length > 0 && !root.appliedSearch
+          spacing: Commons.Style.space(2)
+          Repeater {
+            model: root.hasGuide && !root.appliedSearch ? root.walkSteps : []
+            delegate: Rectangle {
+              id: walkRow
+              required property var modelData
+              required property int index
+              readonly property bool open: root.shownStep === index
+              readonly property bool here: root.guide.step === index
+              width: parent.width
+              height: walkBody.height + Commons.Style.space(12)
+              radius: Commons.Style.cornerRadius
+              color: here ? Qt.alpha(Commons.Color.accent, 0.10) : walkHover.hovered ? Commons.Style.hoverFill : "transparent"
+              opacity: modelData.done && !open ? 0.5 : 1
+              HoverHandler { id: walkHover; cursorShape: Qt.PointingHandCursor }
+              TapHandler { onTapped: root.openStep = walkRow.open ? -2 : walkRow.index }
+              Text {
+                textFormat: Text.PlainText
+                id: walkNumber
+                x: Commons.Style.space(8)
+                y: Commons.Style.space(6)
+                width: Commons.Style.space(22)
+                text: walkRow.modelData.done ? "✓" : String(walkRow.index + 1)
+                color: walkRow.here ? Commons.Color.accent : root.foreground
+                opacity: walkRow.here ? 1 : 0.5
+                font.family: Commons.Style.font.family
+                font.pixelSize: Commons.Style.font.bodySmall
+                font.bold: true
+              }
+              Column {
+                id: walkBody
+                anchors.left: walkNumber.right
+                anchors.right: parent.right
+                anchors.rightMargin: Commons.Style.space(8)
+                y: Commons.Style.space(6)
+                spacing: Commons.Style.space(3)
+                Text {
+                  textFormat: Text.PlainText
+                  width: parent.width
+                  wrapMode: Text.Wrap
+                  text: walkRow.modelData.title
+                  color: walkRow.here ? Commons.Color.accent : root.foreground
+                  font.family: Commons.Style.font.family
+                  font.pixelSize: Commons.Style.font.bodySmall
+                  font.bold: true
+                }
+                Prose {
+                  width: parent.width
+                  visible: walkRow.open && text !== ""
+                  text: root.safeMarkdown(walkRow.modelData.text)
+                }
+                Caption {
+                  textFormat: Text.PlainText
+                  width: parent.width
+                  wrapMode: walkRow.open ? Text.Wrap : Text.NoWrap
+                  visible: text !== ""
+                  text: root.stepNames(walkRow.modelData)
+                }
+                Caption {
+                  textFormat: Text.PlainText
+                  visible: walkRow.open && walkRow.modelData.unverified
+                  text: "(unverified: no source backs this step)"
+                  font.italic: true
+                  opacity: 0.45
+                }
+              }
+            }
           }
         }
 
