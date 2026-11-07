@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.6.2 - 2026-11-07
+
+Two fixes for the Steam profile backfill (`community`, off by default)
+that were made on another machine and never reached a release. Needs
+one `omarchy restart shell`, with no game running: the backfill runs in
+the watcher, which keeps the code it started with.
+
+- Games whose profile page lists achievements under Steam's newer
+  `schema_v2` key are read again (STAR WARS Jedi: Survivor was one).
+- A page OmaTrophy can't read is skipped for a day
+  (`community/skipped.json`) instead of ending every run at that game.
+
 ## 0.6.1 - 2026-11-06
 
 Guides you can follow while you play: a walkthrough, and the guide over

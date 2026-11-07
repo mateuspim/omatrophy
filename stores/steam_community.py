@@ -25,6 +25,9 @@ ACTIVE_SECONDS = 60 * 86400
 DORMANT_SECONDS = 60 * 86400
 UNTOUCHED_SECONDS = 180 * 86400
 NONE_SECONDS = 30 * 86400
+# A page that comes back without data it can read (a new layout) is skipped
+# for a day, so one odd game can't stop every run at the same place.
+SKIP_SECONDS = 86400
 # Valve doesn't publish a rate. On 2026-10-27 it answered 429 after about
 # 20 pages in two and a half minutes, and once limited it kept answering
 # 429 for close to three hours (probed every 15 min until it served). So a run fetches at most PAGES_PER_RUN pages,
@@ -72,7 +75,9 @@ def parse_page(html, app):
     schema, user, info = None, None, None
     for key, data in found.items():
         if len(key) >= 3 and key[0] == 'achievements' and str(key[1]) == str(app):
-            if key[2] == 'schema':
+            # Steam serves both names for the same shape (seen 2026-10-28,
+            # schema_v2 on Jedi: Survivor); the newer one wins.
+            if key[2] == 'schema_v2' or (key[2] == 'schema' and schema is None):
                 schema = data
             elif key[2] == 'user_achievements':
                 user = data
@@ -156,6 +161,11 @@ def none_index():
     return read_json(f'{cache_dir()}/none.json', {})
 
 
+def skip_index():
+    """{app: unix seconds} of games whose page couldn't be read."""
+    return read_json(f'{cache_dir()}/skipped.json', {})
+
+
 def due(app, played, now, nones):
     """True when a game's page should be fetched: never fetched, played
     since the last fetch, or stale for how recently it was played."""
@@ -223,7 +233,8 @@ def backfill(account, played, local, fetch_page=fetch, pause=PAUSE_SECONDS, say=
              budget=None):
     """Fetch the pages of played games with no local stats file, most recent
     first, at most `budget` of them (by default next_budget() of the runs
-    so far). Any error (a rate limit, offline, a private profile) ends the
+    so far). A page it can't read is skipped for a day; any other error
+    (a rate limit, offline, a private profile) ends the
     run, and the next one resumes where it stopped.
     `played` is [(unix seconds, app)], `local` the apps with local stats.
     Returns (fetched, failed: bool)."""
@@ -231,7 +242,9 @@ def backfill(account, played, local, fetch_page=fetch, pause=PAUSE_SECONDS, say=
         budget = next_budget(runs())
     now = time.time()
     nones = none_index()
-    todo = [(t, app) for t, app in played if app_id(app) and app not in local and due(app, t, now, nones)]
+    skips = skip_index()
+    todo = [(t, app) for t, app in played if app_id(app) and app not in local and due(app, t, now, nones)
+            and now - skips.get(app, 0) > SKIP_SECONDS]
     fetched = 0
     shout = say
 
@@ -249,6 +262,11 @@ def backfill(account, played, local, fetch_page=fetch, pause=PAUSE_SECONDS, say=
             sleep(pause)
         try:
             page = fetch_page(account, app)
+        except ValueError as e:
+            skips[app] = int(time.time())
+            write_atomic(f'{cache_dir()}/skipped.json', skips)
+            say(f'skipped {app} for a day: {e}')
+            continue
         except Exception as e:
             limited = rate_limited(e)
             say(f'stopped at {app}: {e}', limited)
