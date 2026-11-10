@@ -597,6 +597,12 @@ Item {
     return String(text || "").replace(/!\[[^\]]*\]\([^)]*\)/g, "").replace(/<img\b[^>]*>/gi, "")
   }
 
+  // Short facts in a wrapping line ("~1-2 h", "9 / 14 systems") stay
+  // whole: the line broke between "9 /" and "14 systems".
+  function unbroken(text) {
+    return String(text).replace(/ /g, "\u00a0")
+  }
+
   function dots(n) {
     var out = ""
     for (var i = 1; i <= 5; i++) out += i <= n ? "●" : "○"
@@ -1156,11 +1162,11 @@ Item {
     readonly property string meta: {
       var parts = []
       if (item.missable && !done) parts.push("⚠ Missable" + (item.missable_note ? ": " + item.missable_note : ""))
-      if (item.time) parts.push(item.time)
+      if (item.time) parts.push(root.unbroken(item.time))
       if (item.difficulty) parts.push(root.dots(item.difficulty))
       if (item.counter && item.counter.target) {
         var at = ach.progress ? ach.progress.value + " / " : ""
-        parts.push(at + item.counter.target + (item.counter.label ? " " + item.counter.label : ""))
+        parts.push(root.unbroken(at + item.counter.target + (item.counter.label ? " " + item.counter.label : "")))
       }
       if (item.dlc) parts.push("DLC: " + item.dlc)
       return parts.join("  ·  ")
