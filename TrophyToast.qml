@@ -388,10 +388,14 @@ Item {
         width: root.cardWidth - row.x - 72 - row.spacing - 16
         spacing: 2
 
+        // Stops short of the art in the corner too: a large theme font
+        // ran "of players" into it.
         Row {
+          width: parent.width - iconBox.width - 12
           spacing: 8
           Text {
             textFormat: Text.PlainText
+            id: tierLabel
             text: root.tier.toUpperCase() + " TROPHY"
             color: root.tierColor
             font.family: Commons.Style.font.family
@@ -401,6 +405,8 @@ Item {
           }
           Text {
             textFormat: Text.PlainText
+            width: Math.max(0, parent.width - tierLabel.width - parent.spacing)
+            elide: Text.ElideRight
             text: root.event && root.event.percent !== null && root.event.percent !== undefined
                   ? root.event.percent.toFixed(1) + "% of players" : ""
             color: Qt.alpha(root.fg, 0.5)
@@ -417,6 +423,10 @@ Item {
           font.family: Commons.Style.font.family
           font.pixelSize: Commons.Style.fontPx(1.5)
           font.bold: true
+          // Two lines before it elides, like names in the panel; the card
+          // grows to fit.
+          wrapMode: Text.Wrap
+          maximumLineCount: 2
           elide: Text.ElideRight
         }
         Text {
@@ -426,7 +436,8 @@ Item {
           color: Qt.alpha(root.fg, 0.7)
           font.family: Commons.Style.font.family
           font.pixelSize: Commons.Style.font.body
-          wrapMode: Text.WordWrap
+          // Wrap, not WordWrap: one long unbroken word overflowed the card.
+          wrapMode: Text.Wrap
           maximumLineCount: 2
           elide: Text.ElideRight
         }
