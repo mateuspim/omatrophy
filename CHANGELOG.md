@@ -16,7 +16,9 @@ fonts. Only `TrophyToast.qml`, `PlatinumCard.qml`, `StylePicker.qml` and
   than run off the panel; the metal counts and the showcase hint move
   to their own line when they would overlap.
 - Guide tab: a counter such as "9 / 14 systems" no longer breaks across
-  lines.
+  lines, and a wrapped facts line no longer ends on a hanging " ·".
+- Settings > Toasts: the "Try it" tiles' trophy and label size with the
+  tile, so PLATINUM stays inside it at a small font.
 - Settings > Guides: the key recorder's "recording" tag no longer covers
   a long key.
 - Tracker: the hero art no longer covers the frame's right edge, and
