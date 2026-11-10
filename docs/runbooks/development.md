@@ -80,7 +80,13 @@ dev/render.sh now /tmp/now.png          # the panel mid-game; also idle, games, 
 dev/render.sh tracker /tmp/tracker.png  # the achievement tracker; tracker-loading for its skeleton
 dev/render.sh gold /tmp/gold.png        # a toast: bronze, silver, gold, platinum
 dev/render.sh --live tracker /tmp/t.png # your running or last game
+dev/render.sh --font 16 now /tmp/n.png  # at a larger theme font (the base is 12)
 ```
+
+`--font` swaps your theme's `[font] base-size` for the render only:
+every font token and the spacing follow it, and the panel widens as the
+real popup does. Text that overlaps or runs off an edge at 16 (or crowds
+at 9) shows up here first.
 
 The software renderer drops `MultiEffect` layers (the omarchy set's accent
 inlay, card masks and shadows); check those with `dev/preview.sh`.
