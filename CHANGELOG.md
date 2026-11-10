@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.3 - 2026-11-10
 
 A pass over every screen for text that was cut, overlapping or off its
 frame, checked with long names, big counts and small and large theme
