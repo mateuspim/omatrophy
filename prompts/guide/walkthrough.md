@@ -21,8 +21,19 @@ Steps:
   each. A step can hold no achievement when the story passes through it.
 - `title`: the chapter, mission or area as the game names it, when an
   excerpt names it; else a short plain name ("After the credits").
-- `text`: two to five short sentences: what to do there for 100%, where
-  to look, what not to skip. Spoiler-light for hidden achievements.
+- `text`: one sentence: what this step is for ("Finish the chapter and
+  pick up the two kill achievements on the way"). Spoiler-light for
+  hidden achievements.
+- `actions`: what to do there, in the order the player meets it: each
+  `{"where": "...", "what": "...", "achievement": "..."}`. `where` is the
+  place as the game names it (a room, an area, a boss arena, a menu);
+  `what` one short instruction; `achievement` the name it earns, or ""
+  when the action only gets the player on. A story step says where to go
+  and what to do there too, not only "play through the chapter". A
+  cleanup pass (chapter select, free roam) gets one action per place, in
+  the order to replay them, each with its chapter or area in `where`;
+  more than about 8 actions, split the step by chapter or area. At most
+  12 actions a step.
 - `achievements`: names exactly as listed, the ones got in this step,
   `[unlocked]` ones included: they show the player where they are. Every
   achievement in exactly one step: the step where it unlocks. One that
@@ -37,5 +48,6 @@ Steps:
 
 <walkthrough>
 {"steps": [{"title": "...", "text": "...", "achievements": ["..."], "missables": [],
+            "actions": [{"where": "...", "what": "...", "achievement": "..."}],
             "cites": [{"source": "S1.2", "quote": "..."}]}]}
 </walkthrough>

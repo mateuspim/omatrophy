@@ -211,12 +211,25 @@ def walkthrough_steps(plan, name_to_api, done):
             continue
         apis = [name_to_api[n] for n in s.get('achievements') or [] if n in name_to_api]
         steps.append({'title': s['title'], 'text': s.get('text') if isinstance(s.get('text'), str) else '',
-                      'achievements': apis,
+                      'achievements': apis, 'actions': step_actions(s.get('actions'), name_to_api),
                       'missables': [name_to_api[n] for n in s.get('missables') or [] if n in name_to_api],
                       'unverified': s.get('unverified') is True,
                       'started': any(a in done for a in apis),
                       'done': bool(apis) and all(a in done for a in apis)})
     return steps
+
+
+def step_actions(raw, name_to_api):
+    """A step's actions for the tracker (maker 4): {where, what, achievement}
+    with the achievement as an `api`, "" when it names none the store has.
+    An older step has none and shows its text alone."""
+    out = []
+    for a in raw if isinstance(raw, list) else []:
+        if not isinstance(a, dict) or not isinstance(a.get('what'), str) or not a['what'].strip():
+            continue
+        out.append({'where': a.get('where') if isinstance(a.get('where'), str) else '', 'what': a['what'],
+                    'achievement': name_to_api.get(a.get('achievement'), '') if isinstance(a.get('achievement'), str) else ''})
+    return out
 
 
 def current_step(steps):

@@ -605,6 +605,36 @@ def check_route(text, names):
 
 
 WALK_STEPS = 40
+# Actions a step keeps: past this a step is a cleanup pass that should be
+# split by place (the RE5 guide crammed 8 achievements over 4 chapters
+# into one paragraph).
+STEP_ACTIONS = 12
+ACTION_CHARS = 200
+
+
+def check_actions(raw, i, names):
+    """(actions, errors) for step `i`: each {where, what, achievement}, in
+    order. `what` is needed; `achievement` is optional and must be known;
+    talk about the input is an error and cut, as in the step's text."""
+    actions, errors = [], []
+    for n, a in enumerate(raw if isinstance(raw, list) else [], 1):
+        what = a.get('what') if isinstance(a, dict) else None
+        if not isinstance(what, str) or not what.strip():
+            errors.append(f'step {i} action {n} has no `what`')
+            continue
+        where = a.get('where') if isinstance(a.get('where'), str) else ''
+        talk = meta_talk(where + ' ' + what)
+        if talk:
+            errors.append(f'step {i} action {n} talks about your input ({", ".join(sorted(set(talk))[:3])})')
+        ach = a.get('achievement') if isinstance(a.get('achievement'), str) else ''
+        if ach and ach not in names:
+            errors.append(f'step {i} action {n} names {ach!r}, which is not an achievement here')
+            ach = ''
+        actions.append({'where': scrub_meta(where.strip())[:ACTION_CHARS],
+                        'what': scrub_meta(what.strip())[:ACTION_CHARS], 'achievement': ach})
+    if len(actions) > STEP_ACTIONS:
+        errors.append(f'step {i} has {len(actions)} actions; at most {STEP_ACTIONS}: split it by chapter or area')
+    return actions[:STEP_ACTIONS], errors
 
 
 def check_walkthrough(text, names, open_names=()):
@@ -639,8 +669,11 @@ def check_walkthrough(text, names, open_names=()):
                 errors.append(f'step {i} names {n!r}, which is not an achievement here')
         placed.update(achs)
         miss = s.get('missables') if isinstance(s.get('missables'), list) else []
+        actions, errs = check_actions(s.get('actions'), i, names)
+        errors += errs
         steps.append({'title': scrub_meta(s['title'].strip()), 'text': scrub_meta(body.strip()), 'achievements': achs,
-                      'missables': [n for n in miss if n in achs], 'cites': check_cites(s.get('cites'))})
+                      'missables': [n for n in miss if n in achs], 'actions': actions,
+                      'cites': check_cites(s.get('cites'))})
     if len(found) > WALK_STEPS:
         errors.append(f'at most {WALK_STEPS} steps')
     if not steps:
@@ -680,6 +713,22 @@ def says_more_than(quote, given):
     return len(re.sub(r'[^a-z0-9]+', '', rest)) >= QUOTE_MIN - 2
 
 
+# Words a quote can't stop on: "They will also unlock the" verified
+# against its page but says nothing (HANDOFF 2026-11-10).
+DANGLING = set('a an the and or but nor of to in on at by for from with into onto as than then that this these '
+               'those your you their its his her our my will would can could should must also is are was were be '
+               'been has have had do does if when while which who whose where so very more most'.split())
+
+
+def cut_off(quote):
+    """True when a folded quote stops mid-sentence on a word that needs
+    another after it; one ending in punctuation never is."""
+    if re.search(r'[.!?:;)\]"\']\s*$', quote):
+        return False
+    last = WORD.findall(quote)
+    return bool(last) and last[-1] in DANGLING
+
+
 def verify_quotes(raw, sources, pieces, given=()):
     """Each cite marked verified when its quote is in the source it names
     (a URL or a chunk id), or else in any source we hold, and says more
@@ -692,7 +741,7 @@ def verify_quotes(raw, sources, pieces, given=()):
         url = by_chunk.get(c['source'], c['source'])
         # The prompt asks for 12-200 characters; a little over still checks.
         ok = False
-        if QUOTE_MIN <= len(quote) <= QUOTE_MAX * 2 and says_more_than(quote, given):
+        if QUOTE_MIN <= len(quote) <= QUOTE_MAX * 2 and says_more_than(quote, given) and not cut_off(quote):
             ok = quote in folded.get(url, '')
             if not ok:
                 hit = next((u for u, t in folded.items() if quote in t), None)
@@ -758,7 +807,11 @@ def table_line(name, item, unlocked, desc=''):
 
 # A walkthrough reads the game's chapters and missions; a chunk naming
 # them is worth more than one that only matches an achievement's words.
-WALK_WORDS = re.compile(r'\b(walkthrough|chapter|mission|episode|act|stage|level|area|before you|point of no return)\b', re.I)
+# "act", "stage", "level" and "area" count only with a number after them
+# ("Act 2", "Stage IV"): bare, they are everyday words ("act fast", "the
+# area around") and pulled in chunks that weren't a walkthrough.
+WALK_WORDS = re.compile(r'\b(?:walkthrough|chapter|mission|episode|before you|point of no return'
+                        r'|(?:act|stage|level|area)\s+(?:\d+|[ivx]+\b))', re.I)
 WALK_CHARS = 16000
 
 
@@ -910,11 +963,15 @@ class Job:
         self.report(line or stage)
 
     # stages
-    def ask(self, stage, text, check, merge):
+    def ask(self, stage, text, check, merge=None, rank=None):
         """Run one model stage, check its answer, and ask once more with the
         errors listed; returns (value, errors), `merge` keeping the valid
-        part of both tries."""
-        best, errors = None, []
+        part of both tries. With no `merge`, the better answer wins by
+        `rank(value, errors)` (lower is better; default the error count),
+        the second on a tie: `b or a` took a retry that came back worse
+        (HANDOFF 2026-11-10)."""
+        rank = rank or (lambda value, errors: (not value, len(errors)))
+        best, errors, best_errors = None, [], []
         for attempt in (1, 2):
             if attempt == 2:
                 text = (text + '\n\nYour last answer had these problems:\n' + '\n'.join(f'- {e}' for e in errors[:20])
@@ -939,10 +996,15 @@ class Job:
             # its walkthrough cost doubled.
             if errors:
                 self.usage[-1]['errors'] = errors[:5]
-            best = value if best is None else merge(best, value)
+            if best is None:
+                best, best_errors = value, errors
+            elif merge:
+                best, best_errors = merge(best, value), errors
+            elif rank(value, errors) <= rank(best, best_errors):
+                best, best_errors = value, errors
             if not errors:
                 break
-        return best, errors
+        return best, best_errors
 
     def add_source(self, url, text, kind):
         if text and text.strip() and not search_page(url):
@@ -1031,7 +1093,7 @@ class Job:
         text = prompt('route', game=self.game, progress=f'{done} of {len(self.achs)} unlocked{played}',
                       table='\n'.join(rows))
         found, errors = self.ask('route', text, lambda t: check_route(t, set(items)),
-                                 lambda a, b: b if b.get('order') else a)
+                                 rank=lambda v, e: (not v.get('order'), len(e)))
         return found or {'order': [], 'sections': {}}, errors
 
     def walkthrough(self, table, order, pieces):
@@ -1058,9 +1120,11 @@ class Job:
         text = prompt('walkthrough', game=self.game, progress=f'{done} of {len(self.achs)} unlocked',
                       excerpts=excerpt_block(picked), table='\n'.join(rows))
         try:
-            steps, errors = self.ask('walkthrough', text,
-                                     lambda t: check_walkthrough(t, every, [a['name'] for a in open_achs]),
-                                     lambda a, b: b or a)
+            want = [a['name'] for a in open_achs]
+            # Open achievements left out weigh most: a walkthrough is for them.
+            steps, errors = self.ask('walkthrough', text, lambda t: check_walkthrough(t, every, want),
+                                     rank=lambda v, e: (not v, len(set(want) - {n for s in v for n in s['achievements']}),
+                                                        len(e)))
         except RuntimeError as e:
             # The items and route are made by now; a walkthrough that
             # failed costs only the walkthrough.

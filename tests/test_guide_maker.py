@@ -162,7 +162,7 @@ class Job(unittest.TestCase):
                   ' "missables": [], "cites": [{"source": "https://x.example/g", "quote": "Carry the lantern to the end"}]},'
                   ' {"title": "Nights", "achievements": ["Quiet Hours"], "missables": [],'
                   ' "cites": [{"source": "https://x.example/g", "quote": "In chapter four keep the lantern lit"}]}]}</walkthrough>')
-        job.ask = lambda stage, text, check, merge: check(answer)
+        job.ask = lambda stage, text, check, merge=None, **kw: check(answer)
         table = {'Last Lantern': {'missable': True}, 'Star Counter': {}, 'Quiet Hours': {}}
         steps, errors = job.walkthrough(table, list(table), [])
         self.assertEqual(errors, [])
@@ -174,7 +174,7 @@ class Job(unittest.TestCase):
     def test_walkthrough_is_told_the_unlocked_ones(self):
         job = self.job()
         seen = []
-        job.ask = lambda stage, text, check, merge: (seen.append(text) or ([], []))
+        job.ask = lambda stage, text, check, merge=None, **kw: (seen.append(text) or ([], []))
         job.walkthrough({'Last Lantern': {'phase': 'story'}}, ['Last Lantern'], [])
         self.assertIn('- First Light [unlocked]: done — Light the first beacon', seen[0])
 
@@ -301,7 +301,7 @@ class Checks(unittest.TestCase):
         steps, errors = guide_maker.check_walkthrough(
             '<walkthrough>{"steps": [{"title": "Act 1", "text": "The provided table says go.", '
             '"achievements": ["A", "Z"], "missables": ["A", "B"]}, {"text": "no title"}]}</walkthrough>', {'A', 'B'})
-        self.assertEqual(steps, [{'title': 'Act 1', 'text': '', 'achievements': ['A'], 'missables': ['A'], 'cites': []}])
+        self.assertEqual(steps, [{'title': 'Act 1', 'text': '', 'achievements': ['A'], 'missables': ['A'], 'actions': [], 'cites': []}])
         self.assertEqual(len(errors), 3)  # meta talk, Z unknown, step 2 untitled
         self.assertEqual(guide_maker.check_walkthrough('<walkthrough>[]</walkthrough>', {'A'})[0], [])
 
@@ -723,7 +723,7 @@ class RouteTable(unittest.TestCase):
     def test_the_route_prompt_gets_descriptions(self):
         seen = {}
         job = guide_maker.Job('steam', '1', 'Game', [dict(a) for a in ACHS], guide_agents.BY_ID['claude'])
-        job.ask = lambda stage, text, check, merge: (seen.setdefault('text', text), None)[1:] + ([],)
+        job.ask = lambda stage, text, check, merge=None, **kw: (seen.setdefault('text', text), None)[1:] + ([],)
         items = {a['name']: {'phase': 'story', 'difficulty': 1} for a in ACHS}
         job.route(items)
         self.assertIn('Carry the lantern to the end', seen['text'])
