@@ -1379,9 +1379,11 @@ Item {
 
     Item {
       id: header
-      x: card.contentLeftInset
-      y: card.contentTopInset
-      width: parent.width - card.contentLeftInset - card.contentRightInset
+      // Whole pixels inside the frame: a theme's 1.5 px border put the art
+      // on half pixels, and it painted over the frame's right edge.
+      x: Math.ceil(card.contentLeftInset)
+      y: Math.ceil(card.contentTopInset)
+      width: parent.width - x - Math.ceil(card.contentRightInset)
       height: Commons.Style.space(176)
 
       Image {
