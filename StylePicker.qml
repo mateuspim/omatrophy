@@ -4176,8 +4176,10 @@ Column {
                   anchors.horizontalCenter: parent.horizontalCenter
                   style: root.iconSet
                   metal: tile.modelData
-                  width: 22
-                  height: 22
+                  // Sized with the tile: fixed sizes ran PLATINUM over the
+                  // tile's edge at a small theme font.
+                  width: Commons.Style.space(22)
+                  height: Commons.Style.space(22)
                   scale: fire.pressed ? 0.9 : 1
                   Behavior on scale { NumberAnimation { duration: 90 } }
                 }
@@ -4188,7 +4190,7 @@ Column {
                   color: root.metalColors[tile.modelData]
                   opacity: fire.containsMouse ? 1 : 0.7
                   font.family: Commons.Style.font.family
-                  font.pixelSize: 8
+                  font.pixelSize: Commons.Style.space(8)
                   font.letterSpacing: 1
                 }
               }
