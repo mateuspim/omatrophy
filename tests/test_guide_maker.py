@@ -140,6 +140,10 @@ class Job(unittest.TestCase):
         write(self.agent_dir, 'items.retry', ITEMS)
         self.assertEqual(guide_maker.make(self.job())['state'], 'done')
         self.assertEqual(self.calls(), 5)  # items twice, route once, walkthrough twice (it names "Nope")
+        plan = json.loads(read(os.path.join(self.guides, 'starfall-odyssey-1.plan.json')))
+        walk = [u for u in plan['usage'] if u['stage'] == 'walkthrough']
+        self.assertTrue(any("'Nope'" in e for e in walk[0]['errors']))
+        self.assertNotIn('errors', [u for u in plan['usage'] if u['stage'] == 'route'][0])
 
     def test_walkthrough_steps_are_checked_and_verified(self):
         self.assertEqual(guide_maker.make(self.job())['state'], 'done')

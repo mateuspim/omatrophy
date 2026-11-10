@@ -889,6 +889,11 @@ class Job:
             if not found['ok']:
                 raise RuntimeError(f"{stage}: {found['error']}; the old guide is unchanged")
             value, errors = check(found['text'])
+            # Why the stage asked again, kept: a retry the second answer
+            # fixed left no trace, and the 2026-11-10 bench couldn't say why
+            # its walkthrough cost doubled.
+            if errors:
+                self.usage[-1]['errors'] = errors[:5]
             best = value if best is None else merge(best, value)
             if not errors:
                 break

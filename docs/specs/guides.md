@@ -122,6 +122,8 @@ OmaTrophy doesn't know survive a rewrite.
 - `details` (per-achievement steps, facts, pitfalls) and `progress`/`steps`
   (the games app's hand state) pass through untouched. The games app's
   `usage`, without `stage`, reads as one whole-guide run.
+- A `usage` entry whose answer failed the checks holds `errors` (up to
+  five), the reasons the stage asked again.
 - Format 1 is the games app's plan: no `format`, no `api`, no `minutes`,
   no `cites`. The reader accepts it.
 
