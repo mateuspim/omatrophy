@@ -630,8 +630,11 @@ def check_actions(raw, i, names):
         if ach and ach not in names:
             errors.append(f'step {i} action {n} names {ach!r}, which is not an achievement here')
             ach = ''
-        actions.append({'where': scrub_meta(where.strip())[:ACTION_CHARS],
-                        'what': scrub_meta(what.strip())[:ACTION_CHARS], 'achievement': ach})
+        what = scrub_meta(what.strip())[:ACTION_CHARS]
+        # All talk about the input: nothing left to do here.
+        if not what:
+            continue
+        actions.append({'where': scrub_meta(where.strip())[:ACTION_CHARS], 'what': what, 'achievement': ach})
     if len(actions) > STEP_ACTIONS:
         errors.append(f'step {i} has {len(actions)} actions; at most {STEP_ACTIONS}: split it by chapter or area')
     return actions[:STEP_ACTIONS], errors

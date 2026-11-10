@@ -95,7 +95,9 @@ OmaTrophy doesn't know survive a rewrite.
   },
   "sections": {"overview": "...", "route": "...", "missables": "...", "combos": "..."},
   "walkthrough": [{"title": "Chapter 2: The Veil", "text": "...", "achievements": ["Name"],
-                   "missables": ["Name"], "cites": [{"source": "https://...", "quote": "...", "verified": true}],
+                   "missables": ["Name"],
+                   "actions": [{"where": "Chapter 2-1, the gate", "what": "...", "achievement": "Name"}],
+                   "cites": [{"source": "https://...", "quote": "...", "verified": true}],
                    "unverified": false}],
   "usage": [{"engine": "claude", "stage": "classify", "input": 0, "output": 0,
              "cost_usd": 0.17, "seconds": 43, "ok": true, "ts": 1793059700}],
@@ -209,19 +211,34 @@ it.
    sentence).
 5. **Walkthrough** (model, no tools; [ADR 17](../adr/0017-walkthrough-is-a-maker-stage.md)).
    The items in the route's order, their best excerpts, then chunks that
-   read like a walkthrough (chapter, mission, act...), trusted sites
-   first, up to 16,000 characters. Answers
-   `<walkthrough>{"steps": [{title, text, achievements, missables, cites}]}</walkthrough>`,
+   read like a walkthrough (walkthrough, chapter, mission, episode; act,
+   stage, level and area only with a number after them, "Act 2"), trusted
+   sites first, up to 16,000 characters. Answers
+   `<walkthrough>{"steps": [{title, text, achievements, missables, actions, cites}]}</walkthrough>`,
    5 to 30 steps in play order (40 kept at most). Unknown names, talk
    about the input and open achievements in no step are errors that ask
    again. An achievement named in several steps stays in the first. Each
    step's `missables` gain its items that classify marked missable, and
    its quotes must say more than the store's text for its achievements,
-   as items' do. A failure here keeps the rest of the guide and the
-   earlier walkthrough.
+   as items' do. `text` is one sentence; `actions` (maker 4) are the
+   step's ordered moves, each `{where, what, achievement}`: `what` is
+   needed, `where` names the chapter, area or menu, `achievement` is
+   optional and must be a known name (an unknown one is an error and is
+   blanked). Talk about the input is cut; an action left with no `what`
+   is dropped. More than 12 actions is an error asking to split the step
+   by chapter or area (12 are kept). Older plans have no `actions` and
+   show their `text` alone. A failure here keeps the rest of the guide
+   and the earlier walkthrough.
+
+   Any stage that asks again keeps the better of its two answers: items
+   merge both; route takes the one with an order; walkthrough the one
+   with fewer open achievements in no step, then fewer errors; the
+   second wins a tie.
 6. **Verify** (no model). Validates the shape. Drops names not in the
    game. Matches each quote against the source text after folding case,
-   whitespace and quotes. Writes the files atomically.
+   whitespace and quotes; a quote that stops mid-sentence on a word that
+   needs another ("the", "and", "will"...) doesn't verify. Writes the
+   files atomically.
 
 Pages come from, in this order: the earlier `.sources.json`, files in
 `sources/<name>/` (named `file:<name>`), Steam guides, then pages the

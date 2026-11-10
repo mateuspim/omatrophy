@@ -107,6 +107,17 @@ class GuideAnswer(unittest.TestCase):
         self.assertEqual(guides.current_step(steps), 1)
         self.assertEqual(guides.current_step(steps[:1]), -1)
 
+    def test_step_actions_map_achievements_and_keep_old_steps_plain(self):
+        plan = {'walkthrough': [
+            {'title': 'Act 1', 'text': 'Go.', 'achievements': ['a'],
+             'actions': [{'where': 'Gate', 'what': 'Open it', 'achievement': 'a'},
+                         {'what': 'Look around', 'achievement': 'gone'}, {'where': 'x', 'what': ' '}, 'junk']},
+            {'title': 'Act 2', 'achievements': ['b']}]}
+        steps = guides.walkthrough_steps(plan, {'a': 'A1', 'b': 'B1'}, set())
+        self.assertEqual(steps[0]['actions'], [{'where': 'Gate', 'what': 'Open it', 'achievement': 'A1'},
+                                               {'where': '', 'what': 'Look around', 'achievement': ''}])
+        self.assertEqual(steps[1]['actions'], [])
+
     def test_walkthrough_maps_unlocked_trophies_not_in_the_plan(self):
         with tempfile.TemporaryDirectory() as d:
             guides.import_guides(SAMPLES, folder=d)

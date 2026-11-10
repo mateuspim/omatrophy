@@ -145,6 +145,21 @@ class Job(unittest.TestCase):
         self.assertTrue(any("'Nope'" in e for e in walk[0]['errors']))
         self.assertNotIn('errors', [u for u in plan['usage'] if u['stage'] == 'route'][0])
 
+    def test_a_worse_retry_does_not_replace_the_first_walkthrough(self):
+        # Regression: `b or a` kept the retry even when it placed fewer of
+        # the open achievements (HANDOFF 2026-11-10).
+        write(self.agent_dir, 'walkthrough.retry', '<walkthrough>{"steps": [{"title": "Nights", "text": "Look up.",'
+              ' "achievements": ["Star Counter"], "missables": [], "cites": []}]}</walkthrough>')
+        self.assertEqual(guide_maker.make(self.job())['state'], 'done')
+        plan = json.loads(read(os.path.join(self.guides, 'starfall-odyssey-1.plan.json')))
+        self.assertEqual([s['title'] for s in plan['walkthrough']], ['Chapter four', 'Nights'])
+
+    def test_a_better_retry_replaces_the_first_answer(self):
+        write(self.agent_dir, 'walkthrough.retry', WALK.replace('"Nope"', '"Quiet Hours"'))
+        self.assertEqual(guide_maker.make(self.job())['state'], 'done')
+        plan = json.loads(read(os.path.join(self.guides, 'starfall-odyssey-1.plan.json')))
+        self.assertEqual(plan['walkthrough'][0]['achievements'], ['Last Lantern', 'Quiet Hours'])
+
     def test_walkthrough_steps_are_checked_and_verified(self):
         self.assertEqual(guide_maker.make(self.job())['state'], 'done')
         plan = json.loads(read(os.path.join(self.guides, 'starfall-odyssey-1.plan.json')))
@@ -304,6 +319,50 @@ class Checks(unittest.TestCase):
         self.assertEqual(steps, [{'title': 'Act 1', 'text': '', 'achievements': ['A'], 'missables': ['A'], 'actions': [], 'cites': []}])
         self.assertEqual(len(errors), 3)  # meta talk, Z unknown, step 2 untitled
         self.assertEqual(guide_maker.check_walkthrough('<walkthrough>[]</walkthrough>', {'A'})[0], [])
+
+    def test_check_actions_keeps_ordered_known_actions(self):
+        raw = [{'where': 'Chapter 2-1, the gate', 'what': 'Shoot the three lamps', 'achievement': 'A'},
+               {'where': '', 'what': 'Talk to the guard', 'achievement': 'Z'},
+               {'where': 'Hub', 'what': '  '}, 'junk',
+               {'where': 'Hub', 'what': 'The provided table says wait'}]
+        actions, errors = guide_maker.check_actions(raw, 3, {'A'})
+        self.assertEqual(actions[:2], [{'where': 'Chapter 2-1, the gate', 'what': 'Shoot the three lamps', 'achievement': 'A'},
+                                       {'where': '', 'what': 'Talk to the guard', 'achievement': ''}])
+        self.assertEqual(len(actions), 2)  # the last was only talk about the input
+        self.assertEqual(len(errors), 4)  # Z unknown, two with no `what`, meta talk
+        self.assertTrue(all(e.startswith('step 3 action') for e in errors))
+        self.assertEqual(guide_maker.check_actions(None, 1, {'A'}), ([], []))
+
+    def test_check_actions_asks_to_split_a_long_cleanup(self):
+        raw = [{'where': f'Chapter {n}', 'what': 'Find the emblem'} for n in range(guide_maker.STEP_ACTIONS + 3)]
+        actions, errors = guide_maker.check_actions(raw, 1, set())
+        self.assertEqual(len(actions), guide_maker.STEP_ACTIONS)
+        self.assertIn('split it by chapter or area', errors[0])
+
+    def test_check_walkthrough_keeps_actions(self):
+        steps, errors = guide_maker.check_walkthrough(
+            '<walkthrough>{"steps": [{"title": "Chapter 1", "text": "Reach the market.", "achievements": ["A"],'
+            ' "actions": [{"where": "Market", "what": "Survive the crowd", "achievement": "A"}]}]}</walkthrough>', {'A'})
+        self.assertEqual(errors, [])
+        self.assertEqual(steps[0]['actions'], [{'where': 'Market', 'what': 'Survive the crowd', 'achievement': 'A'}])
+
+    def test_walk_words_need_a_number_after_everyday_words(self):
+        for text in ('Act 2 opens', 'Stage IV boss', 'level 3', 'Chapter one', 'the mission', 'walkthrough'):
+            self.assertTrue(guide_maker.WALK_WORDS.search(text), text)
+        for text in ('act fast here', 'the area around the lake', 'level up your gun', 'set the stage for it'):
+            self.assertIsNone(guide_maker.WALK_WORDS.search(text), text)
+
+    def test_cut_off_quotes_do_not_verify(self):
+        self.assertTrue(guide_maker.cut_off('they will also unlock the'))
+        self.assertTrue(guide_maker.cut_off('beat the boss and'))
+        self.assertFalse(guide_maker.cut_off('beat the boss without a hit'))
+        self.assertFalse(guide_maker.cut_off('you need it before the.'))
+        self.assertFalse(guide_maker.cut_off(''))
+        sources = {'https://x.example/g': {'text': 'Finish chapter two. They will also unlock the vault door later.'}}
+        cites = [{'source': 'https://x.example/g', 'quote': 'They will also unlock the'},
+                 {'source': 'https://x.example/g', 'quote': 'They will also unlock the vault door'}]
+        found = guide_maker.verify_quotes(cites, sources, [])
+        self.assertEqual([c['verified'] for c in found], [False, True])
 
     def test_check_walkthrough_asks_again_for_open_ones_in_no_step(self):
         answer = '<walkthrough>{"steps": [{"title": "Act 1", "achievements": ["A"]}]}</walkthrough>'

@@ -38,6 +38,17 @@ in its first step only (sonnet had counted one open twice); a step's
 missables take in the items classify marked missable; and a step's
 quote must say more than the store's own text, as an item's must.
 
+Added in 0.7.0, after the owner's RE5 guide (60/60 classified, 25 steps
+all grounded, yet hard to follow): story steps were a sentence or two
+with no place, and a cleanup step crammed eight achievements over four
+chapters into one paragraph. A step now has one sentence of `text` and
+ordered `actions` (`{where, what, achievement}`), checked like the rest;
+more than 12 asks to split it by chapter or area. The tracker shows the
+open step's actions as a checklist. A retry that comes back worse no
+longer replaces the first answer, "act", "stage", "level" and "area"
+need a number to mark an excerpt as a walkthrough, and a quote cut off
+on a word like "the" no longer verifies.
+
 A failed walkthrough (no parse after the retry, or the agent erred) costs
 only the walkthrough: the items and route are already made, and the
 earlier walkthrough, if any, stays.
