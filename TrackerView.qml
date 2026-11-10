@@ -811,10 +811,21 @@ Item {
   // light sweeping across it.
   component Bone: Rectangle {
     id: bone
+    // clip cuts to the box, not the rounded edge: the band showed square
+    // corners around the round ring placeholder. A round bone pulses
+    // instead.
+    readonly property bool round: radius * 2 >= Math.min(width, height) - 1
     color: Qt.alpha(root.foreground, 0.07)
     radius: 3
     clip: true
+    SequentialAnimation on opacity {
+      running: bone.round && bone.visible
+      loops: Animation.Infinite
+      NumberAnimation { to: 0.55; duration: 650; easing.type: Easing.InOutSine }
+      NumberAnimation { to: 1; duration: 650; easing.type: Easing.InOutSine }
+    }
     Rectangle {
+      visible: !bone.round
       width: Math.max(60, bone.width * 0.4)
       height: bone.height
       gradient: Gradient {
