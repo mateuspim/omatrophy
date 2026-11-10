@@ -200,9 +200,13 @@ it.
    read like a walkthrough (chapter, mission, act...), trusted sites
    first, up to 16,000 characters. Answers
    `<walkthrough>{"steps": [{title, text, achievements, missables, cites}]}</walkthrough>`,
-   5 to 30 steps in play order (40 kept at most). Unknown names and talk
-   about the input are errors that ask again. A failure here keeps the
-   rest of the guide and the earlier walkthrough.
+   5 to 30 steps in play order (40 kept at most). Unknown names, talk
+   about the input and open achievements in no step are errors that ask
+   again. An achievement named in several steps stays in the first. Each
+   step's `missables` gain its items that classify marked missable, and
+   its quotes must say more than the store's text for its achievements,
+   as items' do. A failure here keeps the rest of the guide and the
+   earlier walkthrough.
 6. **Verify** (no model). Validates the shape. Drops names not in the
    game. Matches each quote against the source text after folding case,
    whitespace and quotes. Writes the files atomically.
