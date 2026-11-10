@@ -269,7 +269,13 @@ writes `results.json` there: `{store, app, game, web, jail, weights,
 results: [{entry, agent, model, effort, endpoint, state, error, score,
 metrics, seconds, cost_usd, tokens, calls, folder, name}]}`, best first;
 `metrics` holds each measure (0..1) and the counts `items`, `cited`,
-`unverified` and `steps`.
+`unverified` and `steps`, plus, unscored, `needs` (covered items with a
+`requires`), `needs_cited` (those whose `requires` a verified quote
+backs), `actions` (all steps' actions) and `where` (0..1, the share of
+actions naming a place); the table shows them as `needs` (cited/all) and
+`where`. They stay out of the score: a game may have no prerequisites,
+so more `requires` isn't better, and a place is easy to fill with words
+no check reads.
 
 The score (0-100) uses only what OmaTrophy checks: `verified` (share of
 covered items with a verified quote) 35, `coverage` (share of open

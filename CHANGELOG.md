@@ -14,6 +14,9 @@
   checklist, and **Tree** shows the guide as an outline (the story on
   one line, chains of what needs what, the rest on their own). Only
   `TrackerView.qml` changed, so no shell restart is needed.
+- `guide bench` reports, unscored, the items with prerequisites (and
+  how many a quote backs) and the share of step actions that name a
+  place, as `needs` and `where` columns.
 - A stage asked twice keeps the better answer, not always the second;
   everyday words ("act fast", "the area") no longer pull an excerpt in
   as a walkthrough; a quote cut off on "the" or "and" no longer counts

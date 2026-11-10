@@ -687,6 +687,22 @@ class Bench(unittest.TestCase):
         self.assertEqual(guide_bench.walkthrough_measure(plan, {'a', 'b', 'c', 'd'}), 0.5 * 0.25 + 0.5 * 0.5)
         self.assertEqual(guide_bench.metrics(plan, {'a', 'b', 'c', 'd'})['steps'], 4)
 
+    def test_plan_measure_counts_requires_and_actions_unscored(self):
+        import guide_bench
+        plan = {'items': {
+            'A': {'api': 'a', 'name': 'A', 'requires': ['B']},
+            'B': {'api': 'b', 'name': 'B', 'requires': ['C'], 'unverified': ['requires']},
+            'C': {'api': 'c', 'name': 'C'},
+            'D': {'api': 'z', 'name': 'D', 'requires': ['C']}},
+            'walkthrough': [{'title': 'One', 'actions': [{'where': 'Gate', 'what': 'x'}, {'where': ' ', 'what': 'y'}]},
+                            {'title': 'Two', 'actions': [{'where': 'Hub', 'what': 'z'}, 'junk']}, {'title': 'Old'}]}
+        m = guide_bench.metrics(plan, {'a', 'b', 'c'})
+        # D is done, so not counted; B's requires has no verified quote.
+        self.assertEqual((m['needs'], m['needs_cited'], m['actions'], m['where']), (2, 1, 3, 0.667))
+        self.assertNotIn('needs', guide_bench.WEIGHTS)
+        self.assertNotIn('where', guide_bench.WEIGHTS)
+        self.assertEqual(guide_bench.plan_measure({}, {'a'})['where'], 0.0)
+
     def test_walkthrough_measure_is_zero_without_steps_or_open_ones(self):
         import guide_bench
         plan = {'items': {'A': {'api': 'a', 'name': 'A'}},
