@@ -15,8 +15,11 @@ import qs.Commons as Commons
 // next toast. Bones shimmer in place of what's still loading.
 //
 // Sections, in order, each under a "// ---- Name" banner: State, Helpers,
-// Files and processes, Building blocks, Tab strip, Now, Profile, Games,
-// Settings.
+// Files and processes, Building blocks, Tab strip, Load from Steam strip,
+// Guide jobs strip, Now, Profile, Games, Settings. Each tab's parts have a
+// shorter banner (Settings: overview, toasts, now, guides, stores), and
+// Guides, the longest, one more level (agent, model, effort, web, jail,
+// guide key). The file stays one file (ADR 10): grep a banner to jump.
 Column {
   id: root
   spacing: Commons.Style.space(8)
@@ -1492,6 +1495,8 @@ Column {
     }
   }
 
+  // ------------------------------------------------- Load from Steam strip
+
   // Load from Steam's progress, on every tab while it runs: it works out of
   // sight, so this is the only sign it is going. The game being checked,
   // a bar split into found and empty, what is left, the latest results as
@@ -1870,6 +1875,8 @@ Column {
       }
     }
   }
+
+  // ------------------------------------------------------ Guide jobs strip
 
   // A 100% guide being made (or just made, for a quarter of an hour), on
   // every tab: the job runs detached, so this is where it shows once its
@@ -3934,6 +3941,8 @@ Column {
       onPicked: value => root.remember("settings-section", "settingsSection", value)
     }
 
+    // ------------------------------------------------ overview
+
     Rectangle {
       width: root.width
       visible: root.settingsSection === "overview"
@@ -4269,6 +4278,8 @@ Column {
       spacing: root.spacing
       visible: root.settingsSection === "guides"
 
+      // -------------------------------- agent
+
       // The agent and the model as two pickers: each shows the choice and
       // unfolds its list in place (a popup would fight the panel for keys).
       // Agents carry their state and Check; models a search, every model
@@ -4410,6 +4421,8 @@ Column {
         }
       }
 
+
+      // -------------------------------- model
 
       MiniLabel { text: "MODEL"; visible: root.guideRow !== null && root.guideRow.supported }
       PickerField {
@@ -4578,6 +4591,8 @@ Column {
         }
       }
 
+      // -------------------------------- effort
+
       MiniLabel { text: "EFFORT"; visible: root.guideEfforts().length > 0 }
       PickerField {
         visible: root.guideEfforts().length > 0
@@ -4594,6 +4609,8 @@ Column {
         onPicked: value => { root.setGuideModel(root.guidePick.model, value); root.guideMenu = "" }
       }
 
+      // -------------------------------- web
+
       SettingRow {
         label: "WEB"
         Chips {
@@ -4605,6 +4622,8 @@ Column {
           onPicked: value => root.set("guide-web", value)
         }
       }
+
+      // -------------------------------- jail
 
       // A second fence around the agent's own lock, when ai-jail is here;
       // the row stays when it isn't, so "is it installed?" has an answer.
@@ -4720,6 +4739,8 @@ Column {
         opacity: 0.4
         text: root.guideText()
       }
+
+      // -------------------------------- guide key
 
       // The guide over a running game (ADR 18). Nothing is bound until
       // the owner installs a key here: the default when it's free, else
