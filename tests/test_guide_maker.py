@@ -231,6 +231,31 @@ class Checks(unittest.TestCase):
         self.assertEqual(len(errors), 2)
         self.assertEqual(guide_maker.check_item({'name': 'Z'}, {'A'})[0], None)
 
+    def test_check_item_keeps_known_requires_only(self):
+        item, errors = guide_maker.check_item({'name': 'A', 'phase': 'quick', 'requires': ['B', 'A', 'Z', 'B']}, {'A', 'B'})
+        self.assertEqual(item['requires'], ['B'])
+        self.assertEqual(len(errors), 1)
+        self.assertIn("'Z'", errors[0])
+        self.assertEqual(guide_maker.check_item({'name': 'A', 'requires': 'B'}, {'A', 'B'})[0]['requires'], [])
+
+    def test_requires_cycles_break_at_the_closing_edge(self):
+        text = ('<items>[{"name": "Pro", "phase": "challenge", "difficulty": 4, "requires": ["Vet"]},'
+                ' {"name": "Vet", "phase": "challenge", "difficulty": 3, "requires": ["Pro", "Nor"]}]</items>')
+        items, errors = guide_maker.check_items(text, ['Pro', 'Vet'], ['Pro', 'Vet', 'Nor'], {'Nor': ['Pro']})
+        # Pro -> Vet is kept; Vet -> Pro closes the loop, and Vet -> Nor
+        # closes one through the earlier batch (Nor needs Pro).
+        self.assertEqual(items['Pro']['requires'], ['Vet'])
+        self.assertEqual(items['Vet']['requires'], [])
+        self.assertEqual(len([e for e in errors if 'already needs' in e]), 2)
+        loop = {'X': {'requires': ['Y']}, 'Y': {'requires': ['X']}}
+        self.assertEqual(len(guide_maker.prune_requires(loop, {})), 1)
+        self.assertEqual((loop['X']['requires'], loop['Y']['requires']), (['Y'], []))
+
+    def test_requires_is_a_claim_and_reaches_the_route_table(self):
+        item, _ = guide_maker.check_item({'name': 'A', 'phase': 'challenge', 'requires': ['B']}, {'A', 'B'})
+        self.assertEqual(guide_maker.verify_cites(item, {}, [])['unverified'], ['requires'])
+        self.assertIn('needs first B', guide_maker.table_line('A', item, False))
+
     def test_an_estimated_time_stays_unverified_beside_a_verified_quote(self):
         raw = {'name': 'A', 'phase': 'quick', 'time': '~5 min', 'time_estimate': True, 'tips': 'Open the door twice.',
                'cites': [{'source': 'https://x', 'quote': 'open the red door twice in chapter one'}]}

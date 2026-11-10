@@ -39,7 +39,7 @@ SITES = ('PowerPyx (powerpyx.com)', 'TrueAchievements (trueachievements.com)',
 SITE_HOSTS = ('powerpyx.com', 'trueachievements.com', 'playstationtrophies.org', 'xboxachievements.com',
               'steamcommunity.com', 'fandom.com')
 # Item fields the view marks "(unverified)" when no quote backs the item.
-CLAIMS = ('time', 'missable', 'counter', 'tips', 'combine_with')
+CLAIMS = ('time', 'missable', 'counter', 'tips', 'combine_with', 'requires')
 WORD = re.compile(r"[a-z0-9']+")
 STOPWORDS = set('the and for with that this from your you are all any one into over have has its not but get '
                 'got can will each every than then them they their what when where which while who also out '
@@ -461,6 +461,17 @@ def check_item(raw, names):
         item['counter'] = None
     combos = raw.get('combine_with')
     item['combine_with'] = [c for c in combos if c in names and c != name] if isinstance(combos, list) else []
+    # A hard prerequisite, unlike combine_with's "same run": RE5's War Hero
+    # (Professional) opens only after Veteran is beaten (ADR 20).
+    needs = raw.get('requires')
+    item['requires'] = []
+    for r in needs if isinstance(needs, list) else []:
+        if r == name or r in item['requires']:
+            continue
+        if r in names:
+            item['requires'].append(r)
+        else:
+            errors.append(f'{name}: requires names {r!r}, which is not an achievement here')
     item['tips'] = raw.get('tips').strip() if isinstance(raw.get('tips'), str) else ''
     item['dlc'] = raw.get('dlc').strip() if isinstance(raw.get('dlc'), str) else ''
     item['cites'] = check_cites(raw.get('cites'))
@@ -474,8 +485,39 @@ def check_item(raw, names):
     return item, errors
 
 
-def check_items(text, batch, every):
-    """(items by name, errors) from a classify answer for `batch` (names)."""
+def reaches(graph, start, goal):
+    """True when `goal` is `start` or one of its prerequisites, directly or
+    through others, in `graph` ({name: [names it requires]})."""
+    seen, todo = set(), [start]
+    while todo:
+        name = todo.pop()
+        if name == goal:
+            return True
+        if name not in seen:
+            seen.add(name)
+            todo += graph.get(name, [])
+    return False
+
+
+def add_requires(graph, name, wanted):
+    """Adds `name`'s prerequisites to `graph` one by one, dropping each edge
+    that would close a cycle (its target already needs `name`). Returns
+    (kept, errors); the errors ask the model again."""
+    kept, errors = [], []
+    graph[name] = kept
+    for r in wanted:
+        if reaches(graph, r, name):
+            errors.append(f'{name} requires {r}, but {r} already needs {name} first; '
+                          'keep only the one a source states')
+        else:
+            kept.append(r)
+    return kept, errors
+
+
+def check_items(text, batch, every, known=None):
+    """(items by name, errors) from a classify answer for `batch` (names).
+    `known` is {name: requires} of items classified before; a `requires`
+    closing a cycle with them is dropped and asked again."""
     try:
         raw = tagged(text, 'items')
     except ValueError as e:
@@ -488,6 +530,7 @@ def check_items(text, batch, every):
         errors += errs
         if item and item['name'] in batch:
             items[item['name']] = item
+    errors += prune_requires(items, known or {})
     missing = [n for n in batch if n not in items]
     if missing:
         errors.append('no entry for: ' + ', '.join(missing))
@@ -706,6 +749,8 @@ def table_line(name, item, unlocked, desc=''):
         parts.append(f'counter {item["counter"]["target"]} {item["counter"].get("label", "")}'.strip())
     if item.get('combine_with'):
         parts.append('combines with ' + ', '.join(item['combine_with']))
+    if item.get('requires'):
+        parts.append('needs first ' + ', '.join(item['requires']))
     if item.get('dlc'):
         parts.append(f'DLC {item["dlc"]}')
     return f'- {name}{" [unlocked]" if unlocked else ""}: ' + '; '.join(parts) + (f' — {desc}' if desc else '')
@@ -945,9 +990,13 @@ class Job:
             hints.setdefault(n['name'], []).append(n['quote'])
         return hints
 
-    def classify(self, open_achs, pieces, hints):
+    def classify(self, open_achs, pieces, hints, known=None):
+        """Items by name, in batches; `known` ({name: requires}) holds the
+        unlocked ones' prerequisites from the earlier guide, so a cycle
+        through them is caught too."""
         every = [a['name'] for a in self.achs]
         items, problems = {}, []
+        known = dict(known or {})
         for i in range(0, len(open_achs), BATCH_SIZE):
             batch = open_achs[i:i + BATCH_SIZE]
             self.step('classify', f'classify: {i + len(batch)}/{len(open_achs)} achievements')
@@ -960,9 +1009,11 @@ class Job:
             text = prompt('classify', game=self.game, excerpts=excerpt_block(picked),
                           achievements='\n'.join(ach_line(a) for a in batch),
                           all_names='\n'.join(f'- {n}' for n in every), phases=', '.join(guides.PHASES))
-            found, errors = self.ask('classify', text, lambda t, b=[a['name'] for a in batch]: check_items(t, b, every),
+            found, errors = self.ask('classify', text,
+                                     lambda t, b=[a['name'] for a in batch]: check_items(t, b, every, known),
                                      lambda a, b: dict(a, **b))
             items.update(found or {})
+            known.update((n, i['requires']) for n, i in (found or {}).items())
             problems += errors
             self.done += 1
         return items, problems
@@ -1044,17 +1095,21 @@ class Job:
             self.done += 1
         pieces = chunks(self.sources)
         self.say(f'sources: {len(self.sources)} ({len(pieces)} excerpts)')
-        items, problems = self.classify(open_achs, pieces, hints)
-        if open_achs and not items:
-            raise RuntimeError("the agent's answers didn't parse (" + '; '.join(problems[:3]) +
-                               '); make it again, or pick another model')
-        self.step('route', 'route: order and notes')
         old = read_json(guides.plan_path(os.path.join(self.folder, name + '.md')), {})
         old = old if isinstance(old, dict) else {}
         old_items = old.get('items') if isinstance(old.get('items'), dict) else {}
         # Unlocked achievements were not classified; their old entries
         # stay, so the route still knows them as combo partners.
         table = {n: i for n, i in old_items.items() if isinstance(i, dict)}
+        known = {n: [r for r in i.get('requires') or [] if isinstance(r, str)] for n, i in table.items()}
+        items, problems = self.classify(open_achs, pieces, hints, known)
+        if open_achs and not items:
+            raise RuntimeError("the agent's answers didn't parse (" + '; '.join(problems[:3]) +
+                               '); make it again, or pick another model')
+        # The retry's merge can bring back an edge the first answer's check
+        # dropped; what still closes a cycle now is dropped for good.
+        problems += prune_requires(items, known)
+        self.step('route', 'route: order and notes')
         table.update(items)
         route, route_errors = self.route(table)
         self.done += 1
@@ -1109,6 +1164,17 @@ class Job:
         write_json(guides.plan_path(md), plan, indent=1, ensure_ascii=False)
         write_json(md[:-3] + '.sources.json', self.sources, ensure_ascii=False)
         self.plan = plan
+
+
+def prune_requires(items, known):
+    """Drops, in place, each `requires` of `items` that closes a cycle with
+    the others or with `known` ({name: requires}); returns the errors."""
+    graph = {n: list(r) for n, r in known.items() if n not in items}
+    errors = []
+    for name, item in items.items():
+        item['requires'], errs = add_requires(graph, name, item.get('requires') or [])
+        errors += errs
+    return errors
 
 
 def stage_counts(usage):

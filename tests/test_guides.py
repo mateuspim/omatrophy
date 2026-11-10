@@ -135,6 +135,37 @@ class GuideAnswer(unittest.TestCase):
         done = {'c'}
         self.assertEqual(guides.open_order(['a', 'b', 'c', 'd'], items, done), ['b', 'a', 'd'])
 
+    def test_next_waits_for_requires(self):
+        items = {'pro': {'requires': ['vet']}, 'vet': {}, 'x': {}}
+        self.assertEqual(guides.open_order(['pro', 'vet', 'x'], items, set()), ['vet', 'x'])
+        self.assertEqual(guides.open_order(['pro', 'vet', 'x'], items, {'vet'}), ['pro', 'x'])
+
+    def test_tree_puts_story_chains_and_the_rest_apart(self):
+        items = {'c1': {'phase': 'story'}, 'c2': {'phase': 'story'}, 'vet': {'phase': 'challenge'},
+                 'pro': {'phase': 'challenge', 'requires': ['vet', 'c2']}, 'egg': {'phase': 'quick'},
+                 'loop1': {'requires': ['loop2']}, 'loop2': {'requires': ['loop1']}}
+        steps = [{'achievements': ['c2']}, {'achievements': ['c1']}]
+        out = guides.tree(['c1', 'c2', 'egg', 'vet', 'pro', 'loop1', 'loop2'], items, steps)
+        self.assertEqual(out['story'], ['c2', 'c1'])
+        # A story prerequisite shows under its chain too, as a leaf.
+        self.assertEqual(out['chains'], [{'api': 'pro', 'depth': 0}, {'api': 'vet', 'depth': 1}, {'api': 'c2', 'depth': 1}])
+        # A cycle (an older or imported guide) has no root: its items stay
+        # listed on their own rather than lost.
+        self.assertEqual(out['alone'], ['egg', 'loop1', 'loop2'])
+
+    def test_answer_gives_requires_as_apis(self):
+        with tempfile.TemporaryDirectory() as d:
+            guides.import_guides(SAMPLES, folder=d)
+            path = guides.find_guide('steam', '1', d)
+            plan = guides.load_plan(path)
+            plan['items']['Star Counter']['requires'] = ['Last Lantern', 'Nope', 'Star Counter']
+            with open(guides.plan_path(path), 'w') as f:
+                json.dump(plan, f)
+            out = guides.guide_answer('steam', '1', ACHS, d)
+        self.assertEqual(out['items']['ACH_STARS']['requires'], ['ACH_LANTERN'])
+        self.assertNotIn('ACH_STARS', out['next'])
+        self.assertEqual(out['tree']['chains'], [{'api': 'ACH_STARS', 'depth': 0}, {'api': 'ACH_LANTERN', 'depth': 1}])
+
     def test_unlocked_items_leave_next(self):
         achs = [dict(a, unlocked=True) if a['api'] == 'ACH_LANTERN' else a for a in ACHS]
         out = guides.guide_answer('steam', '1', achs, self.folder())

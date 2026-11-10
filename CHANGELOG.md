@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.0 - unreleased
+
+- Guides know hard prerequisites: an achievement the game locks until
+  another is unlocked (Professional after Veteran) lists it under
+  `requires`, backed by a source like any claim. Up next skips what
+  can't be had yet. Guides made before say "older maker" (maker 4).
+
 ## 0.6.4 - 2026-11-10
 
 - `guide bench` scores the walkthrough: half for the open achievements

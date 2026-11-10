@@ -19,8 +19,9 @@ TICK = re.compile(r'^- \[(?P<mark>[ xX])\] \*\*(?P<name>.+?)\*\*(?P<rest>.*)$')
 # The guide maker's revision, written to each plan it makes. Bump it when
 # making a guide again gives a clearly better one (prompts, sources), so
 # the tracker can say so. 3: route prose without `table` citations, fuller
-# tips, full pages instead of the agent's summaries (2026-11-06).
-MAKER = 3
+# tips, full pages instead of the agent's summaries (2026-11-06). 4:
+# `requires` per item and `actions` per walkthrough step (ADR 20).
+MAKER = 4
 
 
 def outdated(plan):
@@ -121,8 +122,10 @@ def phase_rank(item):
 
 
 def open_order(order, items, done):
-    """The first NEXT_COUNT open apis in `order`, missables first."""
-    open_ = [api for api in order if api in items and api not in done]
+    """The first NEXT_COUNT open apis in `order`, missables first. An item
+    whose `requires` (apis) aren't all done waits: the game won't give it."""
+    open_ = [api for api in order if api in items and api not in done
+             and all(r in done for r in items[api].get('requires') or [])]
     open_.sort(key=lambda api: (not items[api].get('missable'),))  # stable: keeps the plan's order
     return open_[:NEXT_COUNT]
 
@@ -157,6 +160,9 @@ def guide_answer(store, app, achievements, folder=None):
     # it maps through every achievement of the game.
     every_api = {a['name']: a['api'] for a in achievements}
     every_api.update(name_to_api)
+    for api, item in items.items():
+        needs = item.get('requires') if isinstance(item.get('requires'), list) else []
+        items[api] = dict(item, requires=[every_api[n] for n in needs if n in every_api and every_api[n] != api])
     steps = walkthrough_steps(plan, every_api, done)
     return {'store': store, 'app': str(app), 'file': os.path.basename(path),
             'generated': plan.get('generated', 0), 'order': order, 'items': items,
@@ -164,7 +170,35 @@ def guide_answer(store, app, achievements, folder=None):
             'next': open_order(order, items, done),
             'agent': plan.get('agent') if isinstance(plan.get('agent'), dict) else {},
             'cost_usd': plan_cost(plan), 'outdated': outdated(plan),
-            'walkthrough': steps, 'step': current_step(steps)}
+            'walkthrough': steps, 'step': current_step(steps), 'tree': tree(order, items, steps)}
+
+
+def tree(order, items, steps=()):
+    """The guide as an outline (ADR 20): `story` the story items in play
+    order (the steps', then the route's); `chains` rows {api, depth}, each
+    item that needs others first with its prerequisites indented under it;
+    `alone` the rest. Apis throughout; done ones stay, the view dims them."""
+    placed = [a for s in steps for a in s.get('achievements') or []]
+    ranked = [a for a in placed if a in items] + [a for a in order if a not in placed]
+    ranked = list(dict.fromkeys(ranked))
+    story = [a for a in ranked if items[a].get('phase') == 'story']
+    needs = {a: [r for r in items[a].get('requires') or [] if r in items] for a in ranked}
+    plain = [a for a in ranked if a not in story]
+    needed = {r for a in plain if needs[a] for r in needs[a]}
+    chains = []
+
+    def walk(api, depth, path):
+        chains.append({'api': api, 'depth': depth})
+        # A cycle in an imported or older guide stops at its closing edge.
+        for r in needs[api]:
+            if r not in path:
+                walk(r, depth + 1, path | {r})
+
+    for a in plain:
+        if needs[a] and a not in needed:
+            walk(a, 0, {a})
+    shown = {row['api'] for row in chains}
+    return {'story': story, 'chains': chains, 'alone': [a for a in plain if a not in shown]}
 
 
 def walkthrough_steps(plan, name_to_api, done):

@@ -69,7 +69,7 @@ OmaTrophy doesn't know survive a rewrite.
 ```json
 {
   "format": 2,
-  "maker": 3,
+  "maker": 4,
   "generated": 1793059700,
   "agent": {"name": "claude", "model": "", "stages": {"classify": 4, "route": 1}},
   "order": ["Name", "..."],
@@ -85,6 +85,7 @@ OmaTrophy doesn't know survive a rewrite.
       "missable_note": "Before leaving the Baker house in chapter 3",
       "counter": {"target": 50, "label": "kills"},
       "combine_with": ["Other name"],
+      "requires": ["Veteran"],
       "tips": "Two to four plain sentences: where, how, what to watch out for.",
       "dlc": "End of Zoe",
       "cites": [{"source": "https://...", "quote": "verbatim snippet", "verified": true}],
@@ -117,6 +118,12 @@ OmaTrophy doesn't know survive a rewrite.
 - `missable_note` says where the point of no return is; it's empty when
   that's unknown.
 - `counter` is set only for a target of 2 or more; `null` otherwise.
+- `combine_with`: achievements best done in the same run, a choice.
+  `requires` (maker 4, [ADR 20](../adr/0020-requires-and-the-guide-tree.md)):
+  achievements that must be unlocked first because the game locks this
+  one until then, only when a source says so. Both hold names known to
+  the game, never the item itself; `requires` has no cycles (the maker
+  drops the edge that closes one). Older plans have no `requires`.
 - `cites`: a claim with no verified cite lists its fields in
   `unverified`, and the view marks them "(unverified)".
 - `details` (per-achievement steps, facts, pitfalls) and `progress`/`steps`
@@ -131,7 +138,7 @@ OmaTrophy doesn't know survive a rewrite.
 
 | Command | Does |
 | --- | --- |
-| `guide [store app]` | Prints the guide as JSON for the tracker: `{store, app, file, generated, order, items: {api: item}, sections, notes, ticks: [api], next: [api], agent, cost_usd, outdated, walkthrough, step}` (`agent` is the plan's, `cost_usd` the sum of its `usage`, `walkthrough` the plan's steps with `achievements` and `missables` as `api`s and `done` when none is left open, `step` the index of the first step with one open or -1, `outdated` true when OmaTrophy made it with a `maker` older than `guides.MAKER`, so the tracker says "older maker" and lights Make again), or `{}` when there is none. The reader is `guides.py`. `items` holds only the plan items that match a store achievement (by `api`, then name); `ticks` are the `api`s of hand ticks; `ticks` and the store's unlocks both count as done for `next`. `next` is the first three open items in `order`, missables first. Without arguments, the game running now, else the last one played. |
+| `guide [store app]` | Prints the guide as JSON for the tracker: `{store, app, file, generated, order, items: {api: item}, sections, notes, ticks: [api], next: [api], agent, cost_usd, outdated, walkthrough, step}` (`agent` is the plan's, `cost_usd` the sum of its `usage`, `walkthrough` the plan's steps with `achievements` and `missables` as `api`s and `done` when none is left open, `step` the index of the first step with one open or -1, `outdated` true when OmaTrophy made it with a `maker` older than `guides.MAKER`, so the tracker says "older maker" and lights Make again, `tree` the guide as an outline: `{story: [api], chains: [{api, depth}], alone: [api]}`, story items in play order, each item that `requires` others at depth 0 with its prerequisites under it, the rest alone), or `{}` when there is none. Each item's `requires` is given as `api`s. The reader is `guides.py`. `items` holds only the plan items that match a store achievement (by `api`, then name); `ticks` are the `api`s of hand ticks; `ticks` and the store's unlocks both count as done for `next`. `next` is the first three open items in `order` whose `requires` are all done, missables first. Without arguments, the game running now, else the last one played. |
 | `guide import <folder>` | Copies every `*-<app>.md` with its `.plan.json` and `.sources.json` from another folder (the games app's `games/`), skipping files we already have (`--replace` overwrites). Read-only on `<folder>`. Prints `imported N, skipped M`. |
 | `guide agents` | Every agent with its models and picks (see Settings). |
 | `guide model <agent> <model> [effort] [@http://endpoint]`, `guide model <agent> default` | Sets or clears that agent's pick in `guide-models`; `@endpoint` points claude at a local Anthropic-compatible server (`ANTHROPIC_BASE_URL`) for that model. |
@@ -189,7 +196,10 @@ it.
 3. **Classify** (model, no tools). Batches of about 15 open achievements,
    each with the top excerpts for it (picked by matching words from its
    name and description), about 12,000 characters a batch. Answers
-   `<items>[...]</items>`.
+   `<items>[...]</items>`. A `requires` naming an unknown achievement, or
+   closing a cycle with this batch, earlier ones or the earlier guide's
+   unlocked items, is an error that asks again; the closing edge is
+   dropped.
 4. **Route** (model, no tools). The compact table of every item (no
    excerpts), the player's progress, DLC. Answers
    `<route>{order, sections}</route>`. Plain prose for the player: no
