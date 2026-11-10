@@ -576,7 +576,7 @@ def check_walkthrough(text, names, open_names=()):
     found = raw.get('steps') if isinstance(raw, dict) else None
     if not isinstance(found, list):
         return [], ['the <walkthrough> block must be {"steps": [...]}']
-    steps, errors = [], []
+    steps, errors, placed = [], [], set()
     for i, s in enumerate(found[:WALK_STEPS], 1):
         if not isinstance(s, dict) or not isinstance(s.get('title'), str) or not s['title'].strip():
             errors.append(f'step {i} has no title')
@@ -587,10 +587,14 @@ def check_walkthrough(text, names, open_names=()):
             errors.append(f'step {i} talks about your input ({", ".join(sorted(set(talk))[:3])}); write for the player')
         achs = []
         for n in s.get('achievements') if isinstance(s.get('achievements'), list) else []:
-            if n in names and n not in achs:
+            # One step each, the first: the 2026-11-10 bench put Skilled in
+            # its mission and again in an "S-rank everything" step, so the
+            # tracker counted it open twice. Not asked again: it costs a call.
+            if n in names and n not in achs and n not in placed:
                 achs.append(n)
             elif n not in names:
                 errors.append(f'step {i} names {n!r}, which is not an achievement here')
+        placed.update(achs)
         miss = s.get('missables') if isinstance(s.get('missables'), list) else []
         steps.append({'title': scrub_meta(s['title'].strip()), 'text': scrub_meta(body.strip()), 'achievements': achs,
                       'missables': [n for n in miss if n in achs], 'cites': check_cites(s.get('cites'))})
@@ -598,7 +602,6 @@ def check_walkthrough(text, names, open_names=()):
         errors.append(f'at most {WALK_STEPS} steps')
     if not steps:
         errors.append('no steps')
-    placed = {n for s in steps for n in s['achievements']}
     unplaced = [n for n in open_names if n not in placed]
     if steps and unplaced:
         errors.append('these open achievements are in no step: ' + ', '.join(unplaced[:12])

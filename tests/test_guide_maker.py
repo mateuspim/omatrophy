@@ -284,6 +284,20 @@ class Checks(unittest.TestCase):
         self.assertIn('in no step: B;', errors[0])
         self.assertEqual(guide_maker.check_walkthrough(answer, {'A', 'B'}, ['A'])[1], [])
 
+    def test_check_walkthrough_keeps_an_achievement_in_its_first_step_only(self):
+        steps, errors = guide_maker.check_walkthrough(
+            '<walkthrough>{"steps": [{"title": "Mission 2", "achievements": ["Skilled"], "missables": ["Skilled"]},'
+            ' {"title": "S-rank all", "achievements": ["Hero", "Skilled"], "missables": ["Skilled"]}]}</walkthrough>',
+            {'Skilled', 'Hero'}, ['Skilled', 'Hero'])
+        self.assertEqual(errors, [])
+        self.assertEqual([s['achievements'] for s in steps], [['Skilled'], ['Hero']])
+        self.assertEqual(steps[1]['missables'], [])
+
+    def test_walkthrough_prompt_puts_a_collect_all_where_it_finishes(self):
+        text = guide_maker.prompt('walkthrough', game='G', progress='0 of 1', excerpts='', table='- A: story')
+        self.assertIn('exactly one step', text)
+        self.assertIn('goes where it finishes', text)
+
     def test_walkthrough_excerpts_prefer_chapters(self):
         pieces = guide_maker.chunks({'https://x.example': {'text': 'unrelated words only'},
                                      'https://www.powerpyx.com/g': {'text': 'Chapter 2: the bridge. Mission 3 next.'}})

@@ -24,7 +24,11 @@ Steps:
 - `text`: two to five short sentences: what to do there for 100%, where
   to look, what not to skip. Spoiler-light for hidden achievements.
 - `achievements`: names exactly as listed, the ones got in this step,
-  `[unlocked]` ones included: they show the player where they are.
+  `[unlocked]` ones included: they show the player where they are. Every
+  achievement in exactly one step: the step where it unlocks. One that
+  builds up over many steps (collect them all, every mission, every rank)
+  goes where it finishes, often a late step of its own, not the first
+  step that starts it.
 - `missables`: names from `achievements` that are lost if the player
   moves on without them.
 - `cites`: quotes backing the step, as below.
