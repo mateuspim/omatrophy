@@ -546,7 +546,7 @@ Item {
 
   function stepNames(step) {
     var missables = step.missables || []
-    return (step.achievements || []).map(function(api) {
+    return factJoin((step.achievements || []).map(function(api) {
       var a = byApi[api] || { name: api }
       var secret = a.hidden && !a.unlocked && !revealed[api] && !revealAll
       // The item's own missable flag counts too: MGSV's walkthrough left
@@ -554,7 +554,7 @@ Item {
       var item = guide && guide.items ? guide.items[api] || {} : {}
       return ((missables.indexOf(api) >= 0 || item.missable) && !guideDone(api) ? "⚠ " : "") + (secret ? "Hidden achievement" : a.name)
              + (guideDone(api) ? " ✓" : "")
-    }).join("  ·  ")
+    }))
   }
 
   function guideDone(api) {
@@ -601,6 +601,12 @@ Item {
   // whole: the line broke between "9 /" and "14 systems".
   function unbroken(text) {
     return String(text).replace(/ /g, "\u00a0")
+  }
+
+  // Joins a wrapping line's parts with " · ", the dot kept with the part
+  // after it: the line broke after the dot and left it hanging at the end.
+  function factJoin(parts) {
+    return parts.join("  ·\u00a0\u00a0")
   }
 
   function dots(n) {
@@ -1180,7 +1186,7 @@ Item {
         parts.push(root.unbroken(at + item.counter.target + (item.counter.label ? " " + item.counter.label : "")))
       }
       if (item.dlc) parts.push("DLC: " + item.dlc)
-      return parts.join("  ·  ")
+      return root.factJoin(parts)
     }
     width: parent ? parent.width : 0
     height: Math.max(growBody.height, growIcon.height, growSide.height) + Commons.Style.space(14)
