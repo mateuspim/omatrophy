@@ -151,6 +151,22 @@ class Job(unittest.TestCase):
         self.assertFalse(first['unverified'])
         self.assertTrue(second['unverified'])
 
+    def test_walkthrough_marks_missable_items_and_wants_more_than_the_store_says(self):
+        job = self.job()
+        job.sources = {'https://x.example/g': {'text': 'Carry the lantern to the end. In chapter four keep the lantern lit.'}}
+        answer = ('<walkthrough>{"steps": [{"title": "Chapter four", "achievements": ["Last Lantern", "Star Counter"],'
+                  ' "missables": [], "cites": [{"source": "https://x.example/g", "quote": "Carry the lantern to the end"}]},'
+                  ' {"title": "Nights", "achievements": ["Quiet Hours"], "missables": [],'
+                  ' "cites": [{"source": "https://x.example/g", "quote": "In chapter four keep the lantern lit"}]}]}</walkthrough>')
+        job.ask = lambda stage, text, check, merge: check(answer)
+        table = {'Last Lantern': {'missable': True}, 'Star Counter': {}, 'Quiet Hours': {}}
+        steps, errors = job.walkthrough(table, list(table), [])
+        self.assertEqual(errors, [])
+        self.assertEqual(steps[0]['missables'], ['Last Lantern'])
+        # The first quote is only the store's description: no proof.
+        self.assertTrue(steps[0]['unverified'])
+        self.assertFalse(steps[1]['unverified'])
+
     def test_walkthrough_is_told_the_unlocked_ones(self):
         job = self.job()
         seen = []
@@ -259,6 +275,14 @@ class Checks(unittest.TestCase):
         self.assertEqual(steps, [{'title': 'Act 1', 'text': '', 'achievements': ['A'], 'missables': ['A'], 'cites': []}])
         self.assertEqual(len(errors), 3)  # meta talk, Z unknown, step 2 untitled
         self.assertEqual(guide_maker.check_walkthrough('<walkthrough>[]</walkthrough>', {'A'})[0], [])
+
+    def test_check_walkthrough_asks_again_for_open_ones_in_no_step(self):
+        answer = '<walkthrough>{"steps": [{"title": "Act 1", "achievements": ["A"]}]}</walkthrough>'
+        steps, errors = guide_maker.check_walkthrough(answer, {'A', 'B', 'C'}, ['A', 'B'])
+        self.assertEqual(len(steps), 1)
+        self.assertEqual(len(errors), 1)
+        self.assertIn('in no step: B;', errors[0])
+        self.assertEqual(guide_maker.check_walkthrough(answer, {'A', 'B'}, ['A'])[1], [])
 
     def test_walkthrough_excerpts_prefer_chapters(self):
         pieces = guide_maker.chunks({'https://x.example': {'text': 'unrelated words only'},
