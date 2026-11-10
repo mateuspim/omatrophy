@@ -2111,8 +2111,11 @@ Column {
         }
       }
       Item {
+        // A large theme font ran the counts into the average; it takes
+        // its own line when both don't fit.
+        readonly property bool fits: metalLegend.width + averageCaption.implicitWidth + Commons.Style.space(12) <= width
         width: parent.width
-        height: metalLegend.height
+        height: fits ? metalLegend.height : averageCaption.y + averageCaption.height
         Row {
           id: metalLegend
           spacing: Commons.Style.space(12)
@@ -2135,7 +2138,9 @@ Column {
           }
         }
         Caption {
+          id: averageCaption
           anchors.right: parent.right
+          y: parent.fits ? 0 : metalLegend.height + Commons.Style.space(4)
           text: (root.cabinet ? root.cabinet.completion : 0) + "% avg completion"
         }
       }
@@ -3213,17 +3218,22 @@ Column {
       readonly property bool picked: picks.length > 0
       readonly property var tiles: picked ? picks
         : (root.cabinet && root.cabinet.rarest ? root.unhidden(root.cabinet.rarest.ever).slice(0, 6) : [])
+      // The hint takes its own line when it would run into the title
+      // (a large theme font).
+      readonly property bool fits: showcaseTitle.implicitWidth + showcaseHint.implicitWidth + Commons.Style.space(12) <= width
       visible: tiles.length > 0
       width: root.width
-      height: showcaseTitle.height
+      height: fits ? showcaseTitle.height : showcaseHint.y + showcaseHint.height
       PanelSectionHeader {
         id: showcaseTitle
         text: showcaseHeader.picked ? "SHOWCASE · " + showcaseHeader.picks.length + " / 6" : "SHOWCASE · RAREST EVER"
         foreground: root.foreground
       }
       Caption {
+        id: showcaseHint
         anchors.right: parent.right
-        anchors.verticalCenter: parent.verticalCenter
+        y: showcaseHeader.fits ? (showcaseTitle.height - height) / 2 : showcaseTitle.height
+        width: Math.min(implicitWidth, parent.width)
         opacity: 0.45
         text: showcaseHeader.picked ? "drag to reorder · ☆ in the tracker adds" : "☆ a trophy in the tracker to pin it"
       }
