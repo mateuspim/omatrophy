@@ -4796,6 +4796,7 @@ Column {
             TapHandler { onTapped: keyField.forceActiveFocus() }
             Text {
               textFormat: Text.PlainText
+              id: keyText
               anchors.left: parent.left
               anchors.leftMargin: Commons.Style.space(12)
               anchors.verticalCenter: parent.verticalCenter
@@ -4811,7 +4812,11 @@ Column {
               anchors.right: parent.right
               anchors.rightMargin: Commons.Style.space(12)
               anchors.verticalCenter: parent.verticalCenter
+              // The key wins the room: at a large theme font this tag was
+              // drawn over "Super+Ctrl+Alt+Shift+F12". The field's border
+              // still shows it's listening.
               visible: keyField.activeFocus
+                       && keyText.implicitWidth + implicitWidth + Commons.Style.space(36) <= keyField.width
               text: "recording"
               color: Commons.Color.accent
               font.family: Commons.Style.font.family
