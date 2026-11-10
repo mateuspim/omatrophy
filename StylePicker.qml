@@ -939,6 +939,16 @@ Column {
     MiniLabel { text: parent.label }
   }
 
+  // Stats side by side. A big count or a large theme font can make them
+  // wider than the panel; then the row shrinks as one rather than
+  // running off the edge (a 1,234,567-trophy row hid GAMES).
+  component StatRow: Row {
+    readonly property real room: parent ? parent.width - x : implicitWidth
+    spacing: Commons.Style.space(16)
+    transformOrigin: Item.Left
+    scale: implicitWidth > room && room > 0 ? room / implicitWidth : 1
+  }
+
   // Store art, cropped into a rounded frame. Steam's header art is 460 × 215;
   // delisted games can lack it, so the name stands in until it loads.
   component Art: Rectangle {
@@ -2049,12 +2059,10 @@ Column {
         width: 48
         height: 48
       }
-      Row {
+      StatRow {
         anchors.left: heroTrophy.right
         anchors.leftMargin: Commons.Style.space(30)
-        anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
-        spacing: Commons.Style.space(16)
         Stat {
           value: root.cabinet ? root.cabinet.trophies : -1
           label: "TROPHIES"
@@ -3112,8 +3120,7 @@ Column {
               maximumLineCount: 2
               elide: Text.ElideRight
             }
-            Row {
-              spacing: Commons.Style.space(16)
+            StatRow {
               Stat {
                 visible: favorite.game !== null && favorite.game.minutes > 0
                 value: favorite.game ? Math.round(favorite.game.minutes / 60) : -1
@@ -3435,9 +3442,8 @@ Column {
       }
     }
 
-    Row {
+    StatRow {
       visible: root.cabinet !== null
-      spacing: Commons.Style.space(16)
       Stat { value: root.cabinet ? root.cabinet.trophies : -1; label: "TROPHIES" }
       Stat { value: root.cabinet && root.cabinet.metals ? root.cabinet.metals.gold : -1; label: "RARE"; tint: root.metalColors.gold }
     }
@@ -3548,9 +3554,8 @@ Column {
       text: "Your newest platinums · ☆ Completionist in the tracker picks your own"
     }
 
-    Row {
+    StatRow {
       visible: root.cabinet !== null
-      spacing: Commons.Style.space(16)
       Stat { value: root.cabinet ? root.cabinet.platinums : -1; label: "COMPLETED"; tint: root.metalColors.platinum }
       Stat { value: root.cabinet && root.cabinet.started !== undefined ? root.cabinet.started : -1; label: "STARTED" }
       Stat { value: root.cabinet && root.cabinet.completion !== undefined ? root.cabinet.completion : -1; label: "AVG COMPLETION"; suffix: "%" }
@@ -3564,11 +3569,10 @@ Column {
       foreground: root.foreground
     }
 
-    Row {
+    StatRow {
       id: playtimeRow
       readonly property var minutes: root.cabinet && root.cabinet.playtime ? root.cabinet.playtime : null
       visible: minutes !== null && minutes.total > 0
-      spacing: Commons.Style.space(16)
       Stat { value: playtimeRow.minutes ? Math.round(playtimeRow.minutes.recent / 60) : -1; label: "HOURS · 2 WEEKS" }
       Stat { value: playtimeRow.minutes ? Math.round(playtimeRow.minutes.total / 60) : -1; label: "HOURS IN ALL" }
     }
