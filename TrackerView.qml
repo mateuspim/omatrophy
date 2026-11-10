@@ -114,6 +114,18 @@ Item {
     walkSteps.forEach(function(s) { (s.achievements || []).forEach(function(a) { placed[a] = true }) })
     return (guide.order || []).filter(function(api) { return !placed[api] && byApi[api] && !guideDone(api) })
   }
+  // The Guide view as an outline (ADR 20) instead of its steps or Up
+  // next: Story folded to one line, Chains, On their own.
+  property bool treeShown: false
+  property bool storyOpen: false
+  readonly property var guideTree: guide && guide.tree && Array.isArray(guide.tree.chains)
+                                   ? guide.tree : ({ story: [], chains: [], alone: [] })
+  // Only story and chains make an outline worth a toggle; a guide from
+  // before the tree (no `tree`) shows as it always did.
+  readonly property bool hasTree: hasGuide && guideTree.story.length + guideTree.chains.length > 0
+  readonly property bool treeOn: treeShown && hasTree && !appliedSearch
+  // The steps, Up next and sections: hidden while the outline shows.
+  readonly property bool listShown: !appliedSearch && !treeOn
   // The agent and model picker; folded away under a made guide.
   property bool makerOpen: false
   // Which Make-guide picker is unfolded: "agent", "model", "effort" or "".
@@ -555,6 +567,20 @@ Item {
       return ((missables.indexOf(api) >= 0 || item.missable) && !guideDone(api) ? "⚠ " : "") + (secret ? "Hidden achievement" : a.name)
              + (guideDone(api) ? " ✓" : "")
     }))
+  }
+
+  // What an item still waits for: its `requires` not done yet.
+  function lockedBy(api) {
+    var item = guide && guide.items ? guide.items[api] : null
+    var needs = item && Array.isArray(item.requires) ? item.requires : []
+    return needs.filter(function(r) { return !guideDone(r) })
+  }
+
+  // A trophy's name for one line, a hidden one kept secret like its row.
+  function shownName(api) {
+    var a = byApi[api]
+    if (!a) return ""
+    return a.hidden && !a.unlocked && !revealed[api] && !revealAll ? "Hidden achievement" : a.name
   }
 
   function guideDone(api) {
@@ -1164,6 +1190,64 @@ Item {
   // One achievement as the guide describes it: time, difficulty, counter,
   // missable point, tip, combos, and what no source backs. A hidden one
   // keeps its name and tip secret until hovered or revealed with Enter.
+  // One line of the guide's outline (ADR 20): indented under what needs
+  // it, dimmed with "needs X" while that is still open. A click finds the
+  // trophy in the list, as a GuideRow's does.
+  component TreeRow: Rectangle {
+    id: trow
+    property string api: ""
+    property int depth: 0
+    readonly property bool done: root.guideDone(api)
+    readonly property var waits: done ? [] : root.lockedBy(api)
+    readonly property var item: root.guide && root.guide.items ? root.guide.items[api] || ({}) : ({})
+    width: parent ? parent.width : 0
+    height: trowBody.height + Commons.Style.space(8)
+    radius: Commons.Style.cornerRadius
+    color: trowHover.hovered ? Commons.Style.hoverFill : "transparent"
+    HoverHandler { id: trowHover; cursorShape: Qt.PointingHandCursor }
+    TapHandler { onTapped: root.highlightApi = trow.api }
+    Text {
+      textFormat: Text.PlainText
+      id: trowMark
+      x: Commons.Style.space(8) + trow.depth * Commons.Style.space(18)
+      y: Commons.Style.space(4)
+      width: Commons.Style.space(18)
+      text: trow.done ? "✓" : trow.depth > 0 ? "↳" : "○"
+      color: trow.done ? Commons.Color.accent : root.foreground
+      opacity: trow.done ? 0.8 : 0.5
+      font.family: Commons.Style.font.family
+      font.pixelSize: Commons.Style.font.bodySmall
+      font.bold: true
+    }
+    Column {
+      id: trowBody
+      anchors.left: trowMark.right
+      anchors.right: parent.right
+      anchors.rightMargin: Commons.Style.space(8)
+      y: Commons.Style.space(4)
+      spacing: Commons.Style.space(1)
+      opacity: trow.done ? 0.5 : trow.waits.length > 0 ? 0.55 : 1
+      Text {
+        textFormat: Text.PlainText
+        width: parent.width
+        wrapMode: Text.Wrap
+        text: (trow.item.missable && !trow.done ? "⚠ " : "") + root.shownName(trow.api)
+        color: root.foreground
+        font.family: Commons.Style.font.family
+        font.pixelSize: Commons.Style.font.bodySmall
+        font.bold: !trow.done && trow.waits.length === 0
+      }
+      Caption {
+        textFormat: Text.PlainText
+        width: parent.width
+        visible: trow.waits.length > 0
+        wrapMode: Text.Wrap
+        elide: Text.ElideNone
+        text: "needs " + trow.waits.map(function(r) { return root.shownName(r) }).join(", ")
+      }
+    }
+  }
+
   component GuideRow: Rectangle {
     id: grow
     property string api: ""
@@ -2331,10 +2415,26 @@ Item {
 
         // ---- the guide itself
 
+        // Steps (or Up next) and the outline of what needs what (ADR 20).
+        Row {
+          visible: root.hasTree && !root.appliedSearch
+          spacing: Commons.Style.space(6)
+          Chip {
+            text: root.walked ? "Steps" : "Up next"
+            chosen: !root.treeShown
+            onClicked: root.treeShown = false
+          }
+          Chip {
+            text: "Tree"
+            chosen: root.treeShown
+            onClicked: root.treeShown = true
+          }
+        }
+
         Item {
           width: parent.width
           height: Math.max(upNextTitle.implicitHeight, upNextReveal.visible ? upNextReveal.height : 0)
-          visible: root.hasGuide && (root.guide.next || []).length > 0 && !root.appliedSearch && !root.walked
+          visible: root.hasGuide && (root.guide.next || []).length > 0 && root.listShown && !root.walked
           SectionLabel {
             id: upNextTitle
             anchors.verticalCenter: parent.verticalCenter
@@ -2355,7 +2455,7 @@ Item {
         }
         Column {
           width: parent.width
-          visible: root.hasGuide && !root.appliedSearch && !root.walked
+          visible: root.hasGuide && root.listShown && !root.walked
           spacing: Commons.Style.space(2)
           Repeater {
             model: root.hasGuide ? root.guide.next || [] : []
@@ -2392,12 +2492,12 @@ Item {
         // The walkthrough (ADR 17): the game's chapters in play order, each
         // with its trophies, the current one open; a click opens another.
         SectionLabel {
-          visible: root.hasGuide && root.walkSteps.length > 0 && !root.appliedSearch
+          visible: root.hasGuide && root.walkSteps.length > 0 && root.listShown
           text: "WALKTHROUGH" + (root.guide && root.guide.step >= 0 ? " · STEP " + (root.guide.step + 1) + " OF " + root.walkSteps.length : "")
         }
         Column {
           width: parent.width
-          visible: root.hasGuide && root.walkSteps.length > 0 && !root.appliedSearch
+          visible: root.hasGuide && root.walkSteps.length > 0 && root.listShown
           spacing: Commons.Style.space(2)
           Repeater {
             model: root.hasGuide && !root.appliedSearch ? root.walkSteps : []
@@ -2464,6 +2564,57 @@ Item {
                   visible: walkRow.open && text !== ""
                   text: root.safeMarkdown(walkRow.modelData.text)
                 }
+                // Its actions in order (maker 4), each ticked when the
+                // trophy it gives is done; a step from an older guide has
+                // none and keeps its text alone.
+                Repeater {
+                  model: walkRow.open ? walkRow.modelData.actions || [] : []
+                  delegate: Item {
+                    id: actRow
+                    required property var modelData
+                    readonly property bool ticked: modelData.achievement !== "" && root.guideDone(modelData.achievement)
+                    width: walkBody.width
+                    height: Math.max(actMark.implicitHeight, actText.height)
+                    Text {
+                      textFormat: Text.PlainText
+                      id: actMark
+                      width: Commons.Style.space(18)
+                      text: actRow.ticked ? "✓" : actRow.modelData.achievement !== "" ? "○" : "·"
+                      color: actRow.ticked ? Commons.Color.accent : root.foreground
+                      opacity: actRow.ticked ? 0.8 : 0.6
+                      font.family: Commons.Style.font.family
+                      font.pixelSize: Commons.Style.font.bodySmall
+                      font.bold: true
+                    }
+                    // Where above what: the place is what a player scans for.
+                    Column {
+                      id: actText
+                      anchors.left: actMark.right
+                      anchors.right: parent.right
+                      opacity: actRow.ticked ? 0.5 : 1
+                      Caption {
+                        textFormat: Text.PlainText
+                        width: parent.width
+                        visible: actRow.modelData.where !== ""
+                        wrapMode: Text.Wrap
+                        elide: Text.ElideNone
+                        text: actRow.modelData.where
+                        font.bold: true
+                      }
+                      Text {
+                        textFormat: Text.PlainText
+                        width: parent.width
+                        wrapMode: Text.Wrap
+                        text: actRow.modelData.what
+                              + (actRow.modelData.achievement ? "  ·\u00a0\u00a0" + root.shownName(actRow.modelData.achievement) : "")
+                        color: root.foreground
+                        opacity: 0.85
+                        font.family: Commons.Style.font.family
+                        font.pixelSize: Commons.Style.font.bodySmall
+                      }
+                    }
+                  }
+                }
                 Caption {
                   textFormat: Text.PlainText
                   width: parent.width
@@ -2491,12 +2642,12 @@ Item {
         }
 
         SectionLabel {
-          visible: root.unplaced.length > 0 && !root.appliedSearch
+          visible: root.unplaced.length > 0 && root.listShown
           text: "NOT IN A STEP · " + root.unplaced.length
         }
         Column {
           width: parent.width
-          visible: root.unplaced.length > 0 && !root.appliedSearch
+          visible: root.unplaced.length > 0 && root.listShown
           spacing: Commons.Style.space(2)
           Repeater {
             model: root.appliedSearch ? [] : root.unplaced
@@ -2504,8 +2655,65 @@ Item {
           }
         }
 
+        // The outline (ADR 20): the story folded to its count, chains of
+        // what needs what, then the rest.
+        Column {
+          width: parent.width
+          visible: root.treeOn && root.guideTree.story.length > 0
+          spacing: Commons.Style.space(2)
+          Rectangle {
+            width: parent.width
+            height: storyHead.implicitHeight + Commons.Style.space(10)
+            radius: Commons.Style.cornerRadius
+            color: storyHover.hovered ? Commons.Style.hoverFill : "transparent"
+            HoverHandler { id: storyHover; cursorShape: Qt.PointingHandCursor }
+            TapHandler { onTapped: root.storyOpen = !root.storyOpen }
+            SectionLabel {
+              id: storyHead
+              x: Commons.Style.space(8)
+              anchors.verticalCenter: parent.verticalCenter
+              text: (root.storyOpen ? "▾ " : "▸ ") + "STORY · "
+                    + root.guideTree.story.filter(function(a) { return root.guideDone(a) }).length
+                    + " / " + root.guideTree.story.length
+            }
+          }
+          Repeater {
+            model: root.treeOn && root.storyOpen ? root.guideTree.story : []
+            delegate: TreeRow { required property string modelData; api: modelData }
+          }
+        }
+        Column {
+          width: parent.width
+          visible: root.treeOn && root.guideTree.chains.length > 0
+          spacing: Commons.Style.space(2)
+          SectionLabel {
+            text: "CHAINS · " + root.guideTree.chains.filter(function(r) { return r.depth === 0 }).length
+          }
+          Caption {
+            width: parent.width
+            wrapMode: Text.Wrap
+            elide: Text.ElideNone
+            text: "Each one needs those under it first."
+            opacity: 0.45
+          }
+          Repeater {
+            model: root.treeOn ? root.guideTree.chains : []
+            delegate: TreeRow { required property var modelData; api: modelData.api; depth: modelData.depth }
+          }
+        }
+        Column {
+          width: parent.width
+          visible: root.treeOn && (root.guideTree.alone || []).length > 0
+          spacing: Commons.Style.space(2)
+          SectionLabel { text: "ON THEIR OWN · " + (root.guideTree.alone || []).length }
+          Repeater {
+            model: root.treeOn ? root.guideTree.alone || [] : []
+            delegate: TreeRow { required property string modelData; api: modelData }
+          }
+        }
+
         Repeater {
-          model: root.hasGuide && !root.appliedSearch && !root.walked
+          model: root.hasGuide && root.listShown && !root.walked
                  ? [{ key: "overview", title: "OVERVIEW" }, { key: "route", title: "RECOMMENDED ROUTE" },
                     { key: "missables", title: "MISSABLES" }, { key: "combos", title: "COMBOS" }] : []
           delegate: Column {

@@ -165,8 +165,18 @@ or after your latest unlock) is open; click a step's title to open or
 fold it. Trophies no step holds follow under **Not in a step**. Without
 a walkthrough, Up next and the route show as before
 ([ADR 17](docs/adr/0017-walkthrough-is-a-maker-stage.md)). A guide made
-before 0.7.0 has none: the tracker says "older maker", and **Make again**
+before 0.6.1 has none: the tracker says "older maker", and **Make again**
 adds one.
+
+Since 0.7.0 the open step also lists what to do there, in order: the
+place, then the move, ticked once the trophy it gives unlocks. **Tree**
+(beside **Steps**) shows the guide as an outline instead: the story
+folded to one line ("3 / 5", click to unfold), then **Chains**, each
+trophy with the ones the game makes you unlock first under it, dimmed
+with "needs ..." while they're open, then the trophies **On their own**.
+Up next leaves out a trophy until what it needs is done
+([ADR 20](docs/adr/0020-requires-and-the-guide-tree.md)). Guides made
+before 0.7.0 have no actions or chains; **Make again** adds them.
 
 ### The guide over your game
 

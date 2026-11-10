@@ -10,6 +10,10 @@
   ordered actions (place, move, the achievement it gives), and a step
   of more than 12 is asked again split by chapter or area. Guides
   without actions show as before.
+- The tracker's Guide view: the open step lists its actions as a
+  checklist, and **Tree** shows the guide as an outline (the story on
+  one line, chains of what needs what, the rest on their own). Only
+  `TrackerView.qml` changed, so no shell restart is needed.
 - A stage asked twice keeps the better answer, not always the second;
   everyday words ("act fast", "the area") no longer pull an excerpt in
   as a walkthrough; a quote cut off on "the" or "and" no longer counts

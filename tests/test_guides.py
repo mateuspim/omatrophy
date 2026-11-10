@@ -118,6 +118,17 @@ class GuideAnswer(unittest.TestCase):
                                                {'where': '', 'what': 'Look around', 'achievement': ''}])
         self.assertEqual(steps[1]['actions'], [])
 
+    def test_the_tree_sample_matches_the_reader(self):
+        # dev/render.sh guide-tree shows it; a sample the reader can't make
+        # would check the view against a shape that never occurs.
+        folder = os.path.join(SAMPLES, '..')
+        with open(os.path.join(folder, 'guide-tree.json'), encoding='utf-8') as f:
+            sample = json.load(f)
+        self.assertEqual(sample['tree'], guides.tree(sample['order'], sample['items'], sample['walkthrough']))
+        self.assertTrue(any(i.get('requires') for i in sample['items'].values()))
+        self.assertTrue(any(s['actions'] for s in sample['walkthrough']))
+        self.assertNotIn('L8', sample['next'])  # Lighthouse Keeper waits for Keeper
+
     def test_walkthrough_maps_unlocked_trophies_not_in_the_plan(self):
         with tempfile.TemporaryDirectory() as d:
             guides.import_guides(SAMPLES, folder=d)

@@ -12,7 +12,8 @@
 #   dev/render.sh settings out.png       its Settings tab (settings-toasts, -now, -guides, -stores: one section)
 #   dev/render.sh tracker out.png        the achievement tracker
 #   dev/render.sh guide out.png          its Guide view (guide-making: a make running; guide-empty: none yet;
-#                                        guide-failed: the last make failed)
+#                                        guide-failed: the last make failed; guide-steps: a guide with
+#                                        step actions; guide-tree: its Tree outline, story unfolded)
 #   dev/render.sh gold out.png           a toast: bronze, silver, gold, platinum
 #   dev/render.sh --live tracker out.png the views read your real stores
 #   dev/render.sh --font 16 now out.png  at another theme font size (the base is 12)
@@ -34,7 +35,7 @@ while [[ ${1:-} == --* ]]; do
 done
 [[ -z $font || $font =~ ^[0-9]+$ && $font -ge 6 && $font -le 40 ]] ||
   { echo "--font takes a theme base size in pixels, 6 to 40, not '$font'" >&2; exit 2; }
-[[ $# -eq 2 ]] || { sed -n '5,19p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+[[ $# -eq 2 ]] || { sed -n '5,21p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 target=$1
 out=$(realpath -m "$2")
 theme=$HOME/.local/state/omarchy/current/theme
@@ -120,12 +121,17 @@ case $target in
         }
       }"
     data=game.json ;;
-  guide|guide-making|guide-empty|guide-failed)
+  guide|guide-making|guide-empty|guide-failed|guide-steps|guide-tree)
     w=1300 h=960 at=3000
+    # guide-steps and guide-tree: a made-up game whose guide has requires
+    # and step actions (maker 4).
+    guideFile=guide.json data=game.json tree=false
+    [[ $target == guide-steps || $target == guide-tree ]] && guideFile=guide-tree.json data=game-tree.json
+    [[ $target == guide-tree ]] && tree=true
     guide="JSON.parse(guideSample.text())"; [[ $target == guide-empty || $target == guide-making || $target == guide-failed ]] && guide="({})"
     job="({})"; [[ $target == guide-making ]] && job="JSON.parse(jobSample.text())"
     [[ $target == guide-failed ]] && job="Object.assign(JSON.parse(jobSample.text()), { state: 'failed', line: 'failed: route: opencode: the agent could not reach its model server inside the sandbox; the old guide is unchanged' })"
-    extra="FileView { id: guideSample; path: \"$repo/dev/samples/guide.json\"; blockLoading: true }
+    extra="FileView { id: guideSample; path: \"$repo/dev/samples/$guideFile\"; blockLoading: true }
   FileView { id: agentSample; path: \"$repo/dev/samples/agents.json\"; blockLoading: true }
   FileView { id: jobSample; path: \"$repo/dev/samples/guide-job.json\"; blockLoading: true }"
     view="Loader {
@@ -140,9 +146,9 @@ case $target in
           item.makerOpen = !item.hasGuide
           item.job = $job
           item.filter = \"guide\"
+          item.treeShown = $tree; item.storyOpen = $tree
         }
-      }"
-    data=game.json ;;
+      }" ;;
   bronze|silver|gold|platinum)
     # The platinum card takes about six seconds to open fully.
     w=1000 h=$([[ $target == platinum ]] && echo 400 || echo 260) at=$([[ $target == platinum ]] && echo 6500 || echo 3500)
