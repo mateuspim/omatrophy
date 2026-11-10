@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.6.3 - 2026-11-10
+
+A pass over every screen for text that was cut, overlapping or off its
+frame, checked with long names, big counts and small and large theme
+fonts. Only `TrophyToast.qml`, `PlatinumCard.qml`, `StylePicker.qml` and
+`TrackerView.qml` changed, so no shell restart is needed.
+
+- Toasts: a long achievement name wraps to two lines, a description
+  that is one unbroken word no longer runs off the card, and the tier
+  line stays clear of the achievement art.
+- The platinum card grows to fit a two-line game name or a large font;
+  its bar no longer sits on the frame.
+- Stat rows (the Now tab's totals, the Profile's) shrink to fit rather
+  than run off the panel; the metal counts and the showcase hint move
+  to their own line when they would overlap.
+- Guide tab: a counter such as "9 / 14 systems" no longer breaks across
+  lines, and a wrapped facts line no longer ends on a hanging " ·".
+- Settings > Toasts: the "Try it" tiles' trophy and label size with the
+  tile, so PLATINUM stays inside it at a small font.
+- Settings > Guides: the key recorder's "recording" tag no longer covers
+  a long key.
+- Tracker: the hero art no longer covers the frame's right edge, and
+  the loading ring no longer shows a square around it.
+
 ## 0.6.2 - 2026-11-07
 
 Two fixes for the Steam profile backfill (`community`, off by default)

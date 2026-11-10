@@ -546,7 +546,7 @@ Item {
 
   function stepNames(step) {
     var missables = step.missables || []
-    return (step.achievements || []).map(function(api) {
+    return factJoin((step.achievements || []).map(function(api) {
       var a = byApi[api] || { name: api }
       var secret = a.hidden && !a.unlocked && !revealed[api] && !revealAll
       // The item's own missable flag counts too: MGSV's walkthrough left
@@ -554,7 +554,7 @@ Item {
       var item = guide && guide.items ? guide.items[api] || {} : {}
       return ((missables.indexOf(api) >= 0 || item.missable) && !guideDone(api) ? "⚠ " : "") + (secret ? "Hidden achievement" : a.name)
              + (guideDone(api) ? " ✓" : "")
-    }).join("  ·  ")
+    }))
   }
 
   function guideDone(api) {
@@ -595,6 +595,18 @@ Item {
   // Markdown or HTML, are dropped so showing it fetches nothing.
   function safeMarkdown(text) {
     return String(text || "").replace(/!\[[^\]]*\]\([^)]*\)/g, "").replace(/<img\b[^>]*>/gi, "")
+  }
+
+  // Short facts in a wrapping line ("~1-2 h", "9 / 14 systems") stay
+  // whole: the line broke between "9 /" and "14 systems".
+  function unbroken(text) {
+    return String(text).replace(/ /g, "\u00a0")
+  }
+
+  // Joins a wrapping line's parts with " · ", the dot kept with the part
+  // after it: the line broke after the dot and left it hanging at the end.
+  function factJoin(parts) {
+    return parts.join("  ·\u00a0\u00a0")
   }
 
   function dots(n) {
@@ -805,10 +817,21 @@ Item {
   // light sweeping across it.
   component Bone: Rectangle {
     id: bone
+    // clip cuts to the box, not the rounded edge: the band showed square
+    // corners around the round ring placeholder. A round bone pulses
+    // instead.
+    readonly property bool round: radius * 2 >= Math.min(width, height) - 1
     color: Qt.alpha(root.foreground, 0.07)
     radius: 3
     clip: true
+    SequentialAnimation on opacity {
+      running: bone.round && bone.visible
+      loops: Animation.Infinite
+      NumberAnimation { to: 0.55; duration: 650; easing.type: Easing.InOutSine }
+      NumberAnimation { to: 1; duration: 650; easing.type: Easing.InOutSine }
+    }
     Rectangle {
+      visible: !bone.round
       width: Math.max(60, bone.width * 0.4)
       height: bone.height
       gradient: Gradient {
@@ -1156,14 +1179,14 @@ Item {
     readonly property string meta: {
       var parts = []
       if (item.missable && !done) parts.push("⚠ Missable" + (item.missable_note ? ": " + item.missable_note : ""))
-      if (item.time) parts.push(item.time)
+      if (item.time) parts.push(root.unbroken(item.time))
       if (item.difficulty) parts.push(root.dots(item.difficulty))
       if (item.counter && item.counter.target) {
         var at = ach.progress ? ach.progress.value + " / " : ""
-        parts.push(at + item.counter.target + (item.counter.label ? " " + item.counter.label : ""))
+        parts.push(root.unbroken(at + item.counter.target + (item.counter.label ? " " + item.counter.label : "")))
       }
       if (item.dlc) parts.push("DLC: " + item.dlc)
-      return parts.join("  ·  ")
+      return root.factJoin(parts)
     }
     width: parent ? parent.width : 0
     height: Math.max(growBody.height, growIcon.height, growSide.height) + Commons.Style.space(14)
@@ -1362,9 +1385,11 @@ Item {
 
     Item {
       id: header
-      x: card.contentLeftInset
-      y: card.contentTopInset
-      width: parent.width - card.contentLeftInset - card.contentRightInset
+      // Whole pixels inside the frame: a theme's 1.5 px border put the art
+      // on half pixels, and it painted over the frame's right edge.
+      x: Math.ceil(card.contentLeftInset)
+      y: Math.ceil(card.contentTopInset)
+      width: parent.width - x - Math.ceil(card.contentRightInset)
       height: Commons.Style.space(176)
 
       Image {

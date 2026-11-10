@@ -271,7 +271,9 @@ Item {
     x: root.pad + (root.edge === "top-left" ? 0 : root.mirror ? root.full - width : (root.full - width) / 2) + slideX
     y: root.pad + slideY
     width: root.badge
-    height: 176
+    // Grows past its usual height for a two-line title or a large theme
+    // font, which ran the bar into the frame's bottom edge.
+    height: Math.max(176, textCol.height + 56)
 
     // Rays turn behind the card, so they read as light from behind it
     // rather than a sticker on top of the art.
@@ -634,6 +636,9 @@ Item {
           font.family: Commons.Style.font.family
           font.pixelSize: Commons.Style.font.display
           font.bold: true
+          // Two lines before it elides, like the toast's name.
+          wrapMode: Text.Wrap
+          maximumLineCount: 2
           elide: Text.ElideRight
           opacity: 0
         }

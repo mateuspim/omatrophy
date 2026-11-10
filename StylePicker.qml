@@ -939,6 +939,16 @@ Column {
     MiniLabel { text: parent.label }
   }
 
+  // Stats side by side. A big count or a large theme font can make them
+  // wider than the panel; then the row shrinks as one rather than
+  // running off the edge (a 1,234,567-trophy row hid GAMES).
+  component StatRow: Row {
+    readonly property real room: parent ? parent.width - x : implicitWidth
+    spacing: Commons.Style.space(16)
+    transformOrigin: Item.Left
+    scale: implicitWidth > room && room > 0 ? room / implicitWidth : 1
+  }
+
   // Store art, cropped into a rounded frame. Steam's header art is 460 × 215;
   // delisted games can lack it, so the name stands in until it loads.
   component Art: Rectangle {
@@ -2049,12 +2059,10 @@ Column {
         width: 48
         height: 48
       }
-      Row {
+      StatRow {
         anchors.left: heroTrophy.right
         anchors.leftMargin: Commons.Style.space(30)
-        anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
-        spacing: Commons.Style.space(16)
         Stat {
           value: root.cabinet ? root.cabinet.trophies : -1
           label: "TROPHIES"
@@ -2103,8 +2111,11 @@ Column {
         }
       }
       Item {
+        // A large theme font ran the counts into the average; it takes
+        // its own line when both don't fit.
+        readonly property bool fits: metalLegend.width + averageCaption.implicitWidth + Commons.Style.space(12) <= width
         width: parent.width
-        height: metalLegend.height
+        height: fits ? metalLegend.height : averageCaption.y + averageCaption.height
         Row {
           id: metalLegend
           spacing: Commons.Style.space(12)
@@ -2127,7 +2138,9 @@ Column {
           }
         }
         Caption {
+          id: averageCaption
           anchors.right: parent.right
+          y: parent.fits ? 0 : metalLegend.height + Commons.Style.space(4)
           text: (root.cabinet ? root.cabinet.completion : 0) + "% avg completion"
         }
       }
@@ -3112,8 +3125,7 @@ Column {
               maximumLineCount: 2
               elide: Text.ElideRight
             }
-            Row {
-              spacing: Commons.Style.space(16)
+            StatRow {
               Stat {
                 visible: favorite.game !== null && favorite.game.minutes > 0
                 value: favorite.game ? Math.round(favorite.game.minutes / 60) : -1
@@ -3206,17 +3218,22 @@ Column {
       readonly property bool picked: picks.length > 0
       readonly property var tiles: picked ? picks
         : (root.cabinet && root.cabinet.rarest ? root.unhidden(root.cabinet.rarest.ever).slice(0, 6) : [])
+      // The hint takes its own line when it would run into the title
+      // (a large theme font).
+      readonly property bool fits: showcaseTitle.implicitWidth + showcaseHint.implicitWidth + Commons.Style.space(12) <= width
       visible: tiles.length > 0
       width: root.width
-      height: showcaseTitle.height
+      height: fits ? showcaseTitle.height : showcaseHint.y + showcaseHint.height
       PanelSectionHeader {
         id: showcaseTitle
         text: showcaseHeader.picked ? "SHOWCASE · " + showcaseHeader.picks.length + " / 6" : "SHOWCASE · RAREST EVER"
         foreground: root.foreground
       }
       Caption {
+        id: showcaseHint
         anchors.right: parent.right
-        anchors.verticalCenter: parent.verticalCenter
+        y: showcaseHeader.fits ? (showcaseTitle.height - height) / 2 : showcaseTitle.height
+        width: Math.min(implicitWidth, parent.width)
         opacity: 0.45
         text: showcaseHeader.picked ? "drag to reorder · ☆ in the tracker adds" : "☆ a trophy in the tracker to pin it"
       }
@@ -3435,9 +3452,8 @@ Column {
       }
     }
 
-    Row {
+    StatRow {
       visible: root.cabinet !== null
-      spacing: Commons.Style.space(16)
       Stat { value: root.cabinet ? root.cabinet.trophies : -1; label: "TROPHIES" }
       Stat { value: root.cabinet && root.cabinet.metals ? root.cabinet.metals.gold : -1; label: "RARE"; tint: root.metalColors.gold }
     }
@@ -3548,9 +3564,8 @@ Column {
       text: "Your newest platinums · ☆ Completionist in the tracker picks your own"
     }
 
-    Row {
+    StatRow {
       visible: root.cabinet !== null
-      spacing: Commons.Style.space(16)
       Stat { value: root.cabinet ? root.cabinet.platinums : -1; label: "COMPLETED"; tint: root.metalColors.platinum }
       Stat { value: root.cabinet && root.cabinet.started !== undefined ? root.cabinet.started : -1; label: "STARTED" }
       Stat { value: root.cabinet && root.cabinet.completion !== undefined ? root.cabinet.completion : -1; label: "AVG COMPLETION"; suffix: "%" }
@@ -3564,11 +3579,10 @@ Column {
       foreground: root.foreground
     }
 
-    Row {
+    StatRow {
       id: playtimeRow
       readonly property var minutes: root.cabinet && root.cabinet.playtime ? root.cabinet.playtime : null
       visible: minutes !== null && minutes.total > 0
-      spacing: Commons.Style.space(16)
       Stat { value: playtimeRow.minutes ? Math.round(playtimeRow.minutes.recent / 60) : -1; label: "HOURS · 2 WEEKS" }
       Stat { value: playtimeRow.minutes ? Math.round(playtimeRow.minutes.total / 60) : -1; label: "HOURS IN ALL" }
     }
@@ -4162,8 +4176,10 @@ Column {
                   anchors.horizontalCenter: parent.horizontalCenter
                   style: root.iconSet
                   metal: tile.modelData
-                  width: 22
-                  height: 22
+                  // Sized with the tile: fixed sizes ran PLATINUM over the
+                  // tile's edge at a small theme font.
+                  width: Commons.Style.space(22)
+                  height: Commons.Style.space(22)
                   scale: fire.pressed ? 0.9 : 1
                   Behavior on scale { NumberAnimation { duration: 90 } }
                 }
@@ -4174,7 +4190,7 @@ Column {
                   color: root.metalColors[tile.modelData]
                   opacity: fire.containsMouse ? 1 : 0.7
                   font.family: Commons.Style.font.family
-                  font.pixelSize: 8
+                  font.pixelSize: Commons.Style.space(8)
                   font.letterSpacing: 1
                 }
               }
@@ -4782,6 +4798,7 @@ Column {
             TapHandler { onTapped: keyField.forceActiveFocus() }
             Text {
               textFormat: Text.PlainText
+              id: keyText
               anchors.left: parent.left
               anchors.leftMargin: Commons.Style.space(12)
               anchors.verticalCenter: parent.verticalCenter
@@ -4797,7 +4814,11 @@ Column {
               anchors.right: parent.right
               anchors.rightMargin: Commons.Style.space(12)
               anchors.verticalCenter: parent.verticalCenter
+              // The key wins the room: at a large theme font this tag was
+              // drawn over "Super+Ctrl+Alt+Shift+F12". The field's border
+              // still shows it's listening.
               visible: keyField.activeFocus
+                       && keyText.implicitWidth + implicitWidth + Commons.Style.space(36) <= keyField.width
               text: "recording"
               color: Commons.Color.accent
               font.family: Commons.Style.font.family

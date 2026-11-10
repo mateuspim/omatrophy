@@ -15,6 +15,7 @@
 #                                        guide-failed: the last make failed)
 #   dev/render.sh gold out.png           a toast: bronze, silver, gold, platinum
 #   dev/render.sh --live tracker out.png the views read your real stores
+#   dev/render.sh --font 16 now out.png  at another theme font size (the base is 12)
 #
 # Sample data is fake (dev/samples/) so captures are safe for the README;
 # --live output shows your own games and stays out of git. The software
@@ -23,8 +24,17 @@
 set -euo pipefail
 repo=$(cd "$(dirname "$0")/.." && pwd)
 live=false
-if [[ ${1:-} == --live ]]; then live=true; shift; fi
-[[ $# -eq 2 ]] || { sed -n '5,18p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+font=""
+while [[ ${1:-} == --* ]]; do
+  case $1 in
+    --live) live=true; shift ;;
+    --font) font=${2:-}; shift 2 || true ;;
+    *) break ;;
+  esac
+done
+[[ -z $font || $font =~ ^[0-9]+$ && $font -ge 6 && $font -le 40 ]] ||
+  { echo "--font takes a theme base size in pixels, 6 to 40, not '$font'" >&2; exit 2; }
+[[ $# -eq 2 ]] || { sed -n '5,19p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 target=$1
 out=$(realpath -m "$2")
 theme=$HOME/.local/state/omarchy/current/theme
@@ -38,12 +48,40 @@ done
 extra=""
 dir=$(mktemp -d)
 trap 'rm -rf "$dir"' EXIT
+
+# --font: the theme's shell.toml with another [font] base-size, which
+# every font token and (by default) the spacing scale follow. Commons.Color
+# reads the real theme itself once it starts, after the FileView below, so
+# the copy is applied again a moment later, over any base-size of the
+# user's own.
+fontShell=""
+panel=420
+if [[ -n $font ]]; then
+  awk -v size="$font" '
+    /^\[/ { if (infont && !done) { print "base-size = " size; done = 1 } infont = ($0 == "[font]") }
+    infont && /^base-size[ \t]*=/ { print "base-size = " size; done = 1; next }
+    { print }
+    END { if (!done) { if (!infont) print "[font]"; print "base-size = " size } }
+  ' "$theme/shell.toml" > "$dir/font-shell.toml" 2>/dev/null || printf '[font]\nbase-size = %s\n' "$font" > "$dir/font-shell.toml"
+  fontShell="FileView { id: fontShell; path: \"$dir/font-shell.toml\"; blockLoading: true }
+  Timer {
+    interval: 600; running: true
+    onTriggered: {
+      var user = Object.assign({}, Commons.Color.userShellValues)
+      delete user[\"font.base-size\"]
+      Commons.Color.userShellValues = user
+      Commons.Color.loadShell(fontShell.text())
+    }
+  }"
+  # The bar popup is Style.space(420) wide, so it grows with the font.
+  panel=$(( (420 * font + 6) / 12 ))
+fi
 ln -s /usr/share/omarchy/shell/Commons "$dir/Commons"
 ln -s /usr/share/omarchy/shell/Ui "$dir/Ui"
 
 case $target in
   now|idle|empty|profile|settings|settings-*|games|loading)
-    w=460 h=900 at=2500
+    w=$(( panel + 40 )) h=900 at=2500
     section=overview; [[ $target == settings-* ]] && { section=${target#settings-}; target=settings; }
     tab=now; [[ $target == settings || $target == games || $target == profile ]] && tab=$target
     data=now.json; [[ $target == idle || $target == empty ]] && data=$target.json; [[ $target == games ]] && data=games.json
@@ -60,10 +98,10 @@ case $target in
       feed="$feed; item.guideAgents = JSON.parse(agentSample.text()); item.guideModels = ({ claude: { model: \"sonnet\", effort: \"medium\" } }); item.guideJail = true; item.defaultKeyCheck = ({ key: \"SUPER + CTRL + G\", valid: true, taken: \"\" }); item.settingsSection = \"$section\""
     fi
     view="Loader {
-        x: 20; y: 20; width: 420
+        x: 20; y: 20; width: $panel
         source: \"file:$repo/StylePicker.qml\"
         onLoaded: {
-          item.width = 420
+          item.width = $panel
           item.live = $live
           if (!$live) { $feed }
           item.tab = \"$tab\"
@@ -129,6 +167,7 @@ ShellRoot {
   FileView { path: "$theme/colors.toml"; blockLoading: true; onLoaded: Commons.Color.loadColors(text()) }
   FileView { path: "$theme/shell.toml"; blockLoading: true; printErrors: false; onLoaded: Commons.Color.loadShell(text()) }
   FileView { id: sample; path: "$repo/dev/samples/$data"; blockLoading: true }
+  $fontShell
   $extra
   FloatingWindow {
     implicitWidth: $w
