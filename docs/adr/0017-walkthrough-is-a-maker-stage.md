@@ -31,6 +31,13 @@ each cite is checked against the page it names. A step with no verified
 quote is marked unverified, not dropped: the order of a game's chapters
 is worth showing even when no excerpt quotes it.
 
+Added in 0.6.4, after the first bench that scored the walkthrough (MGS V
+Ground Zeroes, 2026-11-10): an open achievement in no step is asked
+again, since the walkthrough is for what is left; an achievement stays
+in its first step only (sonnet had counted one open twice); a step's
+missables take in the items classify marked missable; and a step's
+quote must say more than the store's own text, as an item's must.
+
 A failed walkthrough (no parse after the retry, or the agent erred) costs
 only the walkthrough: the items and route are already made, and the
 earlier walkthrough, if any, stays.

@@ -564,9 +564,11 @@ def check_route(text, names):
 WALK_STEPS = 40
 
 
-def check_walkthrough(text, names):
+def check_walkthrough(text, names, open_names=()):
     """(steps, errors) from a walkthrough answer: each step a title, text,
-    achievements and missables (names known here), and cites."""
+    achievements and missables (names known here), and cites. An open
+    achievement (`open_names`) in no step is an error, so the retry places
+    it: a walkthrough is for the ones still to get."""
     try:
         raw = tagged(text, 'walkthrough')
     except ValueError as e:
@@ -574,7 +576,7 @@ def check_walkthrough(text, names):
     found = raw.get('steps') if isinstance(raw, dict) else None
     if not isinstance(found, list):
         return [], ['the <walkthrough> block must be {"steps": [...]}']
-    steps, errors = [], []
+    steps, errors, placed = [], [], set()
     for i, s in enumerate(found[:WALK_STEPS], 1):
         if not isinstance(s, dict) or not isinstance(s.get('title'), str) or not s['title'].strip():
             errors.append(f'step {i} has no title')
@@ -585,10 +587,14 @@ def check_walkthrough(text, names):
             errors.append(f'step {i} talks about your input ({", ".join(sorted(set(talk))[:3])}); write for the player')
         achs = []
         for n in s.get('achievements') if isinstance(s.get('achievements'), list) else []:
-            if n in names and n not in achs:
+            # One step each, the first: the 2026-11-10 bench put Skilled in
+            # its mission and again in an "S-rank everything" step, so the
+            # tracker counted it open twice. Not asked again: it costs a call.
+            if n in names and n not in achs and n not in placed:
                 achs.append(n)
             elif n not in names:
                 errors.append(f'step {i} names {n!r}, which is not an achievement here')
+        placed.update(achs)
         miss = s.get('missables') if isinstance(s.get('missables'), list) else []
         steps.append({'title': scrub_meta(s['title'].strip()), 'text': scrub_meta(body.strip()), 'achievements': achs,
                       'missables': [n for n in miss if n in achs], 'cites': check_cites(s.get('cites'))})
@@ -596,6 +602,11 @@ def check_walkthrough(text, names):
         errors.append(f'at most {WALK_STEPS} steps')
     if not steps:
         errors.append('no steps')
+    unplaced = [n for n in open_names if n not in placed]
+    if steps and unplaced:
+        errors.append('these open achievements are in no step: ' + ', '.join(unplaced[:12])
+                      + (f' and {len(unplaced) - 12} more' if len(unplaced) > 12 else '')
+                      + '; put each in the step where the game gives it (post-game, DLC and online steps last)')
     return steps, errors
 
 
@@ -878,6 +889,11 @@ class Job:
             if not found['ok']:
                 raise RuntimeError(f"{stage}: {found['error']}; the old guide is unchanged")
             value, errors = check(found['text'])
+            # Why the stage asked again, kept: a retry the second answer
+            # fixed left no trace, and the 2026-11-10 bench couldn't say why
+            # its walkthrough cost doubled.
+            if errors:
+                self.usage[-1]['errors'] = errors[:5]
             best = value if best is None else merge(best, value)
             if not errors:
                 break
@@ -991,7 +1007,8 @@ class Job:
         text = prompt('walkthrough', game=self.game, progress=f'{done} of {len(self.achs)} unlocked',
                       excerpts=excerpt_block(picked), table='\n'.join(rows))
         try:
-            steps, errors = self.ask('walkthrough', text, lambda t: check_walkthrough(t, every),
+            steps, errors = self.ask('walkthrough', text,
+                                     lambda t: check_walkthrough(t, every, [a['name'] for a in open_achs]),
                                      lambda a, b: b or a)
         except RuntimeError as e:
             # The items and route are made by now; a walkthrough that
@@ -999,8 +1016,15 @@ class Job:
             return [], [str(e)]
         out = []
         for s in steps or []:
-            cites = verify_quotes(s['cites'], self.sources, pieces)
-            out.append(dict(s, cites=cites, unverified=not any(c['verified'] for c in cites)))
+            # A quote that only repeats the store's name or description of
+            # the step's achievements proves nothing about the step.
+            given = [g for n in s['achievements'] for g in (n, by_name.get(n, {}).get('desc', ''))]
+            cites = verify_quotes(s['cites'], self.sources, pieces, given)
+            # A missable item is lost where the walkthrough gets it, whether
+            # or not the model listed it: MGSV's left War Buddy out.
+            missables = s['missables'] + [n for n in s['achievements']
+                                          if (table.get(n) or {}).get('missable') and n not in s['missables']]
+            out.append(dict(s, cites=cites, missables=missables, unverified=not any(c['verified'] for c in cites)))
         return out, errors
 
     def run(self):

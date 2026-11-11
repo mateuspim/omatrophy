@@ -7,6 +7,12 @@
   weighs 10 of the 100, taken from filled fields (now 15) and sections
   (now 5), and shows as a `walk` column in the table. Scores from
   earlier benches, the README's table among them, used the old weights.
+- Walkthroughs place every open achievement: one a model leaves out is
+  asked for again, and the tracker's "Not in a step" list should be
+  rare. Each achievement sits in one step, the one where it unlocks
+  (a "collect them all" where it finishes), and a step warns for every
+  missable it holds. A step's quote that only repeats the store's
+  description no longer counts as a source.
 
 ## 0.6.3 - 2026-11-10
 

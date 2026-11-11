@@ -140,6 +140,10 @@ class Job(unittest.TestCase):
         write(self.agent_dir, 'items.retry', ITEMS)
         self.assertEqual(guide_maker.make(self.job())['state'], 'done')
         self.assertEqual(self.calls(), 5)  # items twice, route once, walkthrough twice (it names "Nope")
+        plan = json.loads(read(os.path.join(self.guides, 'starfall-odyssey-1.plan.json')))
+        walk = [u for u in plan['usage'] if u['stage'] == 'walkthrough']
+        self.assertTrue(any("'Nope'" in e for e in walk[0]['errors']))
+        self.assertNotIn('errors', [u for u in plan['usage'] if u['stage'] == 'route'][0])
 
     def test_walkthrough_steps_are_checked_and_verified(self):
         self.assertEqual(guide_maker.make(self.job())['state'], 'done')
@@ -150,6 +154,22 @@ class Job(unittest.TestCase):
         self.assertTrue(first['cites'][0]['verified'])
         self.assertFalse(first['unverified'])
         self.assertTrue(second['unverified'])
+
+    def test_walkthrough_marks_missable_items_and_wants_more_than_the_store_says(self):
+        job = self.job()
+        job.sources = {'https://x.example/g': {'text': 'Carry the lantern to the end. In chapter four keep the lantern lit.'}}
+        answer = ('<walkthrough>{"steps": [{"title": "Chapter four", "achievements": ["Last Lantern", "Star Counter"],'
+                  ' "missables": [], "cites": [{"source": "https://x.example/g", "quote": "Carry the lantern to the end"}]},'
+                  ' {"title": "Nights", "achievements": ["Quiet Hours"], "missables": [],'
+                  ' "cites": [{"source": "https://x.example/g", "quote": "In chapter four keep the lantern lit"}]}]}</walkthrough>')
+        job.ask = lambda stage, text, check, merge: check(answer)
+        table = {'Last Lantern': {'missable': True}, 'Star Counter': {}, 'Quiet Hours': {}}
+        steps, errors = job.walkthrough(table, list(table), [])
+        self.assertEqual(errors, [])
+        self.assertEqual(steps[0]['missables'], ['Last Lantern'])
+        # The first quote is only the store's description: no proof.
+        self.assertTrue(steps[0]['unverified'])
+        self.assertFalse(steps[1]['unverified'])
 
     def test_walkthrough_is_told_the_unlocked_ones(self):
         job = self.job()
@@ -259,6 +279,28 @@ class Checks(unittest.TestCase):
         self.assertEqual(steps, [{'title': 'Act 1', 'text': '', 'achievements': ['A'], 'missables': ['A'], 'cites': []}])
         self.assertEqual(len(errors), 3)  # meta talk, Z unknown, step 2 untitled
         self.assertEqual(guide_maker.check_walkthrough('<walkthrough>[]</walkthrough>', {'A'})[0], [])
+
+    def test_check_walkthrough_asks_again_for_open_ones_in_no_step(self):
+        answer = '<walkthrough>{"steps": [{"title": "Act 1", "achievements": ["A"]}]}</walkthrough>'
+        steps, errors = guide_maker.check_walkthrough(answer, {'A', 'B', 'C'}, ['A', 'B'])
+        self.assertEqual(len(steps), 1)
+        self.assertEqual(len(errors), 1)
+        self.assertIn('in no step: B;', errors[0])
+        self.assertEqual(guide_maker.check_walkthrough(answer, {'A', 'B'}, ['A'])[1], [])
+
+    def test_check_walkthrough_keeps_an_achievement_in_its_first_step_only(self):
+        steps, errors = guide_maker.check_walkthrough(
+            '<walkthrough>{"steps": [{"title": "Mission 2", "achievements": ["Skilled"], "missables": ["Skilled"]},'
+            ' {"title": "S-rank all", "achievements": ["Hero", "Skilled"], "missables": ["Skilled"]}]}</walkthrough>',
+            {'Skilled', 'Hero'}, ['Skilled', 'Hero'])
+        self.assertEqual(errors, [])
+        self.assertEqual([s['achievements'] for s in steps], [['Skilled'], ['Hero']])
+        self.assertEqual(steps[1]['missables'], [])
+
+    def test_walkthrough_prompt_puts_a_collect_all_where_it_finishes(self):
+        text = guide_maker.prompt('walkthrough', game='G', progress='0 of 1', excerpts='', table='- A: story')
+        self.assertIn('exactly one step', text)
+        self.assertIn('goes where it finishes', text)
 
     def test_walkthrough_excerpts_prefer_chapters(self):
         pieces = guide_maker.chunks({'https://x.example': {'text': 'unrelated words only'},

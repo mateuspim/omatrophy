@@ -122,6 +122,8 @@ OmaTrophy doesn't know survive a rewrite.
 - `details` (per-achievement steps, facts, pitfalls) and `progress`/`steps`
   (the games app's hand state) pass through untouched. The games app's
   `usage`, without `stage`, reads as one whole-guide run.
+- A `usage` entry whose answer failed the checks holds `errors` (up to
+  five), the reasons the stage asked again.
 - Format 1 is the games app's plan: no `format`, no `api`, no `minutes`,
   no `cites`. The reader accepts it.
 
@@ -200,9 +202,13 @@ it.
    read like a walkthrough (chapter, mission, act...), trusted sites
    first, up to 16,000 characters. Answers
    `<walkthrough>{"steps": [{title, text, achievements, missables, cites}]}</walkthrough>`,
-   5 to 30 steps in play order (40 kept at most). Unknown names and talk
-   about the input are errors that ask again. A failure here keeps the
-   rest of the guide and the earlier walkthrough.
+   5 to 30 steps in play order (40 kept at most). Unknown names, talk
+   about the input and open achievements in no step are errors that ask
+   again. An achievement named in several steps stays in the first. Each
+   step's `missables` gain its items that classify marked missable, and
+   its quotes must say more than the store's text for its achievements,
+   as items' do. A failure here keeps the rest of the guide and the
+   earlier walkthrough.
 6. **Verify** (no model). Validates the shape. Drops names not in the
    game. Matches each quote against the source text after folding case,
    whitespace and quotes. Writes the files atomically.
