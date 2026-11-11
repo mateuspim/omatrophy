@@ -614,8 +614,10 @@ Item {
       // The item's own missable flag counts too: MGSV's walkthrough left
       // War Buddy out of every step's missables.
       var item = guide && guide.items ? guide.items[api] || {} : {}
-      return ((missables.indexOf(api) >= 0 || item.missable) && !guideDone(api) ? "⚠ " : "") + (secret ? "Hidden achievement" : a.name)
-             + (guideDone(api) ? " ✓" : "")
+      // No-break spaces keep ⚠ and ✓ with the name: at a large font the
+      // line broke before the ✓ and left it alone on the next line.
+      return ((missables.indexOf(api) >= 0 || item.missable) && !guideDone(api) ? "⚠\u00a0" : "") + (secret ? "Hidden achievement" : a.name)
+             + (guideDone(api) ? "\u00a0✓" : "")
     }))
   }
 
