@@ -46,12 +46,17 @@ Steps:
   step that starts it.
 - `missables`: names from `achievements` that are lost if the player
   moves on without them.
+- `marker`: the one name from this step's `achievements` that proves
+  the step is finished, the way a chapter or mission clear does ("Clear
+  Chapter 3-2"); the tracker places the player after the last step whose
+  marker is unlocked. Never a side achievement that can be got earlier
+  or later. "" when the step has none.
 - `cites`: quotes backing the step, as below.
 
 {{rules}}
 
 <walkthrough>
-{"steps": [{"title": "...", "text": "...", "achievements": ["..."], "missables": [],
+{"steps": [{"title": "...", "text": "...", "achievements": ["..."], "missables": [], "marker": "...",
             "actions": [{"where": "...", "what": "...", "achievement": "..."}],
             "cites": [{"source": "S1.2", "quote": "..."}]}]}
 </walkthrough>

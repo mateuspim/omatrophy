@@ -65,3 +65,22 @@ shows them under Up next with that step open.
   the tracker says "older maker" and a re-make adds one.
 - The step that is open follows the store's unlocks and hand ticks; the
   game's own progress (which mission the save is on) isn't read.
+
+## Note: markers and "I'm here" (0.7.0)
+
+Guessing the step from unlocks went wrong on RE5: the flash-grenade
+trophy, filed under 4-1, was got in 3-1, and the player showed at 4-1.
+Placing the player after the last fully finished step (ca626b3) helped,
+but a side trophy left open in a finished chapter still held them back.
+Two fixes, as OmaTrophy still sees only achievements:
+
+- The walkthrough stage names a `marker` per step (maker 5): the one
+  achievement of the step that proves it finished, a chapter or mission
+  clear, `""` when the game has none. The reader places the player after
+  the last cleared marker and never past the next one not cleared;
+  between them the finished-step rule still applies. Plans without
+  markers read as before; `guides.MAKER` goes to 5, so they say "older
+  maker".
+- The player can say where they are: **I'm here** on a step (or
+  `guide here`) pins it in the state folder, not in the guide, until
+  they finish a step at or after it.

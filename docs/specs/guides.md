@@ -95,7 +95,7 @@ OmaTrophy doesn't know survive a rewrite.
   },
   "sections": {"overview": "...", "route": "...", "missables": "...", "combos": "..."},
   "walkthrough": [{"title": "Chapter 2: The Veil", "text": "...", "achievements": ["Name"],
-                   "missables": ["Name"],
+                   "missables": ["Name"], "marker": "Name",
                    "actions": [{"where": "Chapter 2-1, the gate", "what": "...", "achievement": "Name"}],
                    "cites": [{"source": "https://...", "quote": "...", "verified": true}],
                    "unverified": false}],
@@ -140,7 +140,7 @@ OmaTrophy doesn't know survive a rewrite.
 
 | Command | Does |
 | --- | --- |
-| `guide [store app]` | Prints the guide as JSON for the tracker: `{store, app, file, generated, order, items: {api: item}, sections, notes, ticks: [api], next: [api], agent, cost_usd, outdated, walkthrough, step, step_pinned, tree, frontier: [api]}` (`agent` is the plan's, `cost_usd` the sum of its `usage`, `walkthrough` the plan's steps with `achievements` and `missables` as `api`s and `done` when none is left open, `step` where the player is: the step they pinned with `guide here` while that pin holds (`step_pinned` true), else the first step with one open after the last finished step, or -1, `outdated` true when OmaTrophy made it with a `maker` older than `guides.MAKER`, so the tracker says "older maker" and lights Make again, `tree` the guide as an outline: `{story: [api], chains: [{api, depth}], alone: [api]}`, story items in play order, each item that `requires` others at depth 0 with its prerequisites under it, the rest alone, `frontier` every open item whose `requires` are all done, in play order from the current step on (a missable of that step first, ones left open in earlier steps last), the tree's Do now), or `{}` when there is none. Each item's `requires` is given as `api`s. The reader is `guides.py`. `items` holds only the plan items that match a store achievement (by `api`, then name); `ticks` are the `api`s of hand ticks; `ticks` and the store's unlocks both count as done for `next`. `next` is the first three open items in `order` whose `requires` are all done, missables first. Without arguments, the game running now, else the last one played. |
+| `guide [store app]` | Prints the guide as JSON for the tracker: `{store, app, file, generated, order, items: {api: item}, sections, notes, ticks: [api], next: [api], agent, cost_usd, outdated, walkthrough, step, step_pinned, tree, frontier: [api]}` (`agent` is the plan's, `cost_usd` the sum of its `usage`, `walkthrough` the plan's steps with `achievements` and `missables` as `api`s, `done` when none is left open, `marker` the `api` of the achievement that proves the step finished (`""` when it has none, as in guides before maker 5) and `cleared` once that one is done, `step` where the player is: the step they pinned with `guide here` while that pin holds (`step_pinned` true), else the first step with one open after the last finished step, or -1; markers bound that guess: never before the step after the last cleared marker, never past the next marked step not cleared, so a side trophy got early doesn't move the player (with no markers, the latest step with an unlock stands in when none is finished), `outdated` true when OmaTrophy made it with a `maker` older than `guides.MAKER`, so the tracker says "older maker" and lights Make again, `tree` the guide as an outline: `{story: [api], chains: [{api, depth}], alone: [api]}`, story items in play order, each item that `requires` others at depth 0 with its prerequisites under it, the rest alone, `frontier` every open item whose `requires` are all done, in play order from the current step on (a missable of that step first, ones left open in earlier steps last), the tree's Do now), or `{}` when there is none. Each item's `requires` is given as `api`s. The reader is `guides.py`. `items` holds only the plan items that match a store achievement (by `api`, then name); `ticks` are the `api`s of hand ticks; `ticks` and the store's unlocks both count as done for `next`. `next` is the first three open items in `order` whose `requires` are all done, missables first. Without arguments, the game running now, else the last one played. |
 | `guide here <store> <app> <step\|clear>` | Pins the walkthrough step the player is at (1-based), or clears the pin, then prints the guide as `guide <store> <app>` does. The pin is saved in `~/.local/state/omatrophy/guide-here.json` as `{"<store>:<app>": {step, title, finished}}` (`step` 0-based, `finished` the steps already finished when pinned); the guide files are not touched. It holds while that step's `title` is the same and no step at or after it finishes that wasn't finished when pinned; after that the automatic rule answers again. Exits non-zero, with what to do, when the game has no guide with steps or the number is out of range. |
 | `guide import <folder>` | Copies every `*-<app>.md` with its `.plan.json` and `.sources.json` from another folder (the games app's `games/`), skipping files we already have (`--replace` overwrites). Read-only on `<folder>`. Prints `imported N, skipped M`. |
 | `guide agents` | Every agent with its models and picks (see Settings). |
@@ -215,7 +215,7 @@ it.
    read like a walkthrough (walkthrough, chapter, mission, episode; act,
    stage, level and area only with a number after them, "Act 2"), trusted
    sites first, up to 16,000 characters. Answers
-   `<walkthrough>{"steps": [{title, text, achievements, missables, actions, cites}]}</walkthrough>`,
+   `<walkthrough>{"steps": [{title, text, achievements, missables, marker, actions, cites}]}</walkthrough>`,
    5 to 30 steps in play order (40 kept at most). Unknown names, talk
    about the input and open achievements in no step are errors that ask
    again. An achievement named in several steps stays in the first. Each
@@ -228,7 +228,10 @@ it.
    blanked). Talk about the input is cut; an action left with no `what`
    is dropped. More than 12 actions is an error asking to split the step
    by chapter or area (12 are kept). Older plans have no `actions` and
-   show their `text` alone. A failure here keeps the rest of the guide
+   show their `text` alone. `marker` (maker 5) is the one name of the
+   step's own `achievements` that proves it finished (a chapter or
+   mission clear), `""` when the game has none; a marker not among the
+   step's achievements is an error that asks again and is blanked. A failure here keeps the rest of the guide
    and the earlier walkthrough.
 
    Any stage that asks again keeps the better of its two answers: items
@@ -272,11 +275,13 @@ metrics, seconds, cost_usd, tokens, calls, folder, name}]}`, best first;
 `metrics` holds each measure (0..1) and the counts `items`, `cited`,
 `unverified` and `steps`, plus, unscored, `needs` (covered items with a
 `requires`), `needs_cited` (those whose `requires` a verified quote
-backs), `actions` (all steps' actions) and `where` (0..1, the share of
-actions naming a place); the table shows them as `needs` (cited/all) and
-`where`. They stay out of the score: a game may have no prerequisites,
-so more `requires` isn't better, and a place is easy to fill with words
-no check reads.
+backs), `actions` (all steps' actions), `where` (0..1, the share of
+actions naming a place) and `markers` (0..1, the share of steps naming a
+marker); the table shows them as `needs` (cited/all), `where` and
+`marker`. They stay out of the score: a game may have no prerequisites,
+so more `requires` isn't better, a place is easy to fill with words no
+check reads, and a game may have no chapter-clear achievements, so a
+step without a marker can be right.
 
 The score (0-100) uses only what OmaTrophy checks: `verified` (share of
 covered items with a verified quote) 35, `coverage` (share of open

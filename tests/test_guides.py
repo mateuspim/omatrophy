@@ -180,6 +180,59 @@ class GuideAnswer(unittest.TestCase):
         steps = guides.walkthrough_steps(plan, ids, {'flash'})
         self.assertEqual(guides.current_step(steps), 3)
 
+    def test_walkthrough_steps_give_the_marker_and_cleared(self):
+        plan = {'walkthrough': [{'title': '3-1', 'achievements': ['clear31', 'side'], 'marker': 'clear31'},
+                                {'title': '3-2', 'achievements': ['clear32'], 'marker': 'side'},
+                                {'title': '3-3', 'achievements': ['clear33'], 'marker': 'gone'},
+                                {'title': 'Old', 'achievements': ['clear41']}]}
+        ids = {n: n.upper() for n in ('clear31', 'side', 'clear32', 'clear33', 'clear41')}
+        steps = guides.walkthrough_steps(plan, ids, {'CLEAR31'})
+        # A marker of another step, or one the store doesn't know, is none.
+        self.assertEqual([(s['marker'], s['cleared']) for s in steps],
+                         [('CLEAR31', True), ('', False), ('', False), ('', False)])
+        self.assertFalse(steps[0]['done'])  # its side trophy is still open
+
+    def test_current_step_follows_the_markers(self):
+        # RE5: 3-1 cleared, the 4-1 flash trophy got early, 3-2 cleared
+        # with its aspirin trophy left open: the player is at 3-3.
+        plan = {'walkthrough': [{'title': '3-1', 'achievements': ['clear31'], 'marker': 'clear31'},
+                                {'title': '3-2', 'achievements': ['clear32', 'aspirin'], 'marker': 'clear32'},
+                                {'title': '3-3', 'achievements': ['clear33'], 'marker': 'clear33'},
+                                {'title': '4-1', 'achievements': ['clear41', 'flash'], 'marker': 'clear41'}]}
+        ids = {n: n for s in plan['walkthrough'] for n in s['achievements']}
+        steps = guides.walkthrough_steps(plan, ids, {'clear31', 'flash', 'clear32'})
+        self.assertEqual(guides.current_step(steps), 2)
+        # Nothing cleared, a side trophy of 4-1 got early: still at the
+        # start, as 3-1's clear is still to come.
+        self.assertEqual(guides.current_step(guides.walkthrough_steps(plan, ids, {'flash'})), 0)
+        # Everything after the last clear done: the leftover pulls back.
+        done = {'clear31', 'clear32', 'clear33', 'clear41', 'flash'}
+        self.assertEqual(guides.current_step(guides.walkthrough_steps(plan, ids, done)), 1)
+
+    def test_current_step_between_markers_uses_the_finished_rule(self):
+        # Only the chapters carry markers; the steps between them don't.
+        plan = {'walkthrough': [{'title': 'Ch 1', 'achievements': ['c1'], 'marker': 'c1'},
+                                {'title': 'Ch 2 town', 'achievements': ['town']},
+                                {'title': 'Ch 2 caves', 'achievements': ['bats']},
+                                {'title': 'Ch 2 boss', 'achievements': ['c2'], 'marker': 'c2'},
+                                {'title': 'Post-game', 'achievements': ['hoard']}]}
+        ids = {n: n for s in plan['walkthrough'] for n in s['achievements']}
+        self.assertEqual(guides.current_step(guides.walkthrough_steps(plan, ids, {'c1', 'town'})), 2)
+        # The post-game trophy got early can't put them past Ch 2's clear.
+        self.assertEqual(guides.current_step(guides.walkthrough_steps(plan, ids, {'c1', 'hoard'})), 1)
+        # Old guides (no marker) keep the finished-step rule.
+        old = {'walkthrough': [dict(s, marker='') for s in plan['walkthrough']]}
+        self.assertEqual(guides.current_step(guides.walkthrough_steps(old, ids, {'c1', 'hoard'})), 1)
+        self.assertEqual(guides.current_step(guides.walkthrough_steps(old, ids, {'hoard'})), 0)
+
+    def test_a_cleared_marker_ends_a_pin(self):
+        plan = {'walkthrough': [{'title': '3-1', 'achievements': ['clear31'], 'marker': 'clear31'},
+                                {'title': '3-2', 'achievements': ['clear32', 'aspirin'], 'marker': 'clear32'}]}
+        ids = {n: n for s in plan['walkthrough'] for n in s['achievements']}
+        pin = guides.make_pin(guides.walkthrough_steps(plan, ids, set()), 1)
+        self.assertEqual(guides.pinned_step(guides.walkthrough_steps(plan, ids, {'clear31'}), pin), 1)
+        self.assertEqual(guides.pinned_step(guides.walkthrough_steps(plan, ids, {'clear32'}), pin), -1)
+
     def test_next_skips_done_and_puts_missables_first(self):
         items = {'a': {'name': 'a'}, 'b': {'name': 'b', 'missable': True}, 'c': {'name': 'c'}, 'd': {'name': 'd'}}
         done = {'c'}

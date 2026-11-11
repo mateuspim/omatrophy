@@ -56,18 +56,22 @@ def walkthrough_measure(plan, open_apis):
 def plan_measure(plan, open_apis):
     """Unscored counts for requires and step actions (maker 4): `needs`
     the covered items that require another, `needs_cited` those whose
-    requires a verified quote backs, `actions` the steps' actions and
-    `where` the share naming a place. Not in the score: a game may have no
-    prerequisites (more isn't better), and a place is easy to fill with
-    words no check reads."""
+    requires a verified quote backs, `actions` the steps' actions,
+    `where` the share naming a place and `markers` the share of steps with
+    a marker. Not in the score: a game may have no prerequisites (more
+    isn't better), a place is easy to fill with words no check reads, and
+    a game may have no chapter-clear achievements to mark with."""
     items = [i for i in (plan.get('items') or {}).values() if isinstance(i, dict) and i.get('api') in open_apis]
     needs = [i for i in items if i.get('requires')]
     cited = [i for i in needs if 'requires' not in (i.get('unverified') or [])]
     actions = [a for s in plan.get('walkthrough') or [] if isinstance(s, dict)
                for a in s.get('actions') or [] if isinstance(a, dict)]
     placed = [a for a in actions if isinstance(a.get('where'), str) and a['where'].strip()]
+    steps = [s for s in plan.get('walkthrough') or [] if isinstance(s, dict)]
+    marked = [s for s in steps if isinstance(s.get('marker'), str) and s['marker']]
     return {'needs': len(needs), 'needs_cited': len(cited), 'actions': len(actions),
-            'where': round(len(placed) / len(actions), 3) if actions else 0.0}
+            'where': round(len(placed) / len(actions), 3) if actions else 0.0,
+            'markers': round(len(marked) / len(steps), 3) if steps else 0.0}
 
 
 def metrics(plan, open_apis):
@@ -112,7 +116,7 @@ def ranked(results):
 
 
 def table(results):
-    rows = [('', 'entry', 'score', 'verified', 'covered', 'fields', 'walk', 'needs', 'where', 'time', 'cost', 'state')]
+    rows = [('', 'entry', 'score', 'verified', 'covered', 'fields', 'walk', 'needs', 'where', 'marker', 'time', 'cost', 'state')]
     for n, r in enumerate(ranked(results), 1):
         m = r.get('metrics') or {}
         cost = r.get('cost_usd')
@@ -121,6 +125,7 @@ def table(results):
                      f"{int(100 * m.get('walkthrough', 0))}%",
                      f"{m.get('needs_cited', 0)}/{m.get('needs', 0)}",
                      f"{int(100 * m.get('where', 0))}%" if m.get('actions') else '-',
+                     f"{int(100 * m.get('markers', 0))}%" if m.get('steps') else '-',
                      f"{r.get('seconds', 0) // 60}m{r.get('seconds', 0) % 60:02d}s",
                      f'${cost:.2f}' if isinstance(cost, (int, float)) else '-', r['state']))
     widths = [max(len(row[i]) for row in rows) for i in range(len(rows[0]))]

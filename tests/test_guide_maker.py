@@ -327,7 +327,8 @@ class Checks(unittest.TestCase):
         steps, errors = guide_maker.check_walkthrough(
             '<walkthrough>{"steps": [{"title": "Act 1", "text": "The provided table says go.", '
             '"achievements": ["A", "Z"], "missables": ["A", "B"]}, {"text": "no title"}]}</walkthrough>', {'A', 'B'})
-        self.assertEqual(steps, [{'title': 'Act 1', 'text': '', 'achievements': ['A'], 'missables': ['A'], 'actions': [], 'cites': []}])
+        self.assertEqual(steps, [{'title': 'Act 1', 'text': '', 'achievements': ['A'], 'missables': ['A'], 'actions': [],
+                                  'marker': '', 'cites': []}])
         self.assertEqual(len(errors), 3)  # meta talk, Z unknown, step 2 untitled
         self.assertEqual(guide_maker.check_walkthrough('<walkthrough>[]</walkthrough>', {'A'})[0], [])
 
@@ -391,6 +392,26 @@ class Checks(unittest.TestCase):
         self.assertEqual(errors, [])
         self.assertEqual([s['achievements'] for s in steps], [['Skilled'], ['Hero']])
         self.assertEqual(steps[1]['missables'], [])
+
+    def test_check_walkthrough_keeps_a_marker_of_the_step_only(self):
+        steps, errors = guide_maker.check_walkthrough(
+            '<walkthrough>{"steps": ['
+            '{"title": "1-1", "achievements": ["Clear 1-1", "Flash"], "marker": "Clear 1-1"},'
+            '{"title": "1-2", "achievements": ["Clear 1-2"], "marker": "Flash"},'
+            '{"title": "1-3", "achievements": ["Clear 1-3"], "marker": "Made up"},'
+            '{"title": "Credits", "achievements": [], "marker": ""},'
+            '{"title": "Post-game", "achievements": ["Hoarder"]}]}</walkthrough>',
+            {'Clear 1-1', 'Clear 1-2', 'Clear 1-3', 'Flash', 'Hoarder'})
+        self.assertEqual([s['marker'] for s in steps], ['Clear 1-1', '', '', '', ''])
+        # Another step's achievement and an unknown name both ask again.
+        self.assertEqual(len(errors), 2)
+        self.assertTrue(errors[0].startswith("step 2 marker 'Flash'"))
+        self.assertIn('chapter or mission clear', errors[1])
+
+    def test_walkthrough_prompt_asks_for_a_marker(self):
+        text = guide_maker.prompt('walkthrough', game='G', progress='0 of 1', excerpts='', table='- A: story')
+        self.assertIn('`marker`', text)
+        self.assertIn('"marker":', text)
 
     def test_walkthrough_prompt_puts_a_collect_all_where_it_finishes(self):
         text = guide_maker.prompt('walkthrough', game='G', progress='0 of 1', excerpts='', table='- A: story')
@@ -712,14 +733,21 @@ class Bench(unittest.TestCase):
             'B': {'api': 'b', 'name': 'B', 'requires': ['C'], 'unverified': ['requires']},
             'C': {'api': 'c', 'name': 'C'},
             'D': {'api': 'z', 'name': 'D', 'requires': ['C']}},
-            'walkthrough': [{'title': 'One', 'actions': [{'where': 'Gate', 'what': 'x'}, {'where': ' ', 'what': 'y'}]},
-                            {'title': 'Two', 'actions': [{'where': 'Hub', 'what': 'z'}, 'junk']}, {'title': 'Old'}]}
+            'walkthrough': [{'title': 'One', 'actions': [{'where': 'Gate', 'what': 'x'}, {'where': ' ', 'what': 'y'}],
+                             'marker': 'A'},
+                            {'title': 'Two', 'actions': [{'where': 'Hub', 'what': 'z'}, 'junk'], 'marker': ''},
+                            {'title': 'Old'}]}
         m = guide_bench.metrics(plan, {'a', 'b', 'c'})
         # D is done, so not counted; B's requires has no verified quote.
         self.assertEqual((m['needs'], m['needs_cited'], m['actions'], m['where']), (2, 1, 3, 0.667))
         self.assertNotIn('needs', guide_bench.WEIGHTS)
         self.assertNotIn('where', guide_bench.WEIGHTS)
         self.assertEqual(guide_bench.plan_measure({}, {'a'})['where'], 0.0)
+        # One step of three names a marker; not scored either.
+        self.assertEqual(m['markers'], 0.333)
+        self.assertNotIn('markers', guide_bench.WEIGHTS)
+        self.assertEqual(guide_bench.plan_measure({}, {'a'})['markers'], 0.0)
+        self.assertIn('marker', guide_bench.table([{'entry': 'e', 'score': 1, 'state': 'done', 'metrics': m}]))
 
     def test_walkthrough_measure_is_zero_without_steps_or_open_ones(self):
         import guide_bench

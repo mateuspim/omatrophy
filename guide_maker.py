@@ -642,7 +642,7 @@ def check_actions(raw, i, names):
 
 def check_walkthrough(text, names, open_names=()):
     """(steps, errors) from a walkthrough answer: each step a title, text,
-    achievements and missables (names known here), and cites. An open
+    achievements, missables and marker (names known here), and cites. An open
     achievement (`open_names`) in no step is an error, so the retry places
     it: a walkthrough is for the ones still to get."""
     try:
@@ -671,11 +671,19 @@ def check_walkthrough(text, names, open_names=()):
             elif n not in names:
                 errors.append(f'step {i} names {n!r}, which is not an achievement here')
         placed.update(achs)
+        # The one achievement that proves the step is done (a chapter
+        # clear): the tracker places the player after the last one got,
+        # whatever side trophies came early (RE5's flash grenade in 3-1).
+        marker = s.get('marker') if isinstance(s.get('marker'), str) else ''
+        if marker and marker not in achs:
+            errors.append(f'step {i} marker {marker!r} is not one of its achievements; name the one of them that '
+                          'proves the step is finished (a chapter or mission clear), or "" when there is none')
+            marker = ''
         miss = s.get('missables') if isinstance(s.get('missables'), list) else []
         actions, errs = check_actions(s.get('actions'), i, names)
         errors += errs
         steps.append({'title': scrub_meta(s['title'].strip()), 'text': scrub_meta(body.strip()), 'achievements': achs,
-                      'missables': [n for n in miss if n in achs], 'actions': actions,
+                      'missables': [n for n in miss if n in achs], 'actions': actions, 'marker': marker,
                       'cites': check_cites(s.get('cites'))})
     if len(found) > WALK_STEPS:
         errors.append(f'at most {WALK_STEPS} steps')

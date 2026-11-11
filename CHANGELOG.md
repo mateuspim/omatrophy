@@ -20,11 +20,24 @@
   needs and what it opens. The guide answer gains `frontier` for Do
   now. Only `TrackerView.qml` changed in the shell, so no restart is
   needed.
+- **I'm here**: OmaTrophy only sees trophies, so the step it puts you
+  at is a guess; click your step in the Tree (or open it in Steps) and
+  **I'm here** pins it, with a pin beside YOU ARE HERE, until you finish
+  that step or a later one. **Back to automatic** drops it. From a
+  terminal: `guide here <store> <app> <step|clear>`. The guide answer
+  gains `step_pinned`.
+- Walkthrough steps name a `marker`, the chapter or mission clear that
+  proves the step finished, and the tracker places you after the last
+  one you got, so a side trophy got early (RE5's flash grenade) or one
+  left open no longer moves you. Guides made before say "older maker"
+  (maker 5) and read as before. Without markers the step you're on
+  follows the last step you finished, not your latest unlock.
 - A done step's ✓ no longer wraps onto a line of its own at large
   font sizes.
 - `guide bench` reports, unscored, the items with prerequisites (and
-  how many a quote backs) and the share of step actions that name a
-  place, as `needs` and `where` columns.
+  how many a quote backs), the share of step actions that name a
+  place and the share of steps with a marker, as `needs`, `where` and
+  `marker` columns.
 - A stage asked twice keeps the better answer, not always the second;
   everyday words ("act fast", "the area") no longer pull an excerpt in
   as a walkthrough; a quote cut off on "the" or "and" no longer counts

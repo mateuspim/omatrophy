@@ -20,8 +20,9 @@ TICK = re.compile(r'^- \[(?P<mark>[ xX])\] \*\*(?P<name>.+?)\*\*(?P<rest>.*)$')
 # making a guide again gives a clearly better one (prompts, sources), so
 # the tracker can say so. 3: route prose without `table` citations, fuller
 # tips, full pages instead of the agent's summaries (2026-11-06). 4:
-# `requires` per item and `actions` per walkthrough step (ADR 20).
-MAKER = 4
+# `requires` per item and `actions` per walkthrough step (ADR 20). 5: a
+# `marker` per step, the chapter clear the tracker places the player by.
+MAKER = 5
 
 
 def outdated(plan):
@@ -234,16 +235,21 @@ def tree(order, items, steps=()):
 def walkthrough_steps(plan, name_to_api, done):
     """The plan's walkthrough for the tracker: each step's achievements
     and missables as `api`s (names the store doesn't know are dropped),
-    and `done` when none of its achievements is left open."""
+    `done` when none of its achievements is left open, `marker` the one
+    achievement that proves the step is finished ("" when it names none
+    of its own) and `cleared` once that one is done."""
     steps = []
     for s in plan.get('walkthrough') if isinstance(plan.get('walkthrough'), list) else []:
         if not isinstance(s, dict) or not isinstance(s.get('title'), str):
             continue
         apis = [name_to_api[n] for n in s.get('achievements') or [] if n in name_to_api]
+        marker = name_to_api.get(s.get('marker'), '') if isinstance(s.get('marker'), str) else ''
+        marker = marker if marker in apis else ''
         steps.append({'title': s['title'], 'text': s.get('text') if isinstance(s.get('text'), str) else '',
                       'achievements': apis, 'actions': step_actions(s.get('actions'), name_to_api),
                       'missables': [name_to_api[n] for n in s.get('missables') or [] if n in name_to_api],
                       'unverified': s.get('unverified') is True,
+                      'marker': marker, 'cleared': bool(marker) and marker in done,
                       'started': any(a in done for a in apis),
                       'done': bool(apis) and all(a in done for a in apis)})
     return steps
@@ -269,20 +275,30 @@ def current_step(steps):
     started doesn't move them forward: RE5's guide puts the flash-grenade
     trophy in 4-1, and a player who got it in 3-1 was shown at 4-1 with
     3-2 and 3-3 still to play. With no step finished yet, the latest
-    step they unlocked anything in stands in."""
-    finished = [i for i, s in enumerate(steps) if s.get('done')]
+    step they unlocked anything in stands in.
+
+    Steps with a `marker` (a chapter clear) bound the guess: the player is
+    past the last cleared one, side trophies or not, and can't be past
+    the next one not cleared, as the story can't skip it. The rules
+    above only look between the two; with no markers that is every step."""
+    cleared = [i for i, s in enumerate(steps) if s.get('marker') and s.get('cleared')]
+    floor = cleared[-1] + 1 if cleared else 0
+    ceiling = next((i for i, s in enumerate(steps) if i >= floor and s.get('marker') and not s.get('cleared')),
+                   len(steps) - 1)
+    window = range(floor, ceiling + 1)
+    finished = [i for i in window if steps[i].get('done')]
     if finished:
         last = finished[-1] + 1
     else:
-        last = max((i for i, s in enumerate(steps) if s.get('started')), default=0)
+        last = max((i for i in window if steps[i].get('started')), default=floor)
     open_at = [i for i, s in enumerate(steps) if s['achievements'] and not s['done']]
     return next((i for i in open_at if i >= last), open_at[0] if open_at else -1)
 
 
 def step_finished(step):
-    """True when the player is past a step: none of its achievements is
-    left open."""
-    return bool(step.get('done'))
+    """True when the player is past a step: its marker (a chapter clear)
+    is done, or none of its achievements is left open."""
+    return bool(step.get('cleared') or step.get('done'))
 
 
 # ------------------------------------------------------------ I'm here
