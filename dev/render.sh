@@ -12,10 +12,16 @@
 #   dev/render.sh settings out.png       its Settings tab (settings-toasts, -now, -guides, -stores: one section)
 #   dev/render.sh tracker out.png        the achievement tracker
 #   dev/render.sh guide out.png          its Guide view (guide-making: a make running; guide-empty: none yet;
-#                                        guide-failed: the last make failed)
+#                                        guide-failed: the last make failed; guide-steps: a guide with
+#                                        step actions; guide-tree: its Tree; guide-tree-done, -locked,
+#                                        -bare (no steps, no chains), -narrow, -pick: its edge states;
+#                                        guide-tree-pinned: the player pinned step 3 (I'm here);
+#                                        guide-tree-pinnable: step 4 shown, its I'm here button;
+#                                        guide-steps-pinned: the Steps view with step 3 pinned)
 #   dev/render.sh gold out.png           a toast: bronze, silver, gold, platinum
 #   dev/render.sh --live tracker out.png the views read your real stores
 #   dev/render.sh --font 16 now out.png  at another theme font size (the base is 12)
+#   dev/render.sh --tall guide-tree out.png  a guide view on a tall card, to see the whole guide column
 #
 # Sample data is fake (dev/samples/) so captures are safe for the README;
 # --live output shows your own games and stays out of git. The software
@@ -25,16 +31,18 @@ set -euo pipefail
 repo=$(cd "$(dirname "$0")/.." && pwd)
 live=false
 font=""
+tall=false
 while [[ ${1:-} == --* ]]; do
   case $1 in
     --live) live=true; shift ;;
+    --tall) tall=true; shift ;;
     --font) font=${2:-}; shift 2 || true ;;
     *) break ;;
   esac
 done
 [[ -z $font || $font =~ ^[0-9]+$ && $font -ge 6 && $font -le 40 ]] ||
   { echo "--font takes a theme base size in pixels, 6 to 40, not '$font'" >&2; exit 2; }
-[[ $# -eq 2 ]] || { sed -n '5,19p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+[[ $# -eq 2 ]] || { sed -n '5,24p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 target=$1
 out=$(realpath -m "$2")
 theme=$HOME/.local/state/omarchy/current/theme
@@ -120,29 +128,59 @@ case $target in
         }
       }"
     data=game.json ;;
-  guide|guide-making|guide-empty|guide-failed)
+  guide|guide-making|guide-empty|guide-failed|guide-steps|guide-steps-pinned|guide-tree|guide-tree-*)
     w=1300 h=960 at=3000
+    $tall && h=2400
+    # guide-steps and guide-tree: a made-up game whose guide has requires
+    # and step actions (maker 4).
+    guideFile=guide.json data=game.json tree=false
+    [[ $target == guide-steps* || $target == guide-tree* ]] && guideFile=guide-tree.json data=game-tree.json
+    [[ $target == guide-tree* ]] && tree=true
+    # The Tree's edge states, from the same sample: every trophy done;
+    # everything left waiting on something; no steps and no chains (the
+    # track falls back to the story trophies); a narrow card; a chain
+    # node picked.
+    tweak="" width=1260
+    case $target in
+      guide-tree-done) tweak="item.game = Object.assign({}, item.game, { achievements: item.game.achievements.map(function(a) { return Object.assign({}, a, { unlocked: true, time: a.time || 1793060000 }) }), unlocked: item.game.total }); g.step = -1; g.frontier = []; g.walkthrough.forEach(function(s) { s.done = true })" ;;
+      guide-tree-locked) tweak="Object.keys(g.items).forEach(function(k) { if (!item.byApi[k].unlocked) g.items[k].requires = [k === 'L9' ? 'L8' : 'L9'] }); g.frontier = []" ;;
+      guide-tree-bare) tweak="g.walkthrough = []; g.step = -1; g.tree.chains = []; g.tree.alone = g.tree.alone.concat(['L5', 'L6', 'L7', 'L8', 'L9', 'L15'])" ;;
+      guide-tree-narrow) width=820 ;;
+      guide-tree-pick) tweak="item.treePick = 'L8'; item.treePickIn = 'chains'" ;;
+      guide-tree-pinned|guide-steps-pinned) tweak="g.step = 2; g.step_pinned = true" ;;
+      # After the guide is set: its onGuideChanged can still see no steps.
+      guide-tree-pinnable) tweak="Qt.callLater(function() { item.trackPick = 3 })" ;;
+      guide-tree) ;;
+      guide-tree-*) echo "unknown view: $target" >&2; exit 2 ;;
+    esac
     guide="JSON.parse(guideSample.text())"; [[ $target == guide-empty || $target == guide-making || $target == guide-failed ]] && guide="({})"
     job="({})"; [[ $target == guide-making ]] && job="JSON.parse(jobSample.text())"
     [[ $target == guide-failed ]] && job="Object.assign(JSON.parse(jobSample.text()), { state: 'failed', line: 'failed: route: opencode: the agent could not reach its model server inside the sandbox; the old guide is unchanged' })"
-    extra="FileView { id: guideSample; path: \"$repo/dev/samples/guide.json\"; blockLoading: true }
+    extra="FileView { id: guideSample; path: \"$repo/dev/samples/$guideFile\"; blockLoading: true }
   FileView { id: agentSample; path: \"$repo/dev/samples/agents.json\"; blockLoading: true }
   FileView { id: jobSample; path: \"$repo/dev/samples/guide-job.json\"; blockLoading: true }"
     view="Loader {
+        id: view
         anchors.centerIn: parent
+        // --tall: set again after the font reload, which put the card's
+        // own height back.
+        Timer { id: tallTimer; interval: 1200; onTriggered: view.item.height = $h - 40 }
         source: \"file:$repo/TrackerView.qml\"
         onLoaded: {
-          item.maxWidth = 1260; item.maxHeight = 920
+          item.maxWidth = ${width:-1260}; item.maxHeight = 920
           item.game = JSON.parse(sample.text())
           item.agents = JSON.parse(agentSample.text())
           item.choosePick()
-          item.guide = $guide
+          var g = $guide
+          ${tweak:-}
+          item.guide = g
           item.makerOpen = !item.hasGuide
           item.job = $job
           item.filter = \"guide\"
+          item.treeShown = $tree
+          if ($tall) tallTimer.start()
         }
-      }"
-    data=game.json ;;
+      }" ;;
   bronze|silver|gold|platinum)
     # The platinum card takes about six seconds to open fully.
     w=1000 h=$([[ $target == platinum ]] && echo 400 || echo 260) at=$([[ $target == platinum ]] && echo 6500 || echo 3500)

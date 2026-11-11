@@ -31,6 +31,7 @@ made.
 | [17](0017-walkthrough-is-a-maker-stage.md) | The walkthrough is one more maker stage, checked like the rest | Accepted |
 | [18](0018-bind-the-guide-key-at-runtime.md) | Bind the Guide key at runtime, once the owner installs it | Accepted |
 | [19](0019-keep-the-tracker-built-between-opens.md) | Keep the tracker built between opens | Accepted |
+| [20](0020-requires-and-the-guide-tree.md) | Hard prerequisites (`requires`) and the guide as a tree | Accepted |
 
 ## Rules
 

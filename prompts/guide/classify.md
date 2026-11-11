@@ -12,7 +12,7 @@ combo partners):
 
 {{achievements}}
 
-Every achievement in the game, for `combine_with`:
+Every achievement in the game, for `combine_with` and `requires`:
 
 {{all_names}}
 
@@ -33,7 +33,14 @@ For each achievement to classify, give:
   is, or "" when unknown.
 - `counter`: `{"target": 50, "label": "kills"}` for a count of 2 or more,
   else null.
-- `combine_with`: names of achievements best done in the same run.
+- `combine_with`: names of achievements best done in the same run (a
+  choice that saves time, not a must).
+- `requires`: names of achievements that must be unlocked before this one
+  can be, because the game locks it until then: a harder difficulty that
+  opens only after an easier one is beaten, a mode or chapter that opens
+  after the story. Only when an excerpt says so, with a cite; else `[]`.
+  Never the chapters played on the way, and never a "same run" partner:
+  those go in `combine_with`.
 - `tips`: two to four plain sentences a player can act on: where and
   when (chapter, mission, area), how to do it, and what to watch out
   for. Never just "unlocks through the story": say which mission, or
@@ -51,6 +58,6 @@ For each achievement to classify, give:
 
 <items>
 [{"name": "...", "phase": "quick", "difficulty": 1, "time": "~5 min", "minutes": [5, 5],
-  "missable": false, "missable_note": "", "counter": null, "combine_with": [],
+  "missable": false, "missable_note": "", "counter": null, "combine_with": [], "requires": [],
   "tips": "...", "dlc": "", "cites": [{"source": "S1.2", "quote": "..."}], "unverified": []}]
 </items>

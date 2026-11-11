@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Effects
+import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import qs.Ui
@@ -105,6 +106,8 @@ Item {
   property var stepOpen: ({})
   readonly property var walkSteps: guide && Array.isArray(guide.walkthrough) ? guide.walkthrough : []
   readonly property int currentStep: guide && guide.step >= 0 ? guide.step : -1
+  // The player said where they are (`guide here`): `step` is that pin.
+  readonly property bool stepPinned: !!guide && guide.step_pinned === true
   readonly property bool walked: hasGuide && walkSteps.length > 0
   // Open trophies of the guide that no step holds, listed after the steps
   // so none is lost track of.
@@ -114,6 +117,66 @@ Item {
     walkSteps.forEach(function(s) { (s.achievements || []).forEach(function(a) { placed[a] = true }) })
     return (guide.order || []).filter(function(api) { return !placed[api] && byApi[api] && !guideDone(api) })
   }
+  // The Guide view as a tree (ADR 20) instead of its steps or Up next:
+  // Do now, the story as a track, chains as small skill trees, the rest
+  // as a grid by phase.
+  property bool treeShown: false
+  // The story step whose actions show under the track; -1 follows the
+  // current step.
+  property int trackPick: -1
+  // The trophy picked in the tree, its tips and needs shown inline in the
+  // part it was picked in (`treePickIn`: "now", "story", "chains", "alone").
+  property string treePick: ""
+  property string treePickIn: ""
+  // On their own's phase groups the player folded, by phase.
+  property var foldedPhases: ({})
+  // Do now shows three; the rest unfold on a click.
+  property bool doNowAll: false
+  // Open trophies whose prerequisites are done, from the reader's
+  // `frontier` (an answer from before it has only `next`); one unlocked or
+  // ticked since drops out at once.
+  readonly property var doNowApis: {
+    if (!guide) return []
+    var from = Array.isArray(guide.frontier) ? guide.frontier : guide.next || []
+    return from.filter(function(api) { return !!byApi[api] && !guideDone(api) && lockedBy(api).length === 0 })
+  }
+  // The chains' rows ({api, depth}) as trees: a depth-0 row is a goal,
+  // the rows under it one deeper are what it needs first.
+  readonly property var chainTrees: {
+    var out = [], stack = []
+    guideTree.chains.forEach(function(row) {
+      var node = { api: row.api, kids: [] }
+      stack.length = row.depth
+      if (row.depth === 0) out.push(node)
+      else if (stack[row.depth - 1]) stack[row.depth - 1].kids.push(node)
+      stack.push(node)
+    })
+    return out
+  }
+  // The story's track: the walkthrough's steps, or with none the story
+  // trophies one per node.
+  readonly property var trackNodes: {
+    if (walkSteps.length > 0) return walkSteps.map(function(s, i) { return { step: i, api: "", achievements: s.achievements || [] } })
+    return guideTree.story.map(function(api) { return { step: -1, api: api, achievements: [api] } })
+  }
+  // Where the player is on the track: the current step, or with no steps
+  // the first story trophy left; -1 when all is done.
+  readonly property int trackHere: {
+    if (walkSteps.length > 0) return currentStep
+    for (var i = 0; i < trackNodes.length; i++) if (!guideDone(trackNodes[i].api)) return i
+    return -1
+  }
+  readonly property int trackShown: trackPick >= 0 ? trackPick : trackHere
+  readonly property var guideTree: guide && guide.tree && Array.isArray(guide.tree.chains)
+                                   ? guide.tree : ({ story: [], chains: [], alone: [] })
+  // Only story and chains make an outline worth a toggle; a guide from
+  // before the tree (no `tree`) shows as it always did.
+  // Steps alone are enough: ARC Raiders has no story trophies and no
+  // prerequisites, and Do now and the track were hidden behind the rule.
+  readonly property bool hasTree: hasGuide && guideTree.story.length + guideTree.chains.length + walkSteps.length > 0
+  readonly property bool treeOn: treeShown && hasTree && !appliedSearch
+  // The steps, Up next and sections: hidden while the outline shows.
+  readonly property bool listShown: !appliedSearch && !treeOn
   // The agent and model picker; folded away under a made guide.
   property bool makerOpen: false
   // Which Make-guide picker is unfolded: "agent", "model", "effort" or "".
@@ -188,8 +251,12 @@ Item {
     stepOpen = next
   }
 
+  onGuideChanged: if (trackPick >= walkSteps.length) trackPick = -1
   onGameChanged: {
     stepOpen = ({})
+    trackPick = -1
+    treePick = ""
+    treePickIn = ""
     var index = {}
     if (game) game.achievements.forEach(function(a) { index[a.api] = a })
     byApi = index
@@ -332,6 +399,17 @@ Item {
     showcaseKeys = add ? showcaseKeys.concat([key]) : showcaseKeys.filter(function(k) { return k !== key })
     var args = ["python3", helperPath, "showcase", add ? "add" : "remove", String(game.store), String(game.app)]
     saver.exec(api ? args.concat([api]) : args)
+  }
+
+  // "I'm here": pin the step at `index`, or with -1 go back to the
+  // automatic guess (OmaTrophy only sees trophies, so the guess can be
+  // wrong). `guide here` saves it and answers with the guide.
+  function pinStep(index) {
+    if (!game || !live) return
+    trackPick = -1
+    pinner.command = ["python3", helperPath, "guide", "here", String(game.store), String(game.app),
+                      index < 0 ? "clear" : String(index + 1)]
+    pinner.running = true
   }
 
   // Pins or unpins this finished game on the completionist tile.
@@ -552,9 +630,146 @@ Item {
       // The item's own missable flag counts too: MGSV's walkthrough left
       // War Buddy out of every step's missables.
       var item = guide && guide.items ? guide.items[api] || {} : {}
-      return ((missables.indexOf(api) >= 0 || item.missable) && !guideDone(api) ? "⚠ " : "") + (secret ? "Hidden achievement" : a.name)
-             + (guideDone(api) ? " ✓" : "")
+      // No-break spaces keep ⚠ and ✓ with the name: at a large font the
+      // line broke before the ✓ and left it alone on the next line.
+      return ((missables.indexOf(api) >= 0 || item.missable) && !guideDone(api) ? "⚠\u00a0" : "") + (secret ? "Hidden achievement" : a.name)
+             + (guideDone(api) ? "\u00a0✓" : "")
     }))
+  }
+
+  function guideItem(api) {
+    return guide && guide.items ? guide.items[api] || ({}) : ({})
+  }
+
+  function isSecret(api) {
+    var a = byApi[api]
+    return !!a && a.hidden && !a.unlocked && !revealed[api] && !revealAll
+  }
+
+  // Picks a trophy from the tree: the list scrolls to it, and its tips
+  // show in the part it was picked in; a second click puts them away.
+  function pickInTree(api, part) {
+    highlightApi = api
+    var same = treePick === api && treePickIn === part
+    treePick = same ? "" : api
+    treePickIn = same ? "" : part
+  }
+
+  function stepOf(api) {
+    for (var i = 0; i < walkSteps.length; i++)
+      if ((walkSteps[i].achievements || []).indexOf(api) >= 0) return i
+    return -1
+  }
+
+  // The step action that gives a trophy: {step, where, what}, null when
+  // no step holds it.
+  function actionOf(api) {
+    var i = stepOf(api)
+    if (i < 0) return null
+    var act = (walkSteps[i].actions || []).find(function(a) { return a.achievement === api })
+    return { step: i, where: act ? act.where : "", what: act ? act.what : "" }
+  }
+
+  // Where a trophy is got, as a player scans for it: the step's number
+  // and the action's place ("Step 2 · Sea wall"), else the step's title;
+  // with no step, a missable's last chance, else its phase.
+  function placeOf(api) {
+    var at = actionOf(api)
+    var item = guideItem(api)
+    if (!at) return item.missable && item.missable_note ? item.missable_note : phaseNames[item.phase] || ""
+    return unbroken("Step " + (at.step + 1)) + "  ·\u00a0\u00a0" + (at.where || walkSteps[at.step].title)
+  }
+
+  // The one-line move: the action, else the tip, else the store's
+  // description; nothing for a secret.
+  function moveOf(api) {
+    var at = actionOf(api)
+    if (at && at.what) return at.what
+    if (isSecret(api)) return ""
+    var a = byApi[api] || {}
+    return guideItem(api).tips || (a.hidden ? "" : a.desc || "")
+  }
+
+  // A counter's progress, {fraction, text}, or null with no counter.
+  function counterOf(api) {
+    var item = guideItem(api), a = byApi[api] || {}
+    var max = item.counter && item.counter.target ? item.counter.target : a.progress ? a.progress.max : 0
+    if (!max) return null
+    var value = guideDone(api) ? max : a.progress ? a.progress.value : 0
+    var label = item.counter && item.counter.label ? " " + item.counter.label : ""
+    return { fraction: Math.min(1, value / max), text: unbroken(value + " / " + max + label) }
+  }
+
+  function isMissable(api) {
+    if (guideItem(api).missable) return true
+    var i = stepOf(api)
+    return i >= 0 && (walkSteps[i].missables || []).indexOf(api) >= 0
+  }
+
+  // Missables still open in a step the player has left: the chance has
+  // gone (until a new game), so the track flags it.
+  function lostAt(index) {
+    if (walkSteps.length === 0 || currentStep < 0 || index >= currentStep) return []
+    return (walkSteps[index].achievements || []).filter(function(api) { return isMissable(api) && !guideDone(api) })
+  }
+
+  // What a trophy opens: the guide's items that need it first.
+  function opensOf(api) {
+    if (!guide || !guide.items) return []
+    return Object.keys(guide.items).filter(function(k) { return (guide.items[k].requires || []).indexOf(api) >= 0 })
+  }
+
+  // A chain laid out as a small tree, goal on top: leaves take slots left
+  // to right and a parent sits over the middle of its children. `x` is in
+  // slots, `parent` an index into `nodes` (-1 for the goal).
+  function chainLayout(tree) {
+    var nodes = [], slot = 0, rows = 0
+    function place(n, depth, parent) {
+      var me = { api: n.api, depth: depth, parent: parent, x: 0 }
+      var at = nodes.length
+      nodes.push(me)
+      rows = Math.max(rows, depth + 1)
+      if (n.kids.length === 0) { me.x = slot++; return me.x }
+      var xs = n.kids.map(function(k) { return place(k, depth + 1, at) })
+      me.x = (xs[0] + xs[xs.length - 1]) / 2
+      return me.x
+    }
+    place(tree, 0, -1)
+    return { nodes: nodes, cols: slot, rows: rows }
+  }
+
+  // On their own by phase, in the reader's order, each {phase, apis, done}.
+  function aloneGroups() {
+    var groups = {}
+    ;(guideTree.alone || []).forEach(function(api) {
+      if (!byApi[api]) return
+      var p = phases.indexOf(guideItem(api).phase) >= 0 ? guideItem(api).phase : "other"
+      if (!groups[p]) groups[p] = []
+      groups[p].push(api)
+    })
+    return phases.concat(["other"]).filter(function(p) { return !!groups[p] }).map(function(p) {
+      return { phase: p, apis: groups[p], done: groups[p].filter(function(a) { return guideDone(a) }).length }
+    })
+  }
+
+  function togglePhase(phase) {
+    var next = Object.assign({}, foldedPhases)
+    next[phase] = !next[phase]
+    foldedPhases = next
+  }
+
+  // What an item still waits for: its `requires` not done yet.
+  function lockedBy(api) {
+    var item = guide && guide.items ? guide.items[api] : null
+    var needs = item && Array.isArray(item.requires) ? item.requires : []
+    return needs.filter(function(r) { return !guideDone(r) })
+  }
+
+  // A trophy's name for one line, a hidden one kept secret like its row.
+  function shownName(api) {
+    var a = byApi[api]
+    if (!a) return ""
+    return a.hidden && !a.unlocked && !revealed[api] && !revealAll ? "Hidden achievement" : a.name
   }
 
   function guideDone(api) {
@@ -631,6 +846,13 @@ Item {
 
   Component.onCompleted: Qt.callLater(function() { keys.forceActiveFocus() })
 
+  // Caption line height, for the tree's fixed-size nodes.
+  FontMetrics {
+    id: captionMetrics
+    font.family: Commons.Style.font.family
+    font.pixelSize: Commons.Style.font.caption
+  }
+
   FileView {
     // Only when live: an offscreen render (dev/render.sh) shows the
     // samples, not the owner's settings and model picks.
@@ -654,6 +876,19 @@ Item {
       onStreamFinished: {
         try { root.guide = JSON.parse(text) || {} } catch (e) { root.guide = {} }
         root.makerOpen = !root.hasGuide
+      }
+    }
+  }
+
+  // A failed pin prints nothing: read the guide again rather than lose it.
+  Process {
+    id: pinner
+    stdout: StdioCollector {
+      onStreamFinished: {
+        var found = null
+        try { found = JSON.parse(text) } catch (e) {}
+        if (found && Array.isArray(found.walkthrough)) root.guide = found
+        else root.readGuide()
       }
     }
   }
@@ -1147,6 +1382,25 @@ Item {
     }
   }
 
+  // Under an open step: "I'm here" on a step that isn't where the player
+  // is, "Back to automatic" on the one they pinned; none on the guessed one.
+  component StepPinButton: Item {
+    id: pinBtn
+    property int index: -1
+    property bool shown: true
+    readonly property bool pinnedHere: root.stepPinned && index === root.currentStep
+    visible: shown && index >= 0 && (pinnedHere || index !== root.currentStep)
+    width: pinAction.width
+    height: visible ? pinAction.height + Commons.Style.space(4) : 0
+    ActionButton {
+      id: pinAction
+      y: Commons.Style.space(4)
+      accent: false
+      text: pinBtn.pinnedHere ? "Back to automatic" : "I'm here"
+      onClicked: root.pinStep(pinBtn.pinnedHere ? -1 : pinBtn.index)
+    }
+  }
+
   // Guide prose (Markdown from the agent or an imported guide). Links open
   // in the browser only when they are https.
   component Prose: Text {
@@ -1159,6 +1413,836 @@ Item {
     font.pixelSize: Commons.Style.font.bodySmall
     onLinkActivated: function(link) { if (/^https:\/\//.test(link)) Qt.openUrlExternally(link) }
     HoverHandler { cursorShape: parent.hoveredLink ? Qt.PointingHandCursor : Qt.ArrowCursor }
+  }
+
+  // A trophy's art for the tree: framed in its metal once done, dim while
+  // open, greyed with a lock while it waits for something. `ready` (its
+  // prerequisites done, itself open) glows in the accent; `badge` adds the
+  // metal's trophy in a corner.
+  component ArtIcon: Item {
+    id: art
+    property string api: ""
+    property real size: Commons.Style.space(36)
+    property bool ready: false
+    property bool picked: false
+    property bool badge: false
+    property bool tick: false
+    readonly property var ach: root.byApi[api] || ({})
+    readonly property bool done: root.guideDone(api)
+    readonly property bool locked: !done && root.lockedBy(api).length > 0
+    readonly property color metal: root.metalColors[ach.tier] || root.metalColors.bronze
+    width: size
+    height: size
+    // The glow, as soft rings: the software renderer drops MultiEffect.
+    Repeater {
+      model: art.ready ? [Commons.Style.space(7), Commons.Style.space(3.5)] : []
+      delegate: Rectangle {
+        required property real modelData
+        anchors.centerIn: parent
+        width: art.size + modelData * 2
+        height: width
+        radius: 5 + modelData
+        color: Qt.alpha(Commons.Color.accent, modelData > Commons.Style.space(5) ? 0.10 : 0.20)
+      }
+    }
+    Rectangle {
+      anchors.fill: parent
+      radius: 5
+      color: Qt.alpha(root.foreground, 0.08)
+      border.width: art.done || art.ready || art.picked ? 2 : 1
+      border.color: art.picked ? Commons.Color.accent : art.done ? art.metal
+                    : art.ready ? Commons.Color.accent : Qt.alpha(root.foreground, 0.16)
+      Behavior on border.color { ColorAnimation { duration: 160 } }
+      Image {
+        anchors.fill: parent
+        anchors.margins: 2
+        source: art.done ? art.ach.icon || "" : (art.ach.icon_locked || art.ach.icon || "")
+        asynchronous: true
+        sourceSize: Qt.size(96, 96)
+        opacity: status !== Image.Ready ? 0 : art.done ? 1 : art.locked ? 0.25 : 0.7
+      }
+    }
+    // `tick`: a done one says so in its corner too.
+    Rectangle {
+      visible: art.tick && art.done
+      anchors.right: parent.right
+      anchors.top: parent.top
+      anchors.margins: -Commons.Style.space(4)
+      width: Commons.Style.space(14)
+      height: width
+      radius: width / 2
+      color: Commons.Color.accent
+      border.width: 1.5
+      border.color: root.background
+      Text {
+        textFormat: Text.PlainText
+        anchors.centerIn: parent
+        text: "✓"
+        color: root.background
+        font.pixelSize: Math.round(Commons.Style.font.caption * 0.8)
+        font.bold: true
+      }
+    }
+    LockGlyph {
+      visible: art.locked
+      anchors.centerIn: parent
+      scale: art.size >= Commons.Style.space(30) ? 1 : 0.8
+    }
+    Rectangle {
+      visible: art.badge
+      anchors.right: parent.right
+      anchors.bottom: parent.bottom
+      anchors.margins: -Commons.Style.space(4)
+      width: Math.round(art.size * 0.42)
+      height: width
+      radius: width / 2
+      color: root.background
+      border.width: 1
+      border.color: Qt.alpha(art.metal, art.done ? 0.8 : 0.3)
+      Trophy {
+        anchors.centerIn: parent
+        style: root.iconSet
+        metal: art.ach.tier || "bronze"
+        width: parent.width * 0.62
+        height: width
+        opacity: art.done ? 1 : 0.5
+      }
+    }
+  }
+
+  // A padlock drawn from boxes, so it shows in any theme font.
+  component LockGlyph: Rectangle {
+    width: Commons.Style.space(18)
+    height: width
+    radius: width / 2
+    color: Qt.alpha(root.background, 0.75)
+    Rectangle {
+      x: (parent.width - width) / 2
+      y: parent.height * 0.2
+      width: parent.width * 0.38
+      height: parent.height * 0.42
+      radius: width / 2
+      color: "transparent"
+      border.width: Math.max(1.5, Commons.Style.space(1.5))
+      border.color: root.foreground
+      opacity: 0.85
+    }
+    Rectangle {
+      x: (parent.width - width) / 2
+      y: parent.height * 0.43
+      width: parent.width * 0.52
+      height: parent.height * 0.36
+      radius: 2
+      color: root.foreground
+      opacity: 0.85
+    }
+  }
+
+  // A thin progress bar that fills when it first shows.
+  component MeterBar: Rectangle {
+    id: meter
+    property real fraction: 0
+    property color fill: Commons.Color.accent
+    property real shown: 0
+    height: Math.max(3, Commons.Style.space(3))
+    radius: height / 2
+    color: Qt.alpha(root.foreground, 0.12)
+    Component.onCompleted: shown = Qt.binding(function() { return meter.fraction })
+    Behavior on shown { NumberAnimation { duration: 600; easing.type: Easing.OutCubic } }
+    Rectangle {
+      height: parent.height
+      radius: parent.radius
+      width: parent.width * Math.max(0, Math.min(1, meter.shown))
+      color: meter.fill
+    }
+  }
+
+  // A drawn pin beside YOU ARE HERE when the player set the step; drawn,
+  // not an emoji, so it needs no emoji font.
+  component PinMark: Item {
+    property real size: Commons.Style.space(12)
+    width: size * 0.8
+    height: size
+    Accessible.name: "pinned by you"
+    Item {
+      anchors.fill: parent
+      rotation: 30
+      Rectangle {
+        x: (parent.width - width) / 2
+        y: parent.height * 0.42
+        width: Math.max(1.5, parent.width * 0.14)
+        height: parent.height * 0.58
+        radius: width / 2
+        color: Commons.Color.accent
+      }
+      Rectangle {
+        x: (parent.width - width) / 2
+        width: parent.width * 0.78
+        height: width
+        radius: width / 2
+        color: Commons.Color.accent
+      }
+    }
+  }
+
+  // A small upper-case tag: MISSABLE, READY, YOU ARE HERE.
+  component Tag: Rectangle {
+    id: tag
+    property string text: ""
+    property color tint: Commons.Color.accent
+    property bool solid: false
+    width: tagText.implicitWidth + Commons.Style.space(10)
+    height: tagText.implicitHeight + Commons.Style.space(3)
+    radius: height / 2
+    color: solid ? tint : Qt.alpha(tint, 0.14)
+    border.width: solid ? 0 : 1
+    border.color: Qt.alpha(tint, 0.5)
+    Text {
+      textFormat: Text.PlainText
+      id: tagText
+      anchors.centerIn: parent
+      text: tag.text
+      color: tag.solid ? root.background : tag.tint
+      font.family: Commons.Style.font.family
+      font.pixelSize: Math.round(Commons.Style.font.caption * 0.85)
+      font.letterSpacing: 1
+      font.bold: true
+    }
+  }
+
+  // One step action (maker 4): where above what, ticked once the trophy
+  // it gives is done. With `picking` (the tree) a click on one that gives
+  // a trophy picks it.
+  component ActionLine: Item {
+    id: actRow
+    property var action: ({})
+    property bool picking: false
+    property string part: ""
+    readonly property bool ticked: action.achievement !== "" && root.guideDone(action.achievement)
+    readonly property bool pickable: picking && action.achievement !== ""
+    height: Math.max(actMark.implicitHeight, actText.height)
+    Rectangle {
+      visible: actRow.pickable && actHover.hovered
+      anchors.fill: parent
+      anchors.margins: -Commons.Style.space(2)
+      radius: Commons.Style.cornerRadius
+      color: Commons.Style.hoverFill
+    }
+    HoverHandler { id: actHover; enabled: actRow.pickable; cursorShape: Qt.PointingHandCursor }
+    TapHandler { enabled: actRow.pickable; onTapped: root.pickInTree(actRow.action.achievement, actRow.part) }
+    Text {
+      textFormat: Text.PlainText
+      id: actMark
+      width: Commons.Style.space(18)
+      text: actRow.ticked ? "✓" : actRow.action.achievement !== "" ? "○" : "·"
+      color: actRow.ticked ? Commons.Color.accent : root.foreground
+      opacity: actRow.ticked ? 0.8 : 0.6
+      font.family: Commons.Style.font.family
+      font.pixelSize: Commons.Style.font.bodySmall
+      font.bold: true
+    }
+    // Where above what: the place is what a player scans for.
+    Column {
+      id: actText
+      anchors.left: actMark.right
+      anchors.right: parent.right
+      opacity: actRow.ticked ? 0.5 : 1
+      Caption {
+        textFormat: Text.PlainText
+        width: parent.width
+        visible: (actRow.action.where || "") !== ""
+        wrapMode: Text.Wrap
+        elide: Text.ElideNone
+        text: actRow.action.where || ""
+        font.bold: true
+      }
+      Text {
+        textFormat: Text.PlainText
+        width: parent.width
+        wrapMode: Text.Wrap
+        text: actRow.action.what
+              + (actRow.action.achievement ? "  ·  " + root.shownName(actRow.action.achievement) : "")
+        color: root.foreground
+        opacity: 0.85
+        font.family: Commons.Style.font.family
+        font.pixelSize: Commons.Style.font.bodySmall
+      }
+    }
+  }
+
+  // Do now: one trophy the player can get now, as a tile: its art in its
+  // metal, name, where (from its step action), the move, a counter's bar
+  // and MISSABLE. `stacked` lays it out tall, for three side by side.
+  component DoTile: Rectangle {
+    id: tile
+    property string api: ""
+    property bool stacked: false
+    property bool first: false
+    readonly property var ach: root.byApi[api] || ({})
+    readonly property bool secret: root.isSecret(api) && !tileHover.hovered
+    readonly property var counter: root.counterOf(api)
+    readonly property bool missable: root.isMissable(api)
+    readonly property bool picked: root.treePick === api && root.treePickIn === "now"
+    readonly property real pad: Commons.Style.space(10)
+    implicitHeight: (stacked ? tileArt.height + Commons.Style.space(8) : 0) + tileBody.height + pad * 2
+    implicitWidth: 0
+    radius: Commons.Style.cornerRadius
+    color: tileHover.hovered ? Commons.Style.hoverFill : first ? Qt.alpha(Commons.Color.accent, 0.08) : Qt.alpha(root.foreground, 0.035)
+    border.width: 1
+    border.color: picked ? Commons.Color.accent : first ? Qt.alpha(Commons.Color.accent, 0.45) : Qt.alpha(root.foreground, 0.1)
+    Behavior on color { ColorAnimation { duration: 120 } }
+    Accessible.role: Accessible.Button
+    Accessible.name: (secret ? "Hidden achievement" : ach.name || "") + ", " + root.placeOf(api)
+    HoverHandler { id: tileHover; cursorShape: Qt.PointingHandCursor }
+    TapHandler { onTapped: root.pickInTree(tile.api, "now") }
+    ArtIcon {
+      id: tileArt
+      x: tile.pad
+      y: tile.pad
+      api: tile.api
+      size: Commons.Style.space(tile.stacked ? 34 : 40)
+      badge: true
+      picked: tile.picked
+    }
+    // Share of players, in the metal's colour, as the list has it.
+    Text {
+      textFormat: Text.PlainText
+      anchors.right: parent.right
+      anchors.rightMargin: tile.pad
+      y: tile.pad
+      visible: tile.ach.percent !== null && tile.ach.percent !== undefined
+      text: visible ? tile.ach.percent.toFixed(1) + "%" : ""
+      color: root.metalColors[tile.ach.tier] || root.foreground
+      opacity: 0.75
+      font.family: Commons.Style.font.family
+      font.pixelSize: Commons.Style.font.caption
+      font.bold: true
+    }
+    Column {
+      id: tileBody
+      x: tile.stacked ? tile.pad : tileArt.x + tileArt.width + Commons.Style.space(12)
+      y: tile.stacked ? tileArt.y + tileArt.height + Commons.Style.space(8) : tile.pad
+      width: parent.width - x - tile.pad - (tile.stacked ? 0 : Commons.Style.space(44))
+      spacing: Commons.Style.space(3)
+      Tag {
+        visible: tile.missable
+        text: "MISSABLE"
+        tint: Commons.Color.urgent
+      }
+      Text {
+        textFormat: Text.PlainText
+        width: parent.width
+        text: tile.secret ? "Hidden achievement" : tile.ach.name || ""
+        color: root.foreground
+        font.family: Commons.Style.font.family
+        font.pixelSize: Commons.Style.font.bodySmall
+        font.bold: true
+        font.italic: tile.secret
+        wrapMode: Text.Wrap
+        maximumLineCount: 2
+        elide: Text.ElideRight
+      }
+      Caption {
+        width: parent.width
+        visible: text !== ""
+        text: root.placeOf(tile.api)
+        color: Commons.Color.accent
+        opacity: 0.95
+        wrapMode: Text.Wrap
+        maximumLineCount: 2
+      }
+      Text {
+        textFormat: Text.PlainText
+        width: parent.width
+        visible: text !== ""
+        text: root.moveOf(tile.api)
+        color: root.foreground
+        opacity: 0.75
+        font.family: Commons.Style.font.family
+        font.pixelSize: Commons.Style.font.caption
+        wrapMode: Text.Wrap
+        maximumLineCount: tile.stacked ? 3 : 2
+        elide: Text.ElideRight
+      }
+      Item {
+        visible: tile.counter !== null
+        width: parent.width
+        height: tileCount.implicitHeight
+        MeterBar {
+          anchors.left: parent.left
+          anchors.right: tileCount.left
+          anchors.rightMargin: Commons.Style.space(6)
+          anchors.verticalCenter: parent.verticalCenter
+          fraction: tile.counter ? tile.counter.fraction : 0
+        }
+        Caption {
+          id: tileCount
+          anchors.right: parent.right
+          text: tile.counter ? tile.counter.text : ""
+          elide: Text.ElideNone
+        }
+      }
+    }
+  }
+
+  // The trophy picked in the tree, inline: what it needs and opens, the
+  // tip, where it's got, its counter. A hidden one keeps its secret.
+  component PickDetail: Rectangle {
+    id: pick
+    property string api: ""
+    readonly property var ach: root.byApi[api] || ({})
+    readonly property var item: root.guideItem(api)
+    readonly property bool done: root.guideDone(api)
+    readonly property bool secret: root.isSecret(api)
+    readonly property var needs: Array.isArray(item.requires) ? item.requires : []
+    readonly property var opens: root.opensOf(api)
+    readonly property var counter: root.counterOf(api)
+    readonly property real pad: Commons.Style.space(12)
+    width: parent ? parent.width : 0
+    height: pickBody.height + pad * 2
+    radius: Commons.Style.cornerRadius
+    color: Qt.alpha(Commons.Color.accent, 0.06)
+    border.width: 1
+    border.color: Qt.alpha(Commons.Color.accent, 0.35)
+    opacity: 0
+    Component.onCompleted: opacity = 1
+    Behavior on opacity { NumberAnimation { duration: 160 } }
+    ArtIcon {
+      id: pickArt
+      x: pick.pad
+      y: pick.pad
+      api: pick.api
+      size: Commons.Style.space(44)
+      badge: true
+    }
+    Text {
+      textFormat: Text.PlainText
+      id: pickClose
+      anchors.right: parent.right
+      anchors.rightMargin: pick.pad
+      y: pick.pad - Commons.Style.space(3)
+      text: "×"
+      color: root.foreground
+      opacity: pickCloseHover.hovered ? 0.9 : 0.45
+      font.pixelSize: Commons.Style.font.bodySmall
+      HoverHandler { id: pickCloseHover; cursorShape: Qt.PointingHandCursor }
+      TapHandler { onTapped: { root.treePick = ""; root.treePickIn = "" } }
+    }
+    Column {
+      id: pickBody
+      x: pickArt.x + pickArt.width + Commons.Style.space(14)
+      y: pick.pad
+      width: parent.width - x - pick.pad - pickClose.width - Commons.Style.space(6)
+      spacing: Commons.Style.space(4)
+      Text {
+        textFormat: Text.PlainText
+        width: parent.width
+        text: (pick.done ? "✓ " : "") + (pick.secret ? "Hidden achievement" : pick.ach.name || "")
+        color: root.foreground
+        font.family: Commons.Style.font.family
+        font.pixelSize: Commons.Style.font.body
+        font.bold: true
+        font.italic: pick.secret
+        wrapMode: Text.Wrap
+      }
+      Caption {
+        width: parent.width
+        wrapMode: Text.Wrap
+        elide: Text.ElideNone
+        text: root.factJoin([
+          (pick.ach.tier || "bronze").replace(/^./, function(c) { return c.toUpperCase() })
+            + (pick.ach.percent !== null && pick.ach.percent !== undefined ? root.unbroken(" · " + pick.ach.percent.toFixed(1) + "% of players") : ""),
+          pick.item.difficulty ? root.dots(pick.item.difficulty) : "",
+          pick.done ? (pick.ach.unlocked ? "unlocked " + root.day(pick.ach.time) : "ticked") : root.placeOf(pick.api)
+        ].filter(function(p) { return p !== "" }))
+      }
+      Caption {
+        width: parent.width
+        visible: root.isMissable(pick.api) && !pick.done
+        wrapMode: Text.Wrap
+        elide: Text.ElideNone
+        text: "⚠ Missable" + (pick.item.missable_note ? ": " + pick.item.missable_note : "")
+        color: Commons.Color.urgent
+        opacity: 1
+      }
+      Text {
+        textFormat: Text.PlainText
+        width: parent.width
+        visible: text !== ""
+        text: pick.secret ? "Reveal all shows its name and tip." : (pick.item.tips || (pick.ach.hidden ? "" : pick.ach.desc || ""))
+        color: root.foreground
+        opacity: pick.secret ? 0.45 : 0.85
+        font.family: Commons.Style.font.family
+        font.pixelSize: Commons.Style.font.bodySmall
+        font.italic: pick.secret
+        wrapMode: Text.Wrap
+      }
+      Item {
+        visible: pick.counter !== null
+        width: parent.width
+        height: pickCount.implicitHeight
+        MeterBar {
+          anchors.left: parent.left
+          anchors.right: pickCount.left
+          anchors.rightMargin: Commons.Style.space(8)
+          anchors.verticalCenter: parent.verticalCenter
+          fraction: pick.counter ? pick.counter.fraction : 0
+        }
+        Caption { id: pickCount; anchors.right: parent.right; text: pick.counter ? pick.counter.text : ""; elide: Text.ElideNone }
+      }
+      // What it waits for and what waits for it: the tree's edges, named.
+      Caption {
+        width: parent.width
+        visible: pick.needs.length > 0
+        wrapMode: Text.Wrap
+        elide: Text.ElideNone
+        text: "Needs first:  " + root.factJoin(pick.needs.map(function(r) {
+          return (root.guideDone(r) ? "✓ " : "○ ") + root.shownName(r)
+        }))
+      }
+      Caption {
+        width: parent.width
+        visible: pick.opens.length > 0
+        wrapMode: Text.Wrap
+        elide: Text.ElideNone
+        text: "Opens:  " + root.factJoin(pick.opens.map(function(r) { return root.shownName(r) }))
+      }
+    }
+  }
+
+  // A node of the story track: solid once done, ringed with a slow pulse
+  // where the player is, hollow ahead; a red flag where a missable was
+  // left behind.
+  component TrackDot: Item {
+    id: dot
+    property int number: 0
+    property bool done: false
+    property bool here: false
+    property bool behind: false
+    property bool chosen: false
+    property int lost: 0
+    property real size: Commons.Style.space(28)
+    width: size
+    height: size
+    // The one loop in the tree: where the player is breathes gently.
+    Rectangle {
+      visible: dot.here
+      anchors.centerIn: parent
+      width: dot.size
+      height: width
+      radius: width / 2
+      color: "transparent"
+      border.width: 2
+      border.color: Commons.Color.accent
+      SequentialAnimation on scale {
+        running: dot.here && dot.visible
+        loops: Animation.Infinite
+        NumberAnimation { from: 1; to: 1.55; duration: 1400; easing.type: Easing.OutCubic }
+        PauseAnimation { duration: 500 }
+      }
+      SequentialAnimation on opacity {
+        running: dot.here && dot.visible
+        loops: Animation.Infinite
+        NumberAnimation { from: 0.7; to: 0; duration: 1400; easing.type: Easing.OutCubic }
+        PauseAnimation { duration: 500 }
+      }
+    }
+    Rectangle {
+      anchors.fill: parent
+      radius: width / 2
+      color: dot.done ? Commons.Color.accent : dot.here ? Qt.tint(root.background, Qt.alpha(Commons.Color.accent, 0.22)) : root.background
+      border.width: dot.done ? 0 : dot.here || dot.chosen ? 2 : 1.5
+      border.color: dot.here || dot.chosen ? Commons.Color.accent
+                    : dot.behind ? Qt.alpha(Commons.Color.accent, 0.6) : Qt.alpha(root.foreground, 0.3)
+      Behavior on color { ColorAnimation { duration: 200 } }
+      Text {
+        textFormat: Text.PlainText
+        anchors.centerIn: parent
+        text: dot.done ? "✓" : String(dot.number)
+        color: dot.done ? root.background : dot.here || dot.chosen ? Commons.Color.accent : root.foreground
+        opacity: dot.done || dot.here || dot.chosen ? 1 : 0.55
+        font.family: Commons.Style.font.family
+        font.pixelSize: Commons.Style.font.caption
+        font.bold: true
+      }
+    }
+    Rectangle {
+      visible: dot.lost > 0
+      anchors.right: parent.right
+      anchors.top: parent.top
+      anchors.margins: -Commons.Style.space(4)
+      width: Math.round(dot.size * 0.5)
+      height: width
+      radius: width / 2
+      color: Commons.Color.urgent
+      border.width: 1.5
+      border.color: root.background
+      Text {
+        textFormat: Text.PlainText
+        anchors.centerIn: parent
+        text: "!"
+        color: root.background
+        font.family: Commons.Style.font.family
+        font.pixelSize: Math.round(Commons.Style.font.caption * 0.85)
+        font.bold: true
+      }
+    }
+  }
+
+  // A chain as a small skill tree: the goal on top, what it needs below,
+  // joined by lines that light in the accent once the lower one is done.
+  // A node whose needs are done while it is open is READY and glows.
+  component ChainCard: Rectangle {
+    id: chain
+    property var tree: ({ api: "", kids: [] })
+    property real maxWidth: 400
+    readonly property var layout: root.chainLayout(tree)
+    readonly property var apis: layout.nodes.map(function(n) { return n.api })
+    readonly property int got: apis.filter(function(a) { return root.guideDone(a) }).length
+    readonly property real pad: Commons.Style.space(12)
+    readonly property real slot: Math.max(Commons.Style.space(64), Math.min(Commons.Style.space(96), (maxWidth - pad * 2) / Math.max(1, layout.cols)))
+    readonly property real nodeSize: Commons.Style.space(36)
+    readonly property real labelH: Commons.Style.space(6) + captionMetrics.height * 3 + Commons.Style.space(4)
+    readonly property real rowH: nodeSize + labelH + Commons.Style.space(18)
+    readonly property bool goalDone: root.guideDone(tree.api)
+    width: Math.min(maxWidth, Math.max(Commons.Style.space(210), chainGraph.width + pad * 2))
+    height: chainHead.height + chainGraph.height + pad * 2 + Commons.Style.space(14)
+    radius: Commons.Style.cornerRadius
+    color: Qt.alpha(root.foreground, 0.035)
+    border.width: 1
+    border.color: goalDone ? Qt.alpha(root.metalColors[(root.byApi[tree.api] || {}).tier] || root.metalColors.bronze, 0.5) : Qt.alpha(root.foreground, 0.1)
+    Column {
+      id: chainHead
+      x: chain.pad
+      y: chain.pad
+      width: chain.width - chain.pad * 2
+      spacing: Commons.Style.space(6)
+      Item {
+        width: parent.width
+        height: chainGoal.implicitHeight
+        Text {
+          textFormat: Text.PlainText
+          id: chainGoal
+          width: parent.width - chainCount.implicitWidth - Commons.Style.space(8)
+          text: root.shownName(chain.tree.api)
+          color: root.foreground
+          font.family: Commons.Style.font.family
+          font.pixelSize: Commons.Style.font.bodySmall
+          font.bold: true
+          elide: Text.ElideRight
+        }
+        Caption {
+          id: chainCount
+          anchors.right: parent.right
+          anchors.verticalCenter: parent.verticalCenter
+          text: root.unbroken(chain.got + " of " + chain.apis.length)
+          color: chain.goalDone ? Commons.Color.accent : root.foreground
+          elide: Text.ElideNone
+        }
+      }
+      MeterBar {
+        width: parent.width
+        fraction: chain.apis.length ? chain.got / chain.apis.length : 0
+      }
+    }
+    Item {
+      id: chainGraph
+      x: Math.round((chain.width - width) / 2)
+      y: chainHead.y + chainHead.height + Commons.Style.space(14)
+      width: chain.slot * chain.layout.cols
+      height: chain.rowH * chain.layout.rows - Commons.Style.space(18)
+      Canvas {
+        id: chainLines
+        anchors.fill: parent
+        // Repaint when anything is unlocked or ticked.
+        property int state: chain.got
+        onStateChanged: requestPaint()
+        onWidthChanged: requestPaint()
+        onPaint: {
+          var c = getContext("2d")
+          c.reset()
+          c.lineWidth = 2
+          c.lineJoin = "round"
+          var nodes = chain.layout.nodes
+          // Dim lines first, so a lit one is never drawn under one.
+          ;[false, true].forEach(function(lit) {
+            c.strokeStyle = lit ? Commons.Color.accent : Qt.alpha(root.foreground, 0.2)
+            nodes.forEach(function(n) {
+              if (n.parent < 0 || root.guideDone(n.api) !== lit) return
+              var p = nodes[n.parent]
+              var x1 = (n.x + 0.5) * chain.slot, y1 = n.depth * chain.rowH - Commons.Style.space(2)
+              var x2 = (p.x + 0.5) * chain.slot, y2 = p.depth * chain.rowH + chain.nodeSize + chain.labelH
+              var mid = (y1 + y2) / 2
+              c.beginPath()
+              c.moveTo(x1, y1)
+              c.lineTo(x1, mid)
+              c.lineTo(x2, mid)
+              c.lineTo(x2, y2)
+              c.stroke()
+            })
+          })
+        }
+      }
+      Repeater {
+        model: chain.layout.nodes
+        delegate: Item {
+          id: cnode
+          required property var modelData
+          required property int index
+          readonly property string api: modelData.api
+          readonly property bool done: root.guideDone(api)
+          readonly property var waits: done ? [] : root.lockedBy(api)
+          readonly property bool ready: !done && waits.length === 0
+          readonly property bool picked: root.treePick === api && root.treePickIn === "chains"
+          x: modelData.x * chain.slot
+          y: modelData.depth * chain.rowH
+          width: chain.slot
+          height: chain.nodeSize + chain.labelH
+          opacity: 0
+          SequentialAnimation on opacity {
+            PauseAnimation { duration: 60 + cnode.index * 50 }
+            NumberAnimation { to: 1; duration: 220; easing.type: Easing.OutCubic }
+          }
+          Accessible.role: Accessible.Button
+          Accessible.name: root.shownName(api) + (done ? ", done" : ready ? ", ready" : ", locked")
+          Rectangle {
+            anchors.fill: parent
+            anchors.margins: -Commons.Style.space(3)
+            radius: Commons.Style.cornerRadius
+            color: cnodeHover.hovered ? Commons.Style.hoverFill : "transparent"
+          }
+          HoverHandler { id: cnodeHover; cursorShape: Qt.PointingHandCursor }
+          TapHandler { onTapped: root.pickInTree(cnode.api, "chains") }
+          ArtIcon {
+            id: cnodeArt
+            anchors.horizontalCenter: parent.horizontalCenter
+            api: cnode.api
+            size: chain.nodeSize
+            ready: cnode.ready
+            picked: cnode.picked
+            tick: true
+          }
+          MeterBar {
+            readonly property var counter: root.counterOf(cnode.api)
+            visible: counter !== null && !cnode.done
+            x: cnodeArt.x
+            y: chain.nodeSize + Commons.Style.space(3)
+            width: chain.nodeSize
+            fraction: counter ? counter.fraction : 0
+          }
+          Column {
+            y: chain.nodeSize + Commons.Style.space(8)
+            width: parent.width
+            Text {
+              textFormat: Text.PlainText
+              width: parent.width - Commons.Style.space(4)
+              anchors.horizontalCenter: parent.horizontalCenter
+              horizontalAlignment: Text.AlignHCenter
+              text: root.shownName(cnode.api)
+              color: root.foreground
+              opacity: cnode.done ? 0.6 : cnode.ready ? 1 : 0.5
+              font.family: Commons.Style.font.family
+              font.pixelSize: Commons.Style.font.caption
+              font.bold: cnode.ready
+              wrapMode: Text.Wrap
+              maximumLineCount: 2
+              elide: Text.ElideRight
+            }
+            Caption {
+              width: parent.width - Commons.Style.space(4)
+              anchors.horizontalCenter: parent.horizontalCenter
+              horizontalAlignment: Text.AlignHCenter
+              visible: !cnode.done
+              text: cnode.ready ? "READY" : "needs " + cnode.waits.map(function(r) { return root.shownName(r) }).join(", ")
+              color: cnode.ready ? Commons.Color.accent : root.foreground
+              opacity: cnode.ready ? 1 : 0.45
+              font.bold: cnode.ready
+              font.letterSpacing: cnode.ready ? 1 : 0
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // On their own: one trophy as a small tile, its art in its metal once
+  // done, a thin bar for a counter.
+  component GridTile: Item {
+    id: gt
+    property string api: ""
+    property int order: 0
+    readonly property var counter: root.counterOf(api)
+    readonly property bool done: root.guideDone(api)
+    readonly property bool picked: root.treePick === api && root.treePickIn === "alone"
+    width: Commons.Style.space(74)
+    height: gtArt.height + Commons.Style.space(8) + Commons.Style.space(5) + captionMetrics.height * 2 + Commons.Style.space(8)
+    opacity: 0
+    SequentialAnimation on opacity {
+      PauseAnimation { duration: 60 + gt.order * 35 }
+      NumberAnimation { to: 1; duration: 200; easing.type: Easing.OutCubic }
+    }
+    Accessible.role: Accessible.Button
+    Accessible.name: root.shownName(api) + (done ? ", done" : "")
+    Rectangle {
+      anchors.fill: parent
+      radius: Commons.Style.cornerRadius
+      color: gtHover.hovered ? Commons.Style.hoverFill : "transparent"
+    }
+    HoverHandler { id: gtHover; cursorShape: Qt.PointingHandCursor }
+    TapHandler { onTapped: root.pickInTree(gt.api, "alone") }
+    ArtIcon {
+      id: gtArt
+      y: Commons.Style.space(6)
+      anchors.horizontalCenter: parent.horizontalCenter
+      api: gt.api
+      size: Commons.Style.space(40)
+      picked: gt.picked
+      tick: true
+    }
+    // An open missable, flagged on its corner.
+    Rectangle {
+      visible: !gt.done && root.isMissable(gt.api)
+      x: gtArt.x - Commons.Style.space(4)
+      y: gtArt.y - Commons.Style.space(4)
+      width: Commons.Style.space(14)
+      height: width
+      radius: width / 2
+      color: Commons.Color.urgent
+      border.width: 1.5
+      border.color: root.background
+      Text {
+        textFormat: Text.PlainText
+        anchors.centerIn: parent
+        text: "!"
+        color: root.background
+        font.family: Commons.Style.font.family
+        font.pixelSize: Math.round(Commons.Style.font.caption * 0.85)
+        font.bold: true
+      }
+    }
+    MeterBar {
+      visible: gt.counter !== null
+      x: gtArt.x
+      y: gtArt.y + gtArt.height + Commons.Style.space(4)
+      width: gtArt.width
+      fraction: gt.counter ? gt.counter.fraction : 0
+    }
+    Text {
+      textFormat: Text.PlainText
+      y: gtArt.y + gtArt.height + Commons.Style.space(10)
+      width: parent.width - Commons.Style.space(4)
+      anchors.horizontalCenter: parent.horizontalCenter
+      horizontalAlignment: Text.AlignHCenter
+      text: root.shownName(gt.api)
+      color: root.foreground
+      opacity: gt.done ? 0.55 : 0.9
+      font.family: Commons.Style.font.family
+      font.pixelSize: Commons.Style.font.caption
+      font.italic: root.isSecret(gt.api)
+      wrapMode: Text.Wrap
+      maximumLineCount: 2
+      elide: Text.ElideRight
+    }
   }
 
   // One achievement as the guide describes it: time, difficulty, counter,
@@ -2331,10 +3415,26 @@ Item {
 
         // ---- the guide itself
 
+        // Steps (or Up next) and the outline of what needs what (ADR 20).
+        Row {
+          visible: root.hasTree && !root.appliedSearch
+          spacing: Commons.Style.space(6)
+          Chip {
+            text: root.walked ? "Steps" : "Up next"
+            chosen: !root.treeShown
+            onClicked: root.treeShown = false
+          }
+          Chip {
+            text: "Tree"
+            chosen: root.treeShown
+            onClicked: root.treeShown = true
+          }
+        }
+
         Item {
           width: parent.width
           height: Math.max(upNextTitle.implicitHeight, upNextReveal.visible ? upNextReveal.height : 0)
-          visible: root.hasGuide && (root.guide.next || []).length > 0 && !root.appliedSearch && !root.walked
+          visible: root.hasGuide && (root.guide.next || []).length > 0 && root.listShown && !root.walked
           SectionLabel {
             id: upNextTitle
             anchors.verticalCenter: parent.verticalCenter
@@ -2355,7 +3455,7 @@ Item {
         }
         Column {
           width: parent.width
-          visible: root.hasGuide && !root.appliedSearch && !root.walked
+          visible: root.hasGuide && root.listShown && !root.walked
           spacing: Commons.Style.space(2)
           Repeater {
             model: root.hasGuide ? root.guide.next || [] : []
@@ -2368,7 +3468,7 @@ Item {
         Item {
           width: parent.width
           height: walkOverview.height
-          visible: root.walked && !root.appliedSearch && walkOverview.text !== ""
+          visible: root.walked && !root.appliedSearch && !root.treeOn && walkOverview.text !== ""
           Column {
             id: walkOverview
             property string text: root.guide && root.guide.sections ? root.guide.sections.overview || "" : ""
@@ -2392,12 +3492,13 @@ Item {
         // The walkthrough (ADR 17): the game's chapters in play order, each
         // with its trophies, the current one open; a click opens another.
         SectionLabel {
-          visible: root.hasGuide && root.walkSteps.length > 0 && !root.appliedSearch
+          visible: root.hasGuide && root.walkSteps.length > 0 && root.listShown
           text: "WALKTHROUGH" + (root.guide && root.guide.step >= 0 ? " · STEP " + (root.guide.step + 1) + " OF " + root.walkSteps.length : "")
+                + (root.stepPinned ? " · PINNED BY YOU" : "")
         }
         Column {
           width: parent.width
-          visible: root.hasGuide && root.walkSteps.length > 0 && !root.appliedSearch
+          visible: root.hasGuide && root.walkSteps.length > 0 && root.listShown
           spacing: Commons.Style.space(2)
           Repeater {
             model: root.hasGuide && !root.appliedSearch ? root.walkSteps : []
@@ -2464,6 +3565,13 @@ Item {
                   visible: walkRow.open && text !== ""
                   text: root.safeMarkdown(walkRow.modelData.text)
                 }
+                // Its actions in order (maker 4), each ticked when the
+                // trophy it gives is done; a step from an older guide has
+                // none and keeps its text alone.
+                Repeater {
+                  model: walkRow.open ? walkRow.modelData.actions || [] : []
+                  delegate: ActionLine { required property var modelData; width: walkBody.width; action: modelData }
+                }
                 Caption {
                   textFormat: Text.PlainText
                   width: parent.width
@@ -2485,18 +3593,19 @@ Item {
                   font.italic: true
                   opacity: 0.45
                 }
+                StepPinButton { index: walkRow.index; shown: walkRow.open }
               }
             }
           }
         }
 
         SectionLabel {
-          visible: root.unplaced.length > 0 && !root.appliedSearch
+          visible: root.unplaced.length > 0 && root.listShown
           text: "NOT IN A STEP · " + root.unplaced.length
         }
         Column {
           width: parent.width
-          visible: root.unplaced.length > 0 && !root.appliedSearch
+          visible: root.unplaced.length > 0 && root.listShown
           spacing: Commons.Style.space(2)
           Repeater {
             model: root.appliedSearch ? [] : root.unplaced
@@ -2504,8 +3613,621 @@ Item {
           }
         }
 
+        // The tree (ADR 20): what can be done now, the story as a track,
+        // chains as small skill trees, the rest as a grid by phase. A click
+        // on any trophy picks it: the list finds it, its tips show inline.
+
+        // DO NOW: the frontier, open trophies whose needs are all done.
+        Column {
+          id: doNow
+          width: parent.width
+          visible: root.treeOn
+          spacing: Commons.Style.space(8)
+          // Three side by side while each keeps room for a short line;
+          // narrower, they stack as rows.
+          readonly property int cols: width >= Commons.Style.space(150) * 3 + Commons.Style.space(16) ? 3 : 1
+          readonly property var apis: root.doNowAll ? root.doNowApis : root.doNowApis.slice(0, 3)
+          readonly property int openLeft: root.game ? root.game.achievements.filter(function(a) { return !root.guideDone(a.api) }).length : 0
+          Item {
+            width: parent.width
+            height: Math.max(doNowHead.height, doNowReveal.visible ? doNowReveal.height : 0)
+            Row {
+              id: doNowHead
+              anchors.verticalCenter: parent.verticalCenter
+              spacing: Commons.Style.space(8)
+              SectionLabel { text: "DO NOW"; color: Commons.Color.accent; opacity: 1 }
+              Caption {
+                visible: root.doNowApis.length > 0
+                text: root.doNowApis.length + " open to you"
+                opacity: 0.5
+              }
+            }
+            // Here as on the Steps view: Do now can be all secrets.
+            Chip {
+              id: doNowReveal
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              visible: root.secretCount > 0
+              chosen: root.revealAll
+              text: root.revealAll ? "Hide secrets" : "Reveal all"
+              onClicked: root.toggleRevealAll()
+            }
+          }
+          GridLayout {
+            width: parent.width
+            visible: doNow.apis.length > 0
+            columns: doNow.cols
+            columnSpacing: Commons.Style.space(8)
+            rowSpacing: Commons.Style.space(8)
+            Repeater {
+              model: root.treeOn ? doNow.apis : []
+              delegate: DoTile {
+                id: doTile
+                required property string modelData
+                required property int index
+                api: modelData
+                first: index === 0
+                stacked: doNow.cols > 1 && index < 3
+                Layout.fillWidth: true
+                Layout.fillHeight: index < 3
+                Layout.preferredWidth: 1
+                Layout.columnSpan: index < 3 ? 1 : doNow.cols
+                opacity: 0
+                SequentialAnimation on opacity {
+                  PauseAnimation { duration: Math.min(doTile.index, 6) * 50 }
+                  NumberAnimation { to: 1; duration: 220; easing.type: Easing.OutCubic }
+                }
+              }
+            }
+          }
+          // Nothing open: all done, or what's left waits for something.
+          Rectangle {
+            width: parent.width
+            visible: root.doNowApis.length === 0
+            height: doNowEmpty.height + Commons.Style.space(20)
+            radius: Commons.Style.cornerRadius
+            color: Qt.alpha(root.foreground, 0.035)
+            border.width: 1
+            border.color: Qt.alpha(root.foreground, 0.1)
+            Row {
+              id: doNowEmpty
+              x: Commons.Style.space(12)
+              anchors.verticalCenter: parent.verticalCenter
+              width: parent.width - Commons.Style.space(24)
+              spacing: Commons.Style.space(10)
+              Trophy {
+                anchors.verticalCenter: parent.verticalCenter
+                visible: doNow.openLeft === 0
+                style: root.iconSet
+                metal: "platinum"
+                width: Commons.Style.space(22)
+                height: width
+              }
+              Text {
+                textFormat: Text.PlainText
+                width: parent.width - (doNow.openLeft === 0 ? Commons.Style.space(32) : 0)
+                anchors.verticalCenter: parent.verticalCenter
+                wrapMode: Text.Wrap
+                text: doNow.openLeft === 0 ? "Every trophy is done. Nothing left to chase here."
+                      : "Nothing is open right now: what's left needs something first. Chains below show what."
+                color: root.foreground
+                opacity: 0.75
+                font.family: Commons.Style.font.family
+                font.pixelSize: Commons.Style.font.bodySmall
+              }
+            }
+          }
+          Text {
+            textFormat: Text.PlainText
+            visible: root.doNowApis.length > 3
+            text: root.doNowAll ? "Show three" : "Show " + (root.doNowApis.length - 3) + " more open to you"
+            color: Commons.Color.accent
+            opacity: doNowMore.hovered ? 1 : 0.8
+            font.family: Commons.Style.font.family
+            font.pixelSize: Commons.Style.font.caption
+            font.bold: true
+            HoverHandler { id: doNowMore; cursorShape: Qt.PointingHandCursor }
+            TapHandler { onTapped: root.doNowAll = !root.doNowAll }
+          }
+          Loader {
+            width: parent.width
+            active: root.treeOn && root.treePickIn === "now" && root.treePick !== ""
+            visible: active
+            sourceComponent: Component { PickDetail { api: root.treePick } }
+          }
+        }
+
+        // STORY: the walkthrough's steps as a journey track (the story
+        // trophies, with no steps): the line fills to where the player is.
+        Column {
+          id: story
+          width: parent.width
+          visible: root.treeOn && root.trackNodes.length > 0
+          spacing: Commons.Style.space(10)
+          // Too narrow for a track across: it runs down instead.
+          readonly property bool upright: width < Commons.Style.space(380)
+          // Every node fits across while each keeps room for a short
+          // title; past that the track scrolls.
+          readonly property real slot: width / Math.max(1, root.trackNodes.length) >= Commons.Style.space(58)
+                                       ? width / Math.max(1, root.trackNodes.length) : Commons.Style.space(70)
+          readonly property real dotSize: Commons.Style.space(26)
+          readonly property bool stepped: root.walkSteps.length > 0
+          readonly property int fillTo: root.trackHere >= 0 ? root.trackHere : root.trackNodes.length - 1
+          Row {
+            spacing: Commons.Style.space(8)
+            SectionLabel { text: "STORY" }
+            Caption {
+              text: story.stepped
+                    ? (root.trackHere >= 0 ? "step " + (root.trackHere + 1) + " of " + root.walkSteps.length : "every step done")
+                    : root.guideTree.story.filter(function(a) { return root.guideDone(a) }).length + " of " + root.guideTree.story.length + " done"
+              opacity: 0.5
+            }
+          }
+          Flickable {
+            id: trackView
+            visible: !story.upright
+            width: parent.width
+            height: track.height
+            contentWidth: track.width
+            contentHeight: track.height
+            clip: true
+            interactive: contentWidth > width
+            flickableDirection: Flickable.HorizontalFlick
+            boundsBehavior: Flickable.StopAtBounds
+            // A long story scrolls; the step shown stays in view.
+            function keepInView() {
+              var i = root.trackShown
+              if (i < 0) return
+              var centre = story.slot * (i + 0.5)
+              contentX = Math.max(0, Math.min(contentWidth - width, centre - width / 2))
+            }
+            onWidthChanged: Qt.callLater(keepInView)
+            Component.onCompleted: Qt.callLater(keepInView)
+            Connections {
+              target: root
+              function onTrackShownChanged() { trackView.keepInView() }
+            }
+            Item {
+              id: track
+              // Room for YOU ARE HERE only while there is a here.
+              readonly property real tagH: root.trackHere >= 0 ? captionMetrics.height + Commons.Style.space(4) : 0
+              readonly property real lineY: tagH + Commons.Style.space(8) + story.dotSize / 2
+              property bool grown: false
+              width: story.slot * root.trackNodes.length
+              height: lineY + story.dotSize / 2 + Commons.Style.space(6) + captionMetrics.height * (story.stepped ? 3 : 2) + Commons.Style.space(6)
+              Component.onCompleted: grown = true
+              Rectangle {
+                x: story.slot / 2
+                y: track.lineY - 1
+                width: track.width - story.slot
+                height: 2
+                color: Qt.alpha(root.foreground, 0.14)
+              }
+              Rectangle {
+                x: story.slot / 2
+                y: track.lineY - 1.5
+                height: 3
+                radius: 1.5
+                width: track.grown ? story.slot * story.fillTo : 0
+                color: Commons.Color.accent
+                Behavior on width { NumberAnimation { duration: 700; easing.type: Easing.OutCubic } }
+              }
+              Repeater {
+                model: root.treeOn ? root.trackNodes : []
+                delegate: Item {
+                  id: tnode
+                  required property var modelData
+                  required property int index
+                  readonly property int total: modelData.achievements.length
+                  readonly property int got: modelData.achievements.filter(function(a) { return root.guideDone(a) }).length
+                  readonly property bool here: index === root.trackHere
+                  readonly property bool done: total > 0 ? got === total : (root.trackHere < 0 || index < root.trackHere)
+                  readonly property bool behind: !done && root.trackHere >= 0 && index < root.trackHere
+                  readonly property bool chosen: story.stepped ? index === root.trackShown
+                                                               : root.treePick === modelData.api && root.treePickIn === "story"
+                  x: index * story.slot
+                  width: story.slot
+                  height: track.height
+                  opacity: 0
+                  SequentialAnimation on opacity {
+                    PauseAnimation { duration: 80 + Math.min(tnode.index, 12) * 45 }
+                    NumberAnimation { to: 1; duration: 220; easing.type: Easing.OutCubic }
+                  }
+                  Accessible.role: Accessible.Button
+                  Accessible.name: tnodeTitle.text + ", " + got + " of " + total + (here ? ", you are here" : "")
+                                   + (here && root.stepPinned ? ", pinned by you" : "")
+                  Rectangle {
+                    x: Commons.Style.space(2)
+                    y: track.tagH + Commons.Style.space(2)
+                    width: parent.width - Commons.Style.space(4)
+                    height: parent.height - y
+                    radius: Commons.Style.cornerRadius
+                    color: tnodeHover.hovered ? Commons.Style.hoverFill : "transparent"
+                  }
+                  HoverHandler { id: tnodeHover; cursorShape: Qt.PointingHandCursor }
+                  TapHandler {
+                    onTapped: {
+                      if (!story.stepped) root.pickInTree(tnode.modelData.api, "story")
+                      else root.trackPick = tnode.index === root.trackHere ? -1 : tnode.index
+                    }
+                  }
+                  // Kept inside the track at its ends.
+                  Row {
+                    visible: tnode.here
+                    spacing: Commons.Style.space(4)
+                    x: Math.max(-tnode.x, Math.min(track.width - tnode.x - width, (tnode.width - width) / 2))
+                    y: 0
+                    Tag { id: hereTag; text: "YOU ARE HERE"; solid: true }
+                    PinMark { visible: root.stepPinned; size: hereTag.height; anchors.verticalCenter: parent.verticalCenter }
+                  }
+                  TrackDot {
+                    x: (tnode.width - width) / 2
+                    y: track.lineY - height / 2
+                    size: story.dotSize
+                    number: tnode.index + 1
+                    done: tnode.done
+                    here: tnode.here
+                    behind: tnode.behind
+                    chosen: tnode.chosen
+                    lost: root.lostAt(tnode.index).length
+                  }
+                  Column {
+                    y: track.lineY + story.dotSize / 2 + Commons.Style.space(6)
+                    width: parent.width
+                    Caption {
+                      anchors.horizontalCenter: parent.horizontalCenter
+                      visible: story.stepped
+                      text: tnode.got + "/" + tnode.total
+                      color: tnode.here || tnode.chosen ? Commons.Color.accent : root.foreground
+                      opacity: tnode.here || tnode.chosen ? 1 : 0.5
+                      elide: Text.ElideNone
+                    }
+                    Text {
+                      textFormat: Text.PlainText
+                      id: tnodeTitle
+                      width: parent.width - Commons.Style.space(8)
+                      anchors.horizontalCenter: parent.horizontalCenter
+                      horizontalAlignment: Text.AlignHCenter
+                      text: story.stepped ? root.walkSteps[tnode.index].title : root.shownName(tnode.modelData.api)
+                      color: root.foreground
+                      opacity: tnode.here || tnode.chosen ? 0.95 : tnode.done ? 0.45 : 0.6
+                      font.family: Commons.Style.font.family
+                      font.pixelSize: Commons.Style.font.caption
+                      font.bold: tnode.here || tnode.chosen
+                      wrapMode: Text.Wrap
+                      maximumLineCount: 2
+                      elide: Text.ElideRight
+                    }
+                  }
+                }
+              }
+            }
+          }
+          // The narrow track: the same nodes down the side, titles beside.
+          Column {
+            visible: story.upright
+            width: parent.width
+            Repeater {
+              model: root.treeOn && story.upright ? root.trackNodes : []
+              delegate: Item {
+                id: unode
+                required property var modelData
+                required property int index
+                readonly property int total: modelData.achievements.length
+                readonly property int got: modelData.achievements.filter(function(a) { return root.guideDone(a) }).length
+                readonly property bool here: index === root.trackHere
+                readonly property bool done: total > 0 ? got === total : (root.trackHere < 0 || index < root.trackHere)
+                readonly property bool chosen: story.stepped ? index === root.trackShown
+                                                             : root.treePick === modelData.api && root.treePickIn === "story"
+                width: parent.width
+                height: Math.max(story.dotSize, unodeText.height) + Commons.Style.space(12)
+                opacity: 0
+                SequentialAnimation on opacity {
+                  PauseAnimation { duration: 80 + Math.min(unode.index, 12) * 45 }
+                  NumberAnimation { to: 1; duration: 220; easing.type: Easing.OutCubic }
+                }
+                Rectangle {
+                  anchors.fill: parent
+                  radius: Commons.Style.cornerRadius
+                  color: unodeHover.hovered ? Commons.Style.hoverFill : unode.chosen && !unode.here ? Qt.alpha(Commons.Color.accent, 0.06) : "transparent"
+                }
+                HoverHandler { id: unodeHover; cursorShape: Qt.PointingHandCursor }
+                TapHandler {
+                  onTapped: {
+                    if (!story.stepped) root.pickInTree(unode.modelData.api, "story")
+                    else root.trackPick = unode.index === root.trackHere ? -1 : unode.index
+                  }
+                }
+                // The line, in halves above and below the dot, lit up to
+                // where the player is.
+                Rectangle {
+                  visible: unode.index > 0
+                  x: Commons.Style.space(6) + story.dotSize / 2 - 1
+                  width: 2
+                  height: parent.height / 2
+                  color: unode.index <= story.fillTo ? Commons.Color.accent : Qt.alpha(root.foreground, 0.14)
+                }
+                Rectangle {
+                  visible: unode.index < root.trackNodes.length - 1
+                  x: Commons.Style.space(6) + story.dotSize / 2 - 1
+                  y: parent.height / 2
+                  width: 2
+                  height: parent.height / 2
+                  color: unode.index < story.fillTo ? Commons.Color.accent : Qt.alpha(root.foreground, 0.14)
+                }
+                TrackDot {
+                  x: Commons.Style.space(6)
+                  anchors.verticalCenter: parent.verticalCenter
+                  size: story.dotSize
+                  number: unode.index + 1
+                  done: unode.done
+                  here: unode.here
+                  behind: !unode.done && root.trackHere >= 0 && unode.index < root.trackHere
+                  chosen: unode.chosen
+                  lost: root.lostAt(unode.index).length
+                }
+                Column {
+                  id: unodeText
+                  x: Commons.Style.space(6) + story.dotSize + Commons.Style.space(10)
+                  width: parent.width - x - Commons.Style.space(8)
+                  anchors.verticalCenter: parent.verticalCenter
+                  spacing: Commons.Style.space(2)
+                  Text {
+                    textFormat: Text.PlainText
+                    width: parent.width
+                    text: story.stepped ? root.walkSteps[unode.index].title : root.shownName(unode.modelData.api)
+                    color: unode.here ? Commons.Color.accent : root.foreground
+                    opacity: unode.here || unode.chosen ? 1 : unode.done ? 0.5 : 0.75
+                    font.family: Commons.Style.font.family
+                    font.pixelSize: Commons.Style.font.bodySmall
+                    font.bold: unode.here || unode.chosen
+                    wrapMode: Text.Wrap
+                  }
+                  Row {
+                    spacing: Commons.Style.space(8)
+                    Caption { visible: story.stepped; text: unode.got + " of " + unode.total; elide: Text.ElideNone }
+                    Tag { id: uhereTag; visible: unode.here; text: "YOU ARE HERE"; solid: true }
+                    PinMark { visible: unode.here && root.stepPinned; size: uhereTag.height; anchors.verticalCenter: parent.verticalCenter }
+                  }
+                }
+              }
+            }
+          }
+          // The step shown: its actions as a checklist, then its trophies
+          // no action names.
+          Rectangle {
+            id: stepPanel
+            // `|| null`: a guide made again can have fewer steps than the
+            // one a step was picked in.
+            readonly property var step: story.stepped && root.trackShown >= 0 ? root.walkSteps[root.trackShown] || null : null
+            readonly property var loose: step ? step.achievements.filter(function(api) {
+              return !(step.actions || []).some(function(a) { return a.achievement === api })
+            }) : []
+            readonly property var lost: step ? root.lostAt(root.trackShown) : []
+            width: parent.width
+            visible: step !== null
+            height: visible ? stepBody.height + Commons.Style.space(24) : 0
+            radius: Commons.Style.cornerRadius
+            color: Qt.alpha(root.foreground, 0.035)
+            border.width: 1
+            border.color: root.trackShown === root.trackHere ? Qt.alpha(Commons.Color.accent, 0.4) : Qt.alpha(root.foreground, 0.1)
+            Column {
+              id: stepBody
+              x: Commons.Style.space(12)
+              y: Commons.Style.space(12)
+              width: parent.width - Commons.Style.space(24)
+              spacing: Commons.Style.space(6)
+              Item {
+                width: parent.width
+                height: stepTitle.height
+                Text {
+                  textFormat: Text.PlainText
+                  id: stepTitle
+                  width: parent.width - stepCount.implicitWidth - Commons.Style.space(10)
+                  text: stepPanel.step ? (root.trackShown + 1) + ".  " + stepPanel.step.title : ""
+                  color: root.trackShown === root.trackHere ? Commons.Color.accent : root.foreground
+                  font.family: Commons.Style.font.family
+                  font.pixelSize: Commons.Style.font.bodySmall
+                  font.bold: true
+                  wrapMode: Text.Wrap
+                }
+                Caption {
+                  id: stepCount
+                  anchors.right: parent.right
+                  visible: stepPanel.step && stepPanel.step.achievements.length > 0
+                  text: stepPanel.step ? root.stepDone(stepPanel.step) + " / " + stepPanel.step.achievements.length : ""
+                  elide: Text.ElideNone
+                }
+              }
+              Prose {
+                width: parent.width
+                visible: text !== ""
+                text: stepPanel.step ? root.safeMarkdown(stepPanel.step.text) : ""
+              }
+              Caption {
+                width: parent.width
+                visible: stepPanel.lost.length > 0
+                wrapMode: Text.Wrap
+                elide: Text.ElideNone
+                text: "⚠ Left behind here: " + stepPanel.lost.map(function(a) { return root.shownName(a) }).join(", ")
+                color: Commons.Color.urgent
+                opacity: 1
+              }
+              Repeater {
+                model: stepPanel.step ? stepPanel.step.actions || [] : []
+                delegate: ActionLine {
+                  required property var modelData
+                  width: stepBody.width
+                  action: modelData
+                  picking: true
+                  part: "story"
+                }
+              }
+              Flow {
+                width: parent.width
+                visible: stepPanel.loose.length > 0
+                spacing: Commons.Style.space(6)
+                Repeater {
+                  model: stepPanel.loose
+                  delegate: Rectangle {
+                    id: looseChip
+                    required property string modelData
+                    width: looseRow.width + Commons.Style.space(12)
+                    height: looseRow.height + Commons.Style.space(8)
+                    radius: height / 2
+                    color: looseHover.hovered ? Commons.Style.hoverFill : Qt.alpha(root.foreground, 0.04)
+                    border.width: 1
+                    border.color: root.treePick === modelData && root.treePickIn === "story" ? Commons.Color.accent : Qt.alpha(root.foreground, 0.1)
+                    HoverHandler { id: looseHover; cursorShape: Qt.PointingHandCursor }
+                    TapHandler { onTapped: root.pickInTree(looseChip.modelData, "story") }
+                    Row {
+                      id: looseRow
+                      anchors.centerIn: parent
+                      spacing: Commons.Style.space(6)
+                      ArtIcon { api: looseChip.modelData; size: Commons.Style.space(20); anchors.verticalCenter: parent.verticalCenter }
+                      Caption {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: (root.guideDone(looseChip.modelData) ? "✓ " : "") + root.shownName(looseChip.modelData)
+                        elide: Text.ElideNone
+                        opacity: root.guideDone(looseChip.modelData) ? 0.5 : 0.85
+                      }
+                    }
+                  }
+                }
+              }
+              Caption {
+                visible: stepPanel.step && stepPanel.step.unverified
+                text: "(unverified: no source backs this step)"
+                font.italic: true
+                opacity: 0.45
+              }
+              StepPinButton { index: root.trackShown }
+            }
+          }
+          Loader {
+            width: parent.width
+            active: root.treeOn && root.treePickIn === "story" && root.treePick !== ""
+            visible: active
+            sourceComponent: Component { PickDetail { api: root.treePick } }
+          }
+        }
+
+        // CHAINS: what needs what, each a card with its goal on top.
+        Column {
+          width: parent.width
+          visible: root.treeOn && root.chainTrees.length > 0
+          spacing: Commons.Style.space(8)
+          Row {
+            spacing: Commons.Style.space(8)
+            SectionLabel { text: "CHAINS" }
+            Caption { text: "each needs the ones under it first"; opacity: 0.5 }
+          }
+          Flow {
+            id: chainFlow
+            width: parent.width
+            spacing: Commons.Style.space(8)
+            Repeater {
+              model: root.treeOn ? root.chainTrees : []
+              delegate: ChainCard {
+                required property var modelData
+                tree: modelData
+                maxWidth: chainFlow.width
+              }
+            }
+          }
+          Loader {
+            width: parent.width
+            active: root.treeOn && root.treePickIn === "chains" && root.treePick !== ""
+            visible: active
+            sourceComponent: Component { PickDetail { api: root.treePick } }
+          }
+        }
+
+        // ON THEIR OWN: the rest as a grid, by phase; a phase folds.
+        Column {
+          width: parent.width
+          visible: root.treeOn && (root.guideTree.alone || []).length > 0
+          spacing: Commons.Style.space(6)
+          Row {
+            spacing: Commons.Style.space(8)
+            SectionLabel { text: "ON THEIR OWN" }
+            Caption {
+              text: (root.guideTree.alone || []).filter(function(a) { return root.guideDone(a) }).length
+                    + " of " + (root.guideTree.alone || []).length + " done"
+              opacity: 0.5
+            }
+          }
+          Repeater {
+            model: root.treeOn ? root.aloneGroups() : []
+            delegate: Column {
+              id: phaseGroup
+              required property var modelData
+              readonly property bool folded: !!root.foldedPhases[modelData.phase]
+              width: parent.width
+              spacing: Commons.Style.space(2)
+              Rectangle {
+                width: parent.width
+                height: phaseHead.implicitHeight + Commons.Style.space(8)
+                radius: Commons.Style.cornerRadius
+                color: phaseHover.hovered ? Commons.Style.hoverFill : "transparent"
+                HoverHandler { id: phaseHover; cursorShape: Qt.PointingHandCursor }
+                TapHandler { onTapped: root.togglePhase(phaseGroup.modelData.phase) }
+                Accessible.role: Accessible.Button
+                Accessible.name: (root.phaseNames[phaseGroup.modelData.phase] || "") + (phaseGroup.folded ? ", folded" : "")
+                Row {
+                  id: phaseHead
+                  x: Commons.Style.space(4)
+                  anchors.verticalCenter: parent.verticalCenter
+                  spacing: Commons.Style.space(8)
+                  // "›" turned down while open: the theme fonts lack ▸ and ▾.
+                  Caption {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "›"
+                    rotation: phaseGroup.folded ? 0 : 90
+                    font.bold: true
+                    elide: Text.ElideNone
+                    Behavior on rotation { NumberAnimation { duration: 140 } }
+                  }
+                  Caption {
+                    text: (root.phaseNames[phaseGroup.modelData.phase] || "").toUpperCase()
+                    font.bold: true
+                    font.letterSpacing: 1
+                    opacity: 0.7
+                    elide: Text.ElideNone
+                  }
+                  Caption {
+                    text: phaseGroup.modelData.done + " of " + phaseGroup.modelData.apis.length
+                    opacity: 0.4
+                    elide: Text.ElideNone
+                  }
+                }
+              }
+              Flow {
+                width: parent.width
+                visible: !phaseGroup.folded
+                spacing: Commons.Style.space(4)
+                Repeater {
+                  model: phaseGroup.folded ? [] : phaseGroup.modelData.apis
+                  delegate: GridTile {
+                    required property string modelData
+                    required property int index
+                    api: modelData
+                    order: index
+                  }
+                }
+              }
+            }
+          }
+          Loader {
+            width: parent.width
+            active: root.treeOn && root.treePickIn === "alone" && root.treePick !== ""
+            visible: active
+            sourceComponent: Component { PickDetail { api: root.treePick } }
+          }
+        }
+
         Repeater {
-          model: root.hasGuide && !root.appliedSearch && !root.walked
+          model: root.hasGuide && root.listShown && !root.walked
                  ? [{ key: "overview", title: "OVERVIEW" }, { key: "route", title: "RECOMMENDED ROUTE" },
                     { key: "missables", title: "MISSABLES" }, { key: "combos", title: "COMBOS" }] : []
           delegate: Column {

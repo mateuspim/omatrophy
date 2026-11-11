@@ -1,5 +1,59 @@
 # Changelog
 
+## 0.7.0 - 2026-11-11
+
+- Guides know hard prerequisites: an achievement the game locks until
+  another is unlocked (Professional after Veteran) lists it under
+  `requires`, backed by a source like any claim. Up next skips what
+  can't be had yet. Guides made before say "older maker" (maker 4).
+- Walkthrough steps say where to go and what to do: one sentence, then
+  ordered actions (place, move, the achievement it gives), and a step
+  of more than 12 is asked again split by chapter or area. Guides
+  without actions show as before.
+- The tracker's Guide view: the open step lists its actions as a
+  checklist, and **Tree** shows the whole guide at a glance: **Do now**
+  tiles for every trophy you can get right now, the story as a track
+  that fills to **YOU ARE HERE** (a red flag where a missable was left
+  behind; a click shows that step's actions), chains as small skill
+  trees (lit lines, locks, READY), and the rest as a grid by phase.
+  Clicking any of them finds the trophy in the list and shows its tip,
+  needs and what it opens. The guide answer gains `frontier` for Do
+  now. Only `TrackerView.qml` changed in the shell, so no restart is
+  needed.
+- **I'm here**: OmaTrophy only sees trophies, so the step it puts you
+  at is a guess; click your step in the Tree (or open it in Steps) and
+  **I'm here** pins it, with a pin beside YOU ARE HERE, until you finish
+  that step or a later one. **Back to automatic** drops it. From a
+  terminal: `guide here <store> <app> <step|clear>`. The guide answer
+  gains `step_pinned`.
+- Walkthrough steps name a `marker`, the chapter or mission clear that
+  proves the step finished, and the tracker places you after the last
+  one you got, so a side trophy got early (RE5's flash grenade) or one
+  left open no longer moves you. Guides made before say "older maker"
+  (maker 5) and read as before. Without markers the step you're on
+  follows the last step you finished, not your latest unlock. Only a
+  story trophy counts as a marker, so an online game (ARC Raiders) whose
+  steps were given challenges as markers isn't held back by them.
+- **Tree** shows for any guide with walkthrough steps, not only ones
+  with story trophies or prerequisites: an online game gets Do now and
+  its step track too.
+- A done step's ✓ no longer wraps onto a line of its own at large
+  font sizes.
+- `guide bench` reports, unscored, the items with prerequisites (and
+  how many a quote backs), the share of step actions that name a
+  place and the share of steps with a marker, as `needs`, `where` and
+  `marker` columns.
+- A stage asked twice keeps the better answer, not always the second;
+  everyday words ("act fast", "the area") no longer pull an excerpt in
+  as a walkthrough; a quote cut off on "the" or "and" no longer counts
+  as verified.
+- Walkthroughs place every open achievement: one a model leaves out is
+  asked for again, and the tracker's "Not in a step" list should be
+  rare. Each achievement sits in one step, the one where it unlocks
+  (a "collect them all" where it finishes), and a step warns for every
+  missable it holds. A step's quote that only repeats the store's
+  description no longer counts as a source.
+
 ## 0.6.4 - 2026-11-10
 
 - `guide bench` scores the walkthrough: half for the open achievements
@@ -7,12 +61,6 @@
   weighs 10 of the 100, taken from filled fields (now 15) and sections
   (now 5), and shows as a `walk` column in the table. Scores from
   earlier benches, the README's table among them, used the old weights.
-- Walkthroughs place every open achievement: one a model leaves out is
-  asked for again, and the tracker's "Not in a step" list should be
-  rare. Each achievement sits in one step, the one where it unlocks
-  (a "collect them all" where it finishes), and a step warns for every
-  missable it holds. A step's quote that only repeats the store's
-  description no longer counts as a source.
 
 ## 0.6.3 - 2026-11-10
 

@@ -38,6 +38,17 @@ in its first step only (sonnet had counted one open twice); a step's
 missables take in the items classify marked missable; and a step's
 quote must say more than the store's own text, as an item's must.
 
+Added in 0.7.0, after the owner's RE5 guide (60/60 classified, 25 steps
+all grounded, yet hard to follow): story steps were a sentence or two
+with no place, and a cleanup step crammed eight achievements over four
+chapters into one paragraph. A step now has one sentence of `text` and
+ordered `actions` (`{where, what, achievement}`), checked like the rest;
+more than 12 asks to split it by chapter or area. The tracker shows the
+open step's actions as a checklist. A retry that comes back worse no
+longer replaces the first answer, "act", "stage", "level" and "area"
+need a number to mark an excerpt as a walkthrough, and a quote cut off
+on a word like "the" no longer verifies.
+
 A failed walkthrough (no parse after the retry, or the agent erred) costs
 only the walkthrough: the items and route are already made, and the
 earlier walkthrough, if any, stays.
@@ -54,3 +65,22 @@ shows them under Up next with that step open.
   the tracker says "older maker" and a re-make adds one.
 - The step that is open follows the store's unlocks and hand ticks; the
   game's own progress (which mission the save is on) isn't read.
+
+## Note: markers and "I'm here" (0.7.0)
+
+Guessing the step from unlocks went wrong on RE5: the flash-grenade
+trophy, filed under 4-1, was got in 3-1, and the player showed at 4-1.
+Placing the player after the last fully finished step (ca626b3) helped,
+but a side trophy left open in a finished chapter still held them back.
+Two fixes, as OmaTrophy still sees only achievements:
+
+- The walkthrough stage names a `marker` per step (maker 5): the one
+  achievement of the step that proves it finished, a chapter or mission
+  clear, `""` when the game has none. The reader places the player after
+  the last cleared marker and never past the next one not cleared;
+  between them the finished-step rule still applies. Plans without
+  markers read as before; `guides.MAKER` goes to 5, so they say "older
+  maker".
+- The player can say where they are: **I'm here** on a step (or
+  `guide here`) pins it in the state folder, not in the guide, until
+  they finish a step at or after it.

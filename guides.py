@@ -19,8 +19,10 @@ TICK = re.compile(r'^- \[(?P<mark>[ xX])\] \*\*(?P<name>.+?)\*\*(?P<rest>.*)$')
 # The guide maker's revision, written to each plan it makes. Bump it when
 # making a guide again gives a clearly better one (prompts, sources), so
 # the tracker can say so. 3: route prose without `table` citations, fuller
-# tips, full pages instead of the agent's summaries (2026-11-06).
-MAKER = 3
+# tips, full pages instead of the agent's summaries (2026-11-06). 4:
+# `requires` per item and `actions` per walkthrough step (ADR 20). 5: a
+# `marker` per step, the chapter clear the tracker places the player by.
+MAKER = 5
 
 
 def outdated(plan):
@@ -121,8 +123,10 @@ def phase_rank(item):
 
 
 def open_order(order, items, done):
-    """The first NEXT_COUNT open apis in `order`, missables first."""
-    open_ = [api for api in order if api in items and api not in done]
+    """The first NEXT_COUNT open apis in `order`, missables first. An item
+    whose `requires` (apis) aren't all done waits: the game won't give it."""
+    open_ = [api for api in order if api in items and api not in done
+             and all(r in done for r in items[api].get('requires') or [])]
     open_.sort(key=lambda api: (not items[api].get('missable'),))  # stable: keeps the plan's order
     return open_[:NEXT_COUNT]
 
@@ -157,41 +161,221 @@ def guide_answer(store, app, achievements, folder=None):
     # it maps through every achievement of the game.
     every_api = {a['name']: a['api'] for a in achievements}
     every_api.update(name_to_api)
-    steps = walkthrough_steps(plan, every_api, done)
+    for api, item in items.items():
+        needs = item.get('requires') if isinstance(item.get('requires'), list) else []
+        items[api] = dict(item, requires=[every_api[n] for n in needs if n in every_api and every_api[n] != api])
+    steps = walkthrough_steps(plan, every_api, done, items)
+    pinned = pinned_step(steps, load_pin(store, app))
+    at = pinned if pinned >= 0 else current_step(steps)
     return {'store': store, 'app': str(app), 'file': os.path.basename(path),
             'generated': plan.get('generated', 0), 'order': order, 'items': items,
             'sections': plan.get('sections') or {}, 'notes': notes, 'ticks': ticks,
             'next': open_order(order, items, done),
             'agent': plan.get('agent') if isinstance(plan.get('agent'), dict) else {},
             'cost_usd': plan_cost(plan), 'outdated': outdated(plan),
-            'walkthrough': steps, 'step': current_step(steps)}
+            'walkthrough': steps, 'step': at, 'step_pinned': pinned >= 0, 'tree': tree(order, items, steps),
+            'frontier': frontier(order, items, done, steps, at)}
 
 
-def walkthrough_steps(plan, name_to_api, done):
+def play_order(order, items, steps=()):
+    """Every item's api in play order: the steps' first, then the route's."""
+    placed = [a for s in steps for a in s.get('achievements') or []]
+    ranked = [a for a in placed if a in items] + [a for a in order if a not in placed and a in items]
+    return list(dict.fromkeys(ranked))
+
+
+def frontier(order, items, done, steps=(), at=-1):
+    """What the player can do now (the tree's Do now): every open item
+    whose `requires` are all done, in play order from the current step
+    `at` on. A missable of that step leads, as its chance ends there;
+    ones left open in earlier steps come last, so a leftover doesn't pull
+    the player back (as `current_step`)."""
+    step_of = {}
+    for i, s in enumerate(steps):
+        for a in s.get('achievements') or []:
+            step_of.setdefault(a, i)
+    here = set(steps[at].get('missables') or []) if 0 <= at < len(steps) else set()
+
+    def rank(api):
+        behind = api in step_of and step_of[api] < at
+        urgent = api in here or (items[api].get('missable') and step_of.get(api) == at)
+        return (behind, not urgent)
+
+    ready = [a for a in play_order(order, items, steps) if a not in done
+             and all(r in done for r in items[a].get('requires') or [])]
+    return sorted(ready, key=rank)  # stable: keeps the play order
+
+
+def tree(order, items, steps=()):
+    """The guide as an outline (ADR 20): `story` the story items in play
+    order (the steps', then the route's); `chains` rows {api, depth}, each
+    item that needs others first with its prerequisites indented under it;
+    `alone` the rest. Apis throughout; done ones stay, the view dims them."""
+    ranked = play_order(order, items, steps)
+    story = [a for a in ranked if items[a].get('phase') == 'story']
+    needs = {a: [r for r in items[a].get('requires') or [] if r in items] for a in ranked}
+    plain = [a for a in ranked if a not in story]
+    needed = {r for a in plain if needs[a] for r in needs[a]}
+    chains = []
+
+    def walk(api, depth, path):
+        chains.append({'api': api, 'depth': depth})
+        # A cycle in an imported or older guide stops at its closing edge.
+        for r in needs[api]:
+            if r not in path:
+                walk(r, depth + 1, path | {r})
+
+    for a in plain:
+        if needs[a] and a not in needed:
+            walk(a, 0, {a})
+    shown = {row['api'] for row in chains}
+    return {'story': story, 'chains': chains, 'alone': [a for a in plain if a not in shown]}
+
+
+def walkthrough_steps(plan, name_to_api, done, items=None):
     """The plan's walkthrough for the tracker: each step's achievements
     and missables as `api`s (names the store doesn't know are dropped),
-    and `done` when none of its achievements is left open."""
+    `done` when none of its achievements is left open, `marker` the one
+    achievement that proves the step is finished ("" when it names none
+    of its own) and `cleared` once that one is done."""
     steps = []
     for s in plan.get('walkthrough') if isinstance(plan.get('walkthrough'), list) else []:
         if not isinstance(s, dict) or not isinstance(s.get('title'), str):
             continue
         apis = [name_to_api[n] for n in s.get('achievements') or [] if n in name_to_api]
+        marker = name_to_api.get(s.get('marker'), '') if isinstance(s.get('marker'), str) else ''
+        marker = marker if marker in apis and story_marker(marker, items) else ''
         steps.append({'title': s['title'], 'text': s.get('text') if isinstance(s.get('text'), str) else '',
-                      'achievements': apis,
+                      'achievements': apis, 'actions': step_actions(s.get('actions'), name_to_api),
                       'missables': [name_to_api[n] for n in s.get('missables') or [] if n in name_to_api],
                       'unverified': s.get('unverified') is True,
+                      'marker': marker, 'cleared': bool(marker) and marker in done,
                       'started': any(a in done for a in apis),
                       'done': bool(apis) and all(a in done for a in apis)})
     return steps
 
 
+def step_actions(raw, name_to_api):
+    """A step's actions for the tracker (maker 4): {where, what, achievement}
+    with the achievement as an `api`, "" when it names none the store has.
+    An older step has none and shows its text alone."""
+    out = []
+    for a in raw if isinstance(raw, list) else []:
+        if not isinstance(a, dict) or not isinstance(a.get('what'), str) or not a['what'].strip():
+            continue
+        out.append({'where': a.get('where') if isinstance(a.get('where'), str) else '', 'what': a['what'],
+                    'achievement': name_to_api.get(a.get('achievement'), '') if isinstance(a.get('achievement'), str) else ''})
+    return out
+
+
+def story_marker(api, items):
+    """True when a step's marker can stand for story progress: a story
+    item, or one never classified (unlocked when the guide was made, as
+    the chapters played are). ARC Raiders' guide named a challenge as
+    each step's marker; one not got yet capped "here" at its step."""
+    if items is None or api not in items:
+        return True
+    return items[api].get('phase') == 'story'
+
+
 def current_step(steps):
-    """Where the player is: the first step with an achievement open, at or
-    after the last step where they unlocked one (a horse bond left open in
-    an early step mustn't pull a player back there); -1 when none is open."""
-    last = max((i for i, s in enumerate(steps) if s.get('started')), default=0)
+    """Where the player is: the first step with an achievement open after
+    the last step they finished (a horse bond left open in an early step
+    mustn't pull a player back there); -1 when none is open. A step only
+    started doesn't move them forward: RE5's guide puts the flash-grenade
+    trophy in 4-1, and a player who got it in 3-1 was shown at 4-1 with
+    3-2 and 3-3 still to play. With no step finished yet, the latest
+    step they unlocked anything in stands in.
+
+    Steps with a `marker` (a chapter clear) bound the guess: the player is
+    past the last cleared one, side trophies or not, and can't be past
+    the next one not cleared, as the story can't skip it. The rules
+    above only look between the two; with no markers that is every step."""
+    cleared = [i for i, s in enumerate(steps) if s.get('marker') and s.get('cleared')]
+    floor = cleared[-1] + 1 if cleared else 0
+    ceiling = next((i for i, s in enumerate(steps) if i >= floor and s.get('marker') and not s.get('cleared')),
+                   len(steps) - 1)
+    finished = [i for i in range(ceiling + 1) if steps[i].get('done')]
+    if finished or cleared:
+        # ARC Raiders: steps 1-8 finished, one online trophy from step 13
+        # got early; the started guess put the player at 13.
+        last = max(floor, finished[-1] + 1 if finished else 0)
+    else:
+        last = max((i for i in range(ceiling + 1) if steps[i].get('started')), default=0)
     open_at = [i for i, s in enumerate(steps) if s['achievements'] and not s['done']]
     return next((i for i in open_at if i >= last), open_at[0] if open_at else -1)
+
+
+def step_finished(step):
+    """True when the player is past a step: its marker (a chapter clear)
+    is done, or none of its achievements is left open."""
+    return bool(step.get('cleared') or step.get('done'))
+
+
+# ------------------------------------------------------------ I'm here
+# OmaTrophy only sees achievements, so `current_step` is a guess; the
+# player can pin the step they are at (`guide here`). The pin is the
+# player's state, not the guide's: guides are never written here, so it
+# lives in the state folder, keyed by store and app.
+
+def here_path():
+    base = os.environ.get('XDG_STATE_HOME') or os.path.expanduser('~/.local/state')
+    return os.path.join(base, 'omatrophy', 'guide-here.json')
+
+
+def load_pins():
+    """{"store:app": pin} from the state file; {} when missing or broken."""
+    try:
+        with open(here_path(), encoding='utf-8') as f:
+            pins = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    return pins if isinstance(pins, dict) else {}
+
+
+def load_pin(store, app):
+    pin = load_pins().get(f'{store}:{app}')
+    return pin if isinstance(pin, dict) else None
+
+
+def save_pin(store, app, pin):
+    """Write one game's pin, or remove it with None; the others stay."""
+    pins = load_pins()
+    key = f'{store}:{app}'
+    if pin is None:
+        pins.pop(key, None)
+    else:
+        pins[key] = pin
+    path = here_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path + '.tmp', 'w', encoding='utf-8') as f:
+        json.dump(pins, f, indent=1, sort_keys=True)
+    os.replace(path + '.tmp', path)
+
+
+def make_pin(steps, index):
+    """A pin on step `index` (0-based): its title, so a guide made again
+    with other steps drops it, and the steps already finished, so only a
+    step the player finishes after pinning ends it."""
+    return {'step': index, 'title': steps[index]['title'],
+            'finished': [i for i, s in enumerate(steps) if step_finished(s)]}
+
+
+def pinned_step(steps, pin):
+    """The pinned step's index while the pin holds, else -1. It holds
+    until the player finishes a step at or after it (the automatic rule
+    takes over then), and not at all once its step's title changed."""
+    if not isinstance(pin, dict):
+        return -1
+    at = pin.get('step')
+    if not isinstance(at, int) or isinstance(at, bool) or not 0 <= at < len(steps):
+        return -1
+    if steps[at].get('title') != pin.get('title'):
+        return -1
+    before = set(pin.get('finished') if isinstance(pin.get('finished'), list) else [])
+    if any(step_finished(s) and i not in before for i, s in enumerate(steps) if i >= at):
+        return -1
+    return at
 
 
 def plan_cost(plan):

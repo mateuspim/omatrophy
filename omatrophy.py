@@ -13,6 +13,8 @@ Usage:
   omatrophy.py guide [store app]      the 100% guide of one game, as JSON ({} when none; docs/specs/guides.md)
   omatrophy.py guide import <folder> [--replace]
                                       copy guide files in from another folder (read-only on it)
+  omatrophy.py guide here <store> <app> <step|clear>
+                                      pin the walkthrough step you are at (1-based), or clear it
   omatrophy.py guide make <store> <app> [--no-web] [--agent a] [--model m] [--effort e]
                                       make a guide through your agent (ADR 14); guide stop|status|agents
   omatrophy.py guide model <agent> <model> [effort] [@http://endpoint]|default
@@ -858,6 +860,8 @@ def guide(args):
         imported, skipped = guides.import_guides(args[1], replace=len(args) == 3)
         print(f'imported {imported}, skipped {skipped}')
         return
+    if args[:1] == ['here'] and len(args) == 4:
+        return guide_here(*args[1:])
     if args[:1] in (['make'], ['stop'], ['status'], ['jobs'], ['agents'], ['model'], ['jail'], ['jail-options'], ['bench'],
                     ['check']):
         return guide_job(args)
@@ -869,11 +873,33 @@ def guide(args):
     else:
         raise SystemExit(f'usage: omatrophy.py guide [{"|".join(s.id for s in found)} <game id>]\n'
                          '       omatrophy.py guide import <folder> [--replace]\n'
+                         '       omatrophy.py guide here <store> <app> <step number|clear>\n'
                          '       omatrophy.py guide make <store> <app> [--no-web] [--notify] [--jail|--no-jail] [--agent a] [--model m] [--effort e]\n'
                          '       omatrophy.py guide stop|status [store app] | jobs | agents\n'
                          '       omatrophy.py guide model <agent> <model> [effort] [@http://endpoint] | default\n'
                          '       omatrophy.py guide jail | jail-options <agent> [ai-jail options...]')
     print(json.dumps(guides.guide_answer(store.id, app, store.achievements(app))))
+
+
+def guide_here(store_id, app, where):
+    """`guide here <store> <app> <step|clear>`: pin the walkthrough step the
+    player is at (1-based), or go back to the automatic guess; prints the
+    guide as `guide <store> <app>` does, so the tracker reads it once."""
+    import guides
+    store = next((s for s in found_stores() if s.id == store_id), None)
+    if store is None:
+        raise SystemExit(f'omatrophy: guide here: no {store_id} store found on this machine')
+    achs = store.achievements(app)
+    if where == 'clear':
+        guides.save_pin(store.id, app, None)
+    else:
+        steps = guides.guide_answer(store.id, app, achs).get('walkthrough') or []
+        if not steps:
+            raise SystemExit(f'omatrophy: guide here: {store.id} {app} has no guide with steps; make one first (guide make)')
+        if not where.isdigit() or not 1 <= int(where) <= len(steps):
+            raise SystemExit(f'omatrophy: guide here: give a step number from 1 to {len(steps)}, or clear')
+        guides.save_pin(store.id, app, guides.make_pin(steps, int(where) - 1))
+    print(json.dumps(guides.guide_answer(store.id, app, achs)))
 
 
 def guide_job(args):

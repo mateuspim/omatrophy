@@ -160,13 +160,50 @@ Anything no source backs says
 A guide with a **walkthrough** leads with it, under a short overview: the
 game's chapters or missions in play order, each with its progress
 ("1 / 3") and its trophies in full, done ones ticked, a ⚠ on the ones you
-lose by moving on. The step you're on (the first with a trophy left, at
-or after your latest unlock) is open; click a step's title to open or
-fold it. Trophies no step holds follow under **Not in a step**. Without
+lose by moving on. The step you're on (the first with a trophy left
+after the last chapter you cleared, by its clear trophy; or, in a guide
+made before 0.7.0, after the last step you finished) is open; click a
+step's title to open or fold it. Trophies no step holds follow under **Not in a step**. Without
 a walkthrough, Up next and the route show as before
 ([ADR 17](docs/adr/0017-walkthrough-is-a-maker-stage.md)). A guide made
-before 0.7.0 has none: the tracker says "older maker", and **Make again**
+before 0.6.1 has none: the tracker says "older maker", and **Make again**
 adds one.
+
+Since 0.7.0 the open step also lists what to do there, in order: the
+place, then the move, ticked once the trophy it gives unlocks.
+
+![The guide's Tree for a sample game: Do now tiles, the story as a track at step 2 of 6, and that step's actions](docs/brand/captures/guide-tree.png)
+
+**Tree** (beside **Steps**) shows the whole guide at a glance
+([ADR 20](docs/adr/0020-requires-and-the-guide-tree.md)):
+
+- **Do now**: every trophy you can get right now (open, and whatever the
+  game makes you unlock first is done), in play order from your step;
+  a missable of that step comes first. The first three show as tiles
+  with where ("Step 2 · Sea wall"), the move, a counter's bar and
+  MISSABLE; **Show more** unfolds the rest.
+- **Story**: the walkthrough's steps as a track that fills up to **YOU
+  ARE HERE**, each with its trophies done ("1/3"). A red **!** marks a
+  step you left with a missable still open. Click a step to see its
+  actions below the track. Without a walkthrough the story trophies are
+  the stops; on a narrow tracker the track runs down the side.
+  OmaTrophy only sees your trophies, so the step you're on is a guess:
+  when it's wrong, click your step and **I'm here** (📌 beside YOU ARE
+  HERE). The pin holds until you finish that step or a later one, then
+  the guess takes over again; **Back to automatic** drops it sooner, and
+  a guide made again whose step has another title drops it too. From a
+  terminal: `omatrophy.py guide here <store> <app> <step number|clear>`.
+- **Chains**: each trophy that needs others first as a small tree, the
+  goal on top. A line lights once the trophy under it unlocks; a locked
+  one is greyed with a padlock and "needs ..."; **READY** (its needs
+  done, itself open) glows.
+- **On their own**: the rest as a grid by phase (click a phase to fold
+  it), with a bar for counters.
+
+Click any tile, stop or trophy and the list on the right finds it, while
+its tip, what it needs and what it opens show under that part. Up next
+leaves out a trophy until what it needs is done. Guides made before
+0.7.0 have no actions or chains; **Make again** adds them.
 
 ### The guide over your game
 

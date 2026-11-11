@@ -1,0 +1,441 @@
+{
+ "store": "steam",
+ "app": "2",
+ "file": "lanterns-of-aster-2.md",
+ "generated": 1793059700,
+ "order": [
+  "L0",
+  "L1",
+  "L2",
+  "L3",
+  "L4",
+  "L5",
+  "L6",
+  "L7",
+  "L8",
+  "L9",
+  "L10",
+  "L11",
+  "L12",
+  "L13",
+  "L14",
+  "L15"
+ ],
+ "items": {
+  "L0": {
+   "name": "Kindling",
+   "api": "L0",
+   "phase": "story",
+   "difficulty": 1,
+   "missable": false,
+   "combine_with": [],
+   "tips": "",
+   "requires": []
+  },
+  "L1": {
+   "name": "Harbor Lights",
+   "api": "L1",
+   "phase": "story",
+   "difficulty": 1,
+   "missable": false,
+   "combine_with": [],
+   "tips": "",
+   "requires": []
+  },
+  "L2": {
+   "name": "The Long Dark",
+   "api": "L2",
+   "phase": "story",
+   "difficulty": 1,
+   "missable": false,
+   "combine_with": [],
+   "tips": "",
+   "requires": []
+  },
+  "L3": {
+   "name": "Tidewatch",
+   "api": "L3",
+   "phase": "story",
+   "difficulty": 1,
+   "missable": false,
+   "combine_with": [],
+   "tips": "",
+   "requires": []
+  },
+  "L4": {
+   "name": "Aster Rising",
+   "api": "L4",
+   "phase": "story",
+   "difficulty": 2,
+   "missable": false,
+   "combine_with": [],
+   "tips": "",
+   "requires": []
+  },
+  "L5": {
+   "name": "Tinker",
+   "api": "L5",
+   "phase": "quick",
+   "difficulty": 1,
+   "missable": false,
+   "combine_with": [],
+   "tips": "",
+   "requires": []
+  },
+  "L6": {
+   "name": "Glassblower",
+   "api": "L6",
+   "phase": "collect",
+   "difficulty": 3,
+   "missable": false,
+   "combine_with": [],
+   "tips": "Each upgrade needs glass from the harbor kilns; buy them as you go.",
+   "requires": [
+    "L5"
+   ],
+   "counter": {
+    "target": 8,
+    "label": "lanterns"
+   }
+  },
+  "L7": {
+   "name": "Keeper",
+   "api": "L7",
+   "phase": "challenge",
+   "difficulty": 3,
+   "missable": false,
+   "combine_with": [],
+   "tips": "",
+   "requires": []
+  },
+  "L8": {
+   "name": "Lighthouse Keeper",
+   "api": "L8",
+   "phase": "challenge",
+   "difficulty": 4,
+   "missable": false,
+   "combine_with": [],
+   "tips": "Nightmare opens once you finish Hard.",
+   "requires": [
+    "L7"
+   ]
+  },
+  "L9": {
+   "name": "Everburning",
+   "api": "L9",
+   "phase": "challenge",
+   "difficulty": 5,
+   "missable": false,
+   "combine_with": [],
+   "tips": "Carry two spare wicks; the lighthouse stairs are where most runs fail.",
+   "requires": [
+    "L8",
+    "L15"
+   ]
+  },
+  "L10": {
+   "name": "Moth Collector",
+   "api": "L10",
+   "phase": "collect",
+   "difficulty": 2,
+   "missable": false,
+   "combine_with": [],
+   "tips": "",
+   "counter": {
+    "target": 40,
+    "label": "moths"
+   },
+   "requires": []
+  },
+  "L11": {
+   "name": "Quiet Feet",
+   "api": "L11",
+   "phase": "missable",
+   "difficulty": 2,
+   "missable": true,
+   "combine_with": [],
+   "tips": "",
+   "missable_note": "Chapter 4, before the tide bell",
+   "requires": []
+  },
+  "L12": {
+   "name": "Ferryman",
+   "api": "L12",
+   "phase": "quick",
+   "difficulty": 1,
+   "missable": false,
+   "combine_with": [],
+   "tips": "",
+   "requires": []
+  },
+  "L13": {
+   "name": "Secret Choir",
+   "api": "L13",
+   "phase": "quick",
+   "difficulty": 2,
+   "missable": false,
+   "combine_with": [],
+   "tips": "",
+   "requires": []
+  },
+  "L14": {
+   "name": "Ember Shrine",
+   "api": "L14",
+   "phase": "missable",
+   "difficulty": 2,
+   "missable": true,
+   "combine_with": [],
+   "tips": "The shrine sits left of the bridge; once it burns the path is gone.",
+   "missable_note": "Chapter 2, before the bridge burns",
+   "requires": []
+  },
+  "L15": {
+   "name": "Wick Trimmer",
+   "api": "L15",
+   "phase": "grind",
+   "difficulty": 3,
+   "missable": false,
+   "combine_with": [],
+   "tips": "Trim at every lantern post; Nightmare runs count too.",
+   "counter": {
+    "target": 100,
+    "label": "wicks"
+   },
+   "requires": []
+  }
+ },
+ "sections": {
+  "overview": "A made-up guide: the story first, then Hard and Nightmare in that order."
+ },
+ "notes": "",
+ "ticks": [
+  "L0",
+  "L1",
+  "L2",
+  "L5"
+ ],
+ "next": [
+  "L11",
+  "L14",
+  "L3"
+ ],
+ "agent": {
+  "name": "claude",
+  "model": "sonnet",
+  "effort": "medium"
+ },
+ "cost_usd": 0,
+ "outdated": false,
+ "walkthrough": [
+  {
+   "title": "Chapters 1-3: Ember Coast",
+   "text": "Learn the lanterns and reach the harbor.",
+   "achievements": [
+    "L0",
+    "L1",
+    "L14",
+    "L2",
+    "L5"
+   ],
+   "actions": [
+    {
+     "where": "Chapter 1, the forge",
+     "what": "Craft the first lantern",
+     "achievement": "L5"
+    },
+    {
+     "where": "Chapter 2, the old bridge",
+     "what": "Light the shrine before you cross",
+     "achievement": "L14"
+    },
+    {
+     "where": "Chapter 3, the mine",
+     "what": "Finish the chapter",
+     "achievement": "L2"
+    }
+   ],
+   "missables": [
+    "L14"
+   ],
+   "unverified": false,
+   "started": true,
+   "done": false
+  },
+  {
+   "title": "Chapter 4: Tidewatch",
+   "text": "The sea wall comes first; the dock and caves are optional.",
+   "achievements": [
+    "L11",
+    "L12",
+    "L3"
+   ],
+   "actions": [
+    {
+     "where": "Sea wall",
+     "what": "Cross with your lantern unlit, hugging the rail",
+     "achievement": "L11"
+    },
+    {
+     "where": "Ferry dock",
+     "what": "Ride the ferry out and back",
+     "achievement": "L12"
+    },
+    {
+     "where": "Tide caves",
+     "what": "Catch the six moths behind the waterfall",
+     "achievement": ""
+    },
+    {
+     "where": "Bell tower",
+     "what": "Ring the tide bell to end the chapter",
+     "achievement": "L3"
+    }
+   ],
+   "missables": [
+    "L11"
+   ],
+   "unverified": false,
+   "started": true,
+   "done": false
+  },
+  {
+   "title": "Chapter 5: Aster",
+   "text": "Climb the lighthouse; listen at its foot before you go up.",
+   "achievements": [
+    "L13",
+    "L4"
+   ],
+   "actions": [
+    {
+     "where": "Lighthouse cellar",
+     "what": "Stand still by the organ until the choir starts",
+     "achievement": "L13"
+    },
+    {
+     "where": "Lighthouse top",
+     "what": "Light the great lamp",
+     "achievement": "L4"
+    }
+   ],
+   "missables": [],
+   "unverified": false,
+   "started": false,
+   "done": false
+  },
+  {
+   "title": "New game on Hard",
+   "text": "Nightmare unlocks only after Hard.",
+   "achievements": [
+    "L7"
+   ],
+   "actions": [
+    {
+     "where": "Main menu",
+     "what": "Start a new game on Hard",
+     "achievement": ""
+    },
+    {
+     "where": "Lighthouse top",
+     "what": "Finish the story",
+     "achievement": "L7"
+    }
+   ],
+   "missables": [],
+   "unverified": false,
+   "started": false,
+   "done": false
+  },
+  {
+   "title": "Nightmare",
+   "text": "One run gives both, if no lantern goes out.",
+   "achievements": [
+    "L8",
+    "L9"
+   ],
+   "actions": [],
+   "missables": [],
+   "unverified": false,
+   "started": false,
+   "done": false
+  },
+  {
+   "title": "Clean-up",
+   "text": "Chapter select keeps your moths and glass.",
+   "achievements": [
+    "L10",
+    "L6",
+    "L15"
+   ],
+   "actions": [
+    {
+     "where": "Chapter select",
+     "what": "Catch the moths you missed",
+     "achievement": "L10"
+    },
+    {
+     "where": "Harbor kilns",
+     "what": "Upgrade every lantern",
+     "achievement": "L6"
+    }
+   ],
+   "missables": [],
+   "unverified": false,
+   "started": false,
+   "done": false
+  }
+ ],
+ "step": 1,
+ "tree": {
+  "story": [
+   "L0",
+   "L1",
+   "L2",
+   "L3",
+   "L4"
+  ],
+  "chains": [
+   {
+    "api": "L9",
+    "depth": 0
+   },
+   {
+    "api": "L8",
+    "depth": 1
+   },
+   {
+    "api": "L7",
+    "depth": 2
+   },
+   {
+    "api": "L15",
+    "depth": 1
+   },
+   {
+    "api": "L6",
+    "depth": 0
+   },
+   {
+    "api": "L5",
+    "depth": 1
+   }
+  ],
+  "alone": [
+   "L14",
+   "L11",
+   "L12",
+   "L13",
+   "L10"
+  ]
+ },
+ "frontier": [
+  "L11",
+  "L3",
+  "L13",
+  "L4",
+  "L7",
+  "L10",
+  "L6",
+  "L15",
+  "L14"
+ ]
+}

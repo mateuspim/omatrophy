@@ -39,7 +39,7 @@ SITES = ('PowerPyx (powerpyx.com)', 'TrueAchievements (trueachievements.com)',
 SITE_HOSTS = ('powerpyx.com', 'trueachievements.com', 'playstationtrophies.org', 'xboxachievements.com',
               'steamcommunity.com', 'fandom.com')
 # Item fields the view marks "(unverified)" when no quote backs the item.
-CLAIMS = ('time', 'missable', 'counter', 'tips', 'combine_with')
+CLAIMS = ('time', 'missable', 'counter', 'tips', 'combine_with', 'requires')
 WORD = re.compile(r"[a-z0-9']+")
 STOPWORDS = set('the and for with that this from your you are all any one into over have has its not but get '
                 'got can will each every than then them they their what when where which while who also out '
@@ -461,6 +461,17 @@ def check_item(raw, names):
         item['counter'] = None
     combos = raw.get('combine_with')
     item['combine_with'] = [c for c in combos if c in names and c != name] if isinstance(combos, list) else []
+    # A hard prerequisite, unlike combine_with's "same run": RE5's War Hero
+    # (Professional) opens only after Veteran is beaten (ADR 20).
+    needs = raw.get('requires')
+    item['requires'] = []
+    for r in needs if isinstance(needs, list) else []:
+        if r == name or r in item['requires']:
+            continue
+        if r in names:
+            item['requires'].append(r)
+        else:
+            errors.append(f'{name}: requires names {r!r}, which is not an achievement here')
     item['tips'] = raw.get('tips').strip() if isinstance(raw.get('tips'), str) else ''
     item['dlc'] = raw.get('dlc').strip() if isinstance(raw.get('dlc'), str) else ''
     item['cites'] = check_cites(raw.get('cites'))
@@ -474,8 +485,39 @@ def check_item(raw, names):
     return item, errors
 
 
-def check_items(text, batch, every):
-    """(items by name, errors) from a classify answer for `batch` (names)."""
+def reaches(graph, start, goal):
+    """True when `goal` is `start` or one of its prerequisites, directly or
+    through others, in `graph` ({name: [names it requires]})."""
+    seen, todo = set(), [start]
+    while todo:
+        name = todo.pop()
+        if name == goal:
+            return True
+        if name not in seen:
+            seen.add(name)
+            todo += graph.get(name, [])
+    return False
+
+
+def add_requires(graph, name, wanted):
+    """Adds `name`'s prerequisites to `graph` one by one, dropping each edge
+    that would close a cycle (its target already needs `name`). Returns
+    (kept, errors); the errors ask the model again."""
+    kept, errors = [], []
+    graph[name] = kept
+    for r in wanted:
+        if reaches(graph, r, name):
+            errors.append(f'{name} requires {r}, but {r} already needs {name} first; '
+                          'keep only the one a source states')
+        else:
+            kept.append(r)
+    return kept, errors
+
+
+def check_items(text, batch, every, known=None):
+    """(items by name, errors) from a classify answer for `batch` (names).
+    `known` is {name: requires} of items classified before; a `requires`
+    closing a cycle with them is dropped and asked again."""
     try:
         raw = tagged(text, 'items')
     except ValueError as e:
@@ -488,6 +530,7 @@ def check_items(text, batch, every):
         errors += errs
         if item and item['name'] in batch:
             items[item['name']] = item
+    errors += prune_requires(items, known or {})
     missing = [n for n in batch if n not in items]
     if missing:
         errors.append('no entry for: ' + ', '.join(missing))
@@ -562,11 +605,44 @@ def check_route(text, names):
 
 
 WALK_STEPS = 40
+# Actions a step keeps: past this a step is a cleanup pass that should be
+# split by place (the RE5 guide crammed 8 achievements over 4 chapters
+# into one paragraph).
+STEP_ACTIONS = 12
+ACTION_CHARS = 200
+
+
+def check_actions(raw, i, names):
+    """(actions, errors) for step `i`: each {where, what, achievement}, in
+    order. `what` is needed; `achievement` is optional and must be known;
+    talk about the input is an error and cut, as in the step's text."""
+    actions, errors = [], []
+    for n, a in enumerate(raw if isinstance(raw, list) else [], 1):
+        what = a.get('what') if isinstance(a, dict) else None
+        if not isinstance(what, str) or not what.strip():
+            errors.append(f'step {i} action {n} has no `what`')
+            continue
+        where = a.get('where') if isinstance(a.get('where'), str) else ''
+        talk = meta_talk(where + ' ' + what)
+        if talk:
+            errors.append(f'step {i} action {n} talks about your input ({", ".join(sorted(set(talk))[:3])})')
+        ach = a.get('achievement') if isinstance(a.get('achievement'), str) else ''
+        if ach and ach not in names:
+            errors.append(f'step {i} action {n} names {ach!r}, which is not an achievement here')
+            ach = ''
+        what = scrub_meta(what.strip())[:ACTION_CHARS]
+        # All talk about the input: nothing left to do here.
+        if not what:
+            continue
+        actions.append({'where': scrub_meta(where.strip())[:ACTION_CHARS], 'what': what, 'achievement': ach})
+    if len(actions) > STEP_ACTIONS:
+        errors.append(f'step {i} has {len(actions)} actions; at most {STEP_ACTIONS}: split it by chapter or area')
+    return actions[:STEP_ACTIONS], errors
 
 
 def check_walkthrough(text, names, open_names=()):
     """(steps, errors) from a walkthrough answer: each step a title, text,
-    achievements and missables (names known here), and cites. An open
+    achievements, missables and marker (names known here), and cites. An open
     achievement (`open_names`) in no step is an error, so the retry places
     it: a walkthrough is for the ones still to get."""
     try:
@@ -595,9 +671,20 @@ def check_walkthrough(text, names, open_names=()):
             elif n not in names:
                 errors.append(f'step {i} names {n!r}, which is not an achievement here')
         placed.update(achs)
+        # The one achievement that proves the step is done (a chapter
+        # clear): the tracker places the player after the last one got,
+        # whatever side trophies came early (RE5's flash grenade in 3-1).
+        marker = s.get('marker') if isinstance(s.get('marker'), str) else ''
+        if marker and marker not in achs:
+            errors.append(f'step {i} marker {marker!r} is not one of its achievements; name the one of them that '
+                          'proves the step is finished (a chapter or mission clear), or "" when there is none')
+            marker = ''
         miss = s.get('missables') if isinstance(s.get('missables'), list) else []
+        actions, errs = check_actions(s.get('actions'), i, names)
+        errors += errs
         steps.append({'title': scrub_meta(s['title'].strip()), 'text': scrub_meta(body.strip()), 'achievements': achs,
-                      'missables': [n for n in miss if n in achs], 'cites': check_cites(s.get('cites'))})
+                      'missables': [n for n in miss if n in achs], 'actions': actions, 'marker': marker,
+                      'cites': check_cites(s.get('cites'))})
     if len(found) > WALK_STEPS:
         errors.append(f'at most {WALK_STEPS} steps')
     if not steps:
@@ -637,6 +724,22 @@ def says_more_than(quote, given):
     return len(re.sub(r'[^a-z0-9]+', '', rest)) >= QUOTE_MIN - 2
 
 
+# Words a quote can't stop on: "They will also unlock the" verified
+# against its page but says nothing (HANDOFF 2026-11-10).
+DANGLING = set('a an the and or but nor of to in on at by for from with into onto as than then that this these '
+               'those your you their its his her our my will would can could should must also is are was were be '
+               'been has have had do does if when while which who whose where so very more most'.split())
+
+
+def cut_off(quote):
+    """True when a folded quote stops mid-sentence on a word that needs
+    another after it; one ending in punctuation never is."""
+    if re.search(r'[.!?:;)\]"\']\s*$', quote):
+        return False
+    last = WORD.findall(quote)
+    return bool(last) and last[-1] in DANGLING
+
+
 def verify_quotes(raw, sources, pieces, given=()):
     """Each cite marked verified when its quote is in the source it names
     (a URL or a chunk id), or else in any source we hold, and says more
@@ -649,7 +752,7 @@ def verify_quotes(raw, sources, pieces, given=()):
         url = by_chunk.get(c['source'], c['source'])
         # The prompt asks for 12-200 characters; a little over still checks.
         ok = False
-        if QUOTE_MIN <= len(quote) <= QUOTE_MAX * 2 and says_more_than(quote, given):
+        if QUOTE_MIN <= len(quote) <= QUOTE_MAX * 2 and says_more_than(quote, given) and not cut_off(quote):
             ok = quote in folded.get(url, '')
             if not ok:
                 hit = next((u for u, t in folded.items() if quote in t), None)
@@ -706,6 +809,8 @@ def table_line(name, item, unlocked, desc=''):
         parts.append(f'counter {item["counter"]["target"]} {item["counter"].get("label", "")}'.strip())
     if item.get('combine_with'):
         parts.append('combines with ' + ', '.join(item['combine_with']))
+    if item.get('requires'):
+        parts.append('needs first ' + ', '.join(item['requires']))
     if item.get('dlc'):
         parts.append(f'DLC {item["dlc"]}')
     return f'- {name}{" [unlocked]" if unlocked else ""}: ' + '; '.join(parts) + (f' — {desc}' if desc else '')
@@ -713,7 +818,11 @@ def table_line(name, item, unlocked, desc=''):
 
 # A walkthrough reads the game's chapters and missions; a chunk naming
 # them is worth more than one that only matches an achievement's words.
-WALK_WORDS = re.compile(r'\b(walkthrough|chapter|mission|episode|act|stage|level|area|before you|point of no return)\b', re.I)
+# "act", "stage", "level" and "area" count only with a number after them
+# ("Act 2", "Stage IV"): bare, they are everyday words ("act fast", "the
+# area around") and pulled in chunks that weren't a walkthrough.
+WALK_WORDS = re.compile(r'\b(?:walkthrough|chapter|mission|episode|before you|point of no return'
+                        r'|(?:act|stage|level|area)\s+(?:\d+|[ivx]+\b))', re.I)
 WALK_CHARS = 16000
 
 
@@ -865,11 +974,15 @@ class Job:
         self.report(line or stage)
 
     # stages
-    def ask(self, stage, text, check, merge):
+    def ask(self, stage, text, check, merge=None, rank=None):
         """Run one model stage, check its answer, and ask once more with the
         errors listed; returns (value, errors), `merge` keeping the valid
-        part of both tries."""
-        best, errors = None, []
+        part of both tries. With no `merge`, the better answer wins by
+        `rank(value, errors)` (lower is better; default the error count),
+        the second on a tie: `b or a` took a retry that came back worse
+        (HANDOFF 2026-11-10)."""
+        rank = rank or (lambda value, errors: (not value, len(errors)))
+        best, errors, best_errors = None, [], []
         for attempt in (1, 2):
             if attempt == 2:
                 text = (text + '\n\nYour last answer had these problems:\n' + '\n'.join(f'- {e}' for e in errors[:20])
@@ -894,10 +1007,15 @@ class Job:
             # its walkthrough cost doubled.
             if errors:
                 self.usage[-1]['errors'] = errors[:5]
-            best = value if best is None else merge(best, value)
+            if best is None:
+                best, best_errors = value, errors
+            elif merge:
+                best, best_errors = merge(best, value), errors
+            elif rank(value, errors) <= rank(best, best_errors):
+                best, best_errors = value, errors
             if not errors:
                 break
-        return best, errors
+        return best, best_errors
 
     def add_source(self, url, text, kind):
         if text and text.strip() and not search_page(url):
@@ -945,9 +1063,13 @@ class Job:
             hints.setdefault(n['name'], []).append(n['quote'])
         return hints
 
-    def classify(self, open_achs, pieces, hints):
+    def classify(self, open_achs, pieces, hints, known=None):
+        """Items by name, in batches; `known` ({name: requires}) holds the
+        unlocked ones' prerequisites from the earlier guide, so a cycle
+        through them is caught too."""
         every = [a['name'] for a in self.achs]
         items, problems = {}, []
+        known = dict(known or {})
         for i in range(0, len(open_achs), BATCH_SIZE):
             batch = open_achs[i:i + BATCH_SIZE]
             self.step('classify', f'classify: {i + len(batch)}/{len(open_achs)} achievements')
@@ -960,9 +1082,11 @@ class Job:
             text = prompt('classify', game=self.game, excerpts=excerpt_block(picked),
                           achievements='\n'.join(ach_line(a) for a in batch),
                           all_names='\n'.join(f'- {n}' for n in every), phases=', '.join(guides.PHASES))
-            found, errors = self.ask('classify', text, lambda t, b=[a['name'] for a in batch]: check_items(t, b, every),
+            found, errors = self.ask('classify', text,
+                                     lambda t, b=[a['name'] for a in batch]: check_items(t, b, every, known),
                                      lambda a, b: dict(a, **b))
             items.update(found or {})
+            known.update((n, i['requires']) for n, i in (found or {}).items())
             problems += errors
             self.done += 1
         return items, problems
@@ -980,7 +1104,7 @@ class Job:
         text = prompt('route', game=self.game, progress=f'{done} of {len(self.achs)} unlocked{played}',
                       table='\n'.join(rows))
         found, errors = self.ask('route', text, lambda t: check_route(t, set(items)),
-                                 lambda a, b: b if b.get('order') else a)
+                                 rank=lambda v, e: (not v.get('order'), len(e)))
         return found or {'order': [], 'sections': {}}, errors
 
     def walkthrough(self, table, order, pieces):
@@ -1007,9 +1131,11 @@ class Job:
         text = prompt('walkthrough', game=self.game, progress=f'{done} of {len(self.achs)} unlocked',
                       excerpts=excerpt_block(picked), table='\n'.join(rows))
         try:
-            steps, errors = self.ask('walkthrough', text,
-                                     lambda t: check_walkthrough(t, every, [a['name'] for a in open_achs]),
-                                     lambda a, b: b or a)
+            want = [a['name'] for a in open_achs]
+            # Open achievements left out weigh most: a walkthrough is for them.
+            steps, errors = self.ask('walkthrough', text, lambda t: check_walkthrough(t, every, want),
+                                     rank=lambda v, e: (not v, len(set(want) - {n for s in v for n in s['achievements']}),
+                                                        len(e)))
         except RuntimeError as e:
             # The items and route are made by now; a walkthrough that
             # failed costs only the walkthrough.
@@ -1024,7 +1150,13 @@ class Job:
             # or not the model listed it: MGSV's left War Buddy out.
             missables = s['missables'] + [n for n in s['achievements']
                                           if (table.get(n) or {}).get('missable') and n not in s['missables']]
-            out.append(dict(s, cites=cites, missables=missables, unverified=not any(c['verified'] for c in cites)))
+            # Only a story clear marks progress; a model gave ARC Raiders'
+            # steps challenges as markers, which cap where the player is.
+            marker = s.get('marker', '')
+            if marker and (table.get(marker) or {}).get('phase') not in (None, 'story'):
+                marker = ''
+            out.append(dict(s, cites=cites, missables=missables, marker=marker,
+                            unverified=not any(c['verified'] for c in cites)))
         return out, errors
 
     def run(self):
@@ -1044,17 +1176,21 @@ class Job:
             self.done += 1
         pieces = chunks(self.sources)
         self.say(f'sources: {len(self.sources)} ({len(pieces)} excerpts)')
-        items, problems = self.classify(open_achs, pieces, hints)
-        if open_achs and not items:
-            raise RuntimeError("the agent's answers didn't parse (" + '; '.join(problems[:3]) +
-                               '); make it again, or pick another model')
-        self.step('route', 'route: order and notes')
         old = read_json(guides.plan_path(os.path.join(self.folder, name + '.md')), {})
         old = old if isinstance(old, dict) else {}
         old_items = old.get('items') if isinstance(old.get('items'), dict) else {}
         # Unlocked achievements were not classified; their old entries
         # stay, so the route still knows them as combo partners.
         table = {n: i for n, i in old_items.items() if isinstance(i, dict)}
+        known = {n: [r for r in i.get('requires') or [] if isinstance(r, str)] for n, i in table.items()}
+        items, problems = self.classify(open_achs, pieces, hints, known)
+        if open_achs and not items:
+            raise RuntimeError("the agent's answers didn't parse (" + '; '.join(problems[:3]) +
+                               '); make it again, or pick another model')
+        # The retry's merge can bring back an edge the first answer's check
+        # dropped; what still closes a cycle now is dropped for good.
+        problems += prune_requires(items, known)
+        self.step('route', 'route: order and notes')
         table.update(items)
         route, route_errors = self.route(table)
         self.done += 1
@@ -1109,6 +1245,17 @@ class Job:
         write_json(guides.plan_path(md), plan, indent=1, ensure_ascii=False)
         write_json(md[:-3] + '.sources.json', self.sources, ensure_ascii=False)
         self.plan = plan
+
+
+def prune_requires(items, known):
+    """Drops, in place, each `requires` of `items` that closes a cycle with
+    the others or with `known` ({name: requires}); returns the errors."""
+    graph = {n: list(r) for n, r in known.items() if n not in items}
+    errors = []
+    for name, item in items.items():
+        item['requires'], errs = add_requires(graph, name, item.get('requires') or [])
+        errors += errs
+    return errors
 
 
 def stage_counts(usage):
