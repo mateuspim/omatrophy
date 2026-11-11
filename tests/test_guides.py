@@ -233,6 +233,31 @@ class GuideAnswer(unittest.TestCase):
         self.assertEqual(guides.pinned_step(guides.walkthrough_steps(plan, ids, {'clear31'}), pin), 1)
         self.assertEqual(guides.pinned_step(guides.walkthrough_steps(plan, ids, {'clear32'}), pin), -1)
 
+    def test_only_story_markers_place_the_player(self):
+        # Regression: ARC Raiders' guide gave each step a challenge as its
+        # marker; one not got yet capped "here" at its step.
+        plan = {'walkthrough': [{'title': 'Dam', 'achievements': ['first'], 'marker': 'first'},
+                                {'title': 'Raiders', 'achievements': ['duel'], 'marker': 'duel'},
+                                {'title': 'Queen', 'achievements': ['queen'], 'marker': 'queen'}]}
+        ids = {n: n for n in ('first', 'duel', 'queen')}
+        items = {'duel': {'phase': 'challenge'}, 'queen': {'phase': 'story'}}
+        steps = guides.walkthrough_steps(plan, ids, {'first', 'queen'}, items)
+        # 'first' was unlocked before the make (never classified): kept.
+        self.assertEqual([s['marker'] for s in steps], ['first', '', 'queen'])
+        self.assertEqual(guides.current_step(steps), 1)
+
+    def test_an_early_trophy_past_finished_steps_doesnt_move_the_player(self):
+        # Regression: ARC Raiders put a player who had finished steps 1-8
+        # at step 13, for one online trophy got early.
+        plan = {'walkthrough': [{'title': 'Dam', 'achievements': ['dam'], 'marker': 'dam'},
+                                {'title': 'Range', 'achievements': ['range']},
+                                {'title': 'Grind', 'achievements': ['grind'], 'marker': 'grind'},
+                                {'title': 'Drops', 'achievements': ['drop']},
+                                {'title': 'Online', 'achievements': ['duo', 'trio']}]}
+        ids = {n: n for s in plan['walkthrough'] for n in s['achievements']}
+        steps = guides.walkthrough_steps(plan, ids, {'dam', 'grind', 'duo'})
+        self.assertEqual(guides.current_step(steps), 3)
+
     def test_next_skips_done_and_puts_missables_first(self):
         items = {'a': {'name': 'a'}, 'b': {'name': 'b', 'missable': True}, 'c': {'name': 'c'}, 'd': {'name': 'd'}}
         done = {'c'}

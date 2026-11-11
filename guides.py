@@ -164,7 +164,7 @@ def guide_answer(store, app, achievements, folder=None):
     for api, item in items.items():
         needs = item.get('requires') if isinstance(item.get('requires'), list) else []
         items[api] = dict(item, requires=[every_api[n] for n in needs if n in every_api and every_api[n] != api])
-    steps = walkthrough_steps(plan, every_api, done)
+    steps = walkthrough_steps(plan, every_api, done, items)
     pinned = pinned_step(steps, load_pin(store, app))
     at = pinned if pinned >= 0 else current_step(steps)
     return {'store': store, 'app': str(app), 'file': os.path.basename(path),
@@ -232,7 +232,7 @@ def tree(order, items, steps=()):
     return {'story': story, 'chains': chains, 'alone': [a for a in plain if a not in shown]}
 
 
-def walkthrough_steps(plan, name_to_api, done):
+def walkthrough_steps(plan, name_to_api, done, items=None):
     """The plan's walkthrough for the tracker: each step's achievements
     and missables as `api`s (names the store doesn't know are dropped),
     `done` when none of its achievements is left open, `marker` the one
@@ -244,7 +244,7 @@ def walkthrough_steps(plan, name_to_api, done):
             continue
         apis = [name_to_api[n] for n in s.get('achievements') or [] if n in name_to_api]
         marker = name_to_api.get(s.get('marker'), '') if isinstance(s.get('marker'), str) else ''
-        marker = marker if marker in apis else ''
+        marker = marker if marker in apis and story_marker(marker, items) else ''
         steps.append({'title': s['title'], 'text': s.get('text') if isinstance(s.get('text'), str) else '',
                       'achievements': apis, 'actions': step_actions(s.get('actions'), name_to_api),
                       'missables': [name_to_api[n] for n in s.get('missables') or [] if n in name_to_api],
@@ -268,6 +268,16 @@ def step_actions(raw, name_to_api):
     return out
 
 
+def story_marker(api, items):
+    """True when a step's marker can stand for story progress: a story
+    item, or one never classified (unlocked when the guide was made, as
+    the chapters played are). ARC Raiders' guide named a challenge as
+    each step's marker; one not got yet capped "here" at its step."""
+    if items is None or api not in items:
+        return True
+    return items[api].get('phase') == 'story'
+
+
 def current_step(steps):
     """Where the player is: the first step with an achievement open after
     the last step they finished (a horse bond left open in an early step
@@ -285,12 +295,13 @@ def current_step(steps):
     floor = cleared[-1] + 1 if cleared else 0
     ceiling = next((i for i, s in enumerate(steps) if i >= floor and s.get('marker') and not s.get('cleared')),
                    len(steps) - 1)
-    window = range(floor, ceiling + 1)
-    finished = [i for i in window if steps[i].get('done')]
-    if finished:
-        last = finished[-1] + 1
+    finished = [i for i in range(ceiling + 1) if steps[i].get('done')]
+    if finished or cleared:
+        # ARC Raiders: steps 1-8 finished, one online trophy from step 13
+        # got early; the started guess put the player at 13.
+        last = max(floor, finished[-1] + 1 if finished else 0)
     else:
-        last = max((i for i in window if steps[i].get('started')), default=floor)
+        last = max((i for i in range(ceiling + 1) if steps[i].get('started')), default=0)
     open_at = [i for i, s in enumerate(steps) if s['achievements'] and not s['done']]
     return next((i for i in open_at if i >= last), open_at[0] if open_at else -1)
 

@@ -1150,7 +1150,13 @@ class Job:
             # or not the model listed it: MGSV's left War Buddy out.
             missables = s['missables'] + [n for n in s['achievements']
                                           if (table.get(n) or {}).get('missable') and n not in s['missables']]
-            out.append(dict(s, cites=cites, missables=missables, unverified=not any(c['verified'] for c in cites)))
+            # Only a story clear marks progress; a model gave ARC Raiders'
+            # steps challenges as markers, which cap where the player is.
+            marker = s.get('marker', '')
+            if marker and (table.get(marker) or {}).get('phase') not in (None, 'story'):
+                marker = ''
+            out.append(dict(s, cites=cites, missables=missables, marker=marker,
+                            unverified=not any(c['verified'] for c in cites)))
         return out, errors
 
     def run(self):

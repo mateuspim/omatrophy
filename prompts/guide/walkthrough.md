@@ -50,7 +50,9 @@ Steps:
   the step is finished, the way a chapter or mission clear does ("Clear
   Chapter 3-2"); the tracker places the player after the last step whose
   marker is unlocked. Never a side achievement that can be got earlier
-  or later. "" when the step has none.
+  or later. "" when the step has none. A game with no chapters or
+  missions (open world, online, a sandbox) has no markers: leave every
+  one "".
 - `cites`: quotes backing the step, as below.
 
 {{rules}}

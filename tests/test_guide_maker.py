@@ -181,6 +181,15 @@ class Job(unittest.TestCase):
         self.assertFalse(first['unverified'])
         self.assertTrue(second['unverified'])
 
+    def test_walkthrough_keeps_only_story_markers(self):
+        job = self.job()
+        answer = ('<walkthrough>{"steps": [{"title": "One", "achievements": ["Last Lantern"], "marker": "Last Lantern"},'
+                  ' {"title": "Two", "achievements": ["Star Counter"], "marker": "Star Counter"}]}</walkthrough>')
+        job.ask = lambda stage, text, check, merge=None, rank=None: check(answer)
+        table = {'Last Lantern': {'phase': 'story'}, 'Star Counter': {'phase': 'challenge'}}
+        steps, errors = job.walkthrough(table, list(table), [])
+        self.assertEqual([s['marker'] for s in steps], ['Last Lantern', ''])
+
     def test_walkthrough_marks_missable_items_and_wants_more_than_the_store_says(self):
         job = self.job()
         job.sources = {'https://x.example/g': {'text': 'Carry the lantern to the end. In chapter four keep the lantern lit.'}}

@@ -171,7 +171,9 @@ Item {
                                    ? guide.tree : ({ story: [], chains: [], alone: [] })
   // Only story and chains make an outline worth a toggle; a guide from
   // before the tree (no `tree`) shows as it always did.
-  readonly property bool hasTree: hasGuide && guideTree.story.length + guideTree.chains.length > 0
+  // Steps alone are enough: ARC Raiders has no story trophies and no
+  // prerequisites, and Do now and the track were hidden behind the rule.
+  readonly property bool hasTree: hasGuide && guideTree.story.length + guideTree.chains.length + walkSteps.length > 0
   readonly property bool treeOn: treeShown && hasTree && !appliedSearch
   // The steps, Up next and sections: hidden while the outline shows.
   readonly property bool listShown: !appliedSearch && !treeOn
