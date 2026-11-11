@@ -1,8 +1,8 @@
 {
  "store": "steam",
  "app": "2",
- "unlocked": 4,
- "total": 14,
+ "unlocked": 5,
+ "total": 16,
  "game": "Lanterns of Aster",
  "header": "dev/samples/art/lanterns-of-aster-header.svg",
  "hero": "",
@@ -175,8 +175,8 @@
    "icon": "dev/samples/art/icon-cartographer.svg",
    "icon_locked": "dev/samples/art/icon-cartographer-locked.svg",
    "hidden": false,
-   "unlocked": false,
-   "time": 0,
+   "unlocked": true,
+   "time": 1793050000,
    "percent": 47.9,
    "tier": "bronze",
    "progress": null
@@ -193,6 +193,35 @@
    "percent": 9.8,
    "tier": "gold",
    "progress": null
+  },
+  {
+   "api": "L14",
+   "name": "Ember Shrine",
+   "desc": "Light the shrine before the bridge burns",
+   "icon": "dev/samples/art/icon-starfall.svg",
+   "icon_locked": "dev/samples/art/icon-starfall-locked.svg",
+   "hidden": false,
+   "unlocked": false,
+   "time": 0,
+   "percent": 24.3,
+   "tier": "bronze",
+   "progress": null
+  },
+  {
+   "api": "L15",
+   "name": "Wick Trimmer",
+   "desc": "Trim 100 wicks",
+   "icon": "dev/samples/art/icon-collector.svg",
+   "icon_locked": "dev/samples/art/icon-collector-locked.svg",
+   "hidden": false,
+   "unlocked": false,
+   "time": 0,
+   "percent": 15.2,
+   "tier": "silver",
+   "progress": {
+    "value": 64,
+    "max": 100
+   }
   }
  ]
 }

@@ -164,13 +164,44 @@ def guide_answer(store, app, achievements, folder=None):
         needs = item.get('requires') if isinstance(item.get('requires'), list) else []
         items[api] = dict(item, requires=[every_api[n] for n in needs if n in every_api and every_api[n] != api])
     steps = walkthrough_steps(plan, every_api, done)
+    at = current_step(steps)
     return {'store': store, 'app': str(app), 'file': os.path.basename(path),
             'generated': plan.get('generated', 0), 'order': order, 'items': items,
             'sections': plan.get('sections') or {}, 'notes': notes, 'ticks': ticks,
             'next': open_order(order, items, done),
             'agent': plan.get('agent') if isinstance(plan.get('agent'), dict) else {},
             'cost_usd': plan_cost(plan), 'outdated': outdated(plan),
-            'walkthrough': steps, 'step': current_step(steps), 'tree': tree(order, items, steps)}
+            'walkthrough': steps, 'step': at, 'tree': tree(order, items, steps),
+            'frontier': frontier(order, items, done, steps, at)}
+
+
+def play_order(order, items, steps=()):
+    """Every item's api in play order: the steps' first, then the route's."""
+    placed = [a for s in steps for a in s.get('achievements') or []]
+    ranked = [a for a in placed if a in items] + [a for a in order if a not in placed and a in items]
+    return list(dict.fromkeys(ranked))
+
+
+def frontier(order, items, done, steps=(), at=-1):
+    """What the player can do now (the tree's Do now): every open item
+    whose `requires` are all done, in play order from the current step
+    `at` on. A missable of that step leads, as its chance ends there;
+    ones left open in earlier steps come last, so a leftover doesn't pull
+    the player back (as `current_step`)."""
+    step_of = {}
+    for i, s in enumerate(steps):
+        for a in s.get('achievements') or []:
+            step_of.setdefault(a, i)
+    here = set(steps[at].get('missables') or []) if 0 <= at < len(steps) else set()
+
+    def rank(api):
+        behind = api in step_of and step_of[api] < at
+        urgent = api in here or (items[api].get('missable') and step_of.get(api) == at)
+        return (behind, not urgent)
+
+    ready = [a for a in play_order(order, items, steps) if a not in done
+             and all(r in done for r in items[a].get('requires') or [])]
+    return sorted(ready, key=rank)  # stable: keeps the play order
 
 
 def tree(order, items, steps=()):
@@ -178,9 +209,7 @@ def tree(order, items, steps=()):
     order (the steps', then the route's); `chains` rows {api, depth}, each
     item that needs others first with its prerequisites indented under it;
     `alone` the rest. Apis throughout; done ones stay, the view dims them."""
-    placed = [a for s in steps for a in s.get('achievements') or []]
-    ranked = [a for a in placed if a in items] + [a for a in order if a not in placed]
-    ranked = list(dict.fromkeys(ranked))
+    ranked = play_order(order, items, steps)
     story = [a for a in ranked if items[a].get('phase') == 'story']
     needs = {a: [r for r in items[a].get('requires') or [] if r in items] for a in ranked}
     plain = [a for a in ranked if a not in story]

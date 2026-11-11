@@ -17,7 +17,9 @@
   "L10",
   "L11",
   "L12",
-  "L13"
+  "L13",
+  "L14",
+  "L15"
  ],
  "items": {
   "L0": {
@@ -127,7 +129,8 @@
    "combine_with": [],
    "tips": "Carry two spare wicks; the lighthouse stairs are where most runs fail.",
    "requires": [
-    "L8"
+    "L8",
+    "L15"
    ]
   },
   "L10": {
@@ -174,6 +177,31 @@
    "combine_with": [],
    "tips": "",
    "requires": []
+  },
+  "L14": {
+   "name": "Ember Shrine",
+   "api": "L14",
+   "phase": "missable",
+   "difficulty": 2,
+   "missable": true,
+   "combine_with": [],
+   "tips": "The shrine sits left of the bridge; once it burns the path is gone.",
+   "missable_note": "Chapter 2, before the bridge burns",
+   "requires": []
+  },
+  "L15": {
+   "name": "Wick Trimmer",
+   "api": "L15",
+   "phase": "grind",
+   "difficulty": 3,
+   "missable": false,
+   "combine_with": [],
+   "tips": "Trim at every lantern post; Nightmare runs count too.",
+   "counter": {
+    "target": 100,
+    "label": "wicks"
+   },
+   "requires": []
   }
  },
  "sections": {
@@ -188,8 +216,8 @@
  ],
  "next": [
   "L11",
-  "L3",
-  "L4"
+  "L14",
+  "L3"
  ],
  "agent": {
   "name": "claude",
@@ -205,6 +233,7 @@
    "achievements": [
     "L0",
     "L1",
+    "L14",
     "L2",
     "L5"
    ],
@@ -215,15 +244,22 @@
      "achievement": "L5"
     },
     {
+     "where": "Chapter 2, the old bridge",
+     "what": "Light the shrine before you cross",
+     "achievement": "L14"
+    },
+    {
      "where": "Chapter 3, the mine",
      "what": "Finish the chapter",
      "achievement": "L2"
     }
    ],
-   "missables": [],
+   "missables": [
+    "L14"
+   ],
    "unverified": false,
    "started": true,
-   "done": true
+   "done": false
   },
   {
    "title": "Chapter 4: Tidewatch",
@@ -259,7 +295,7 @@
     "L11"
    ],
    "unverified": false,
-   "started": false,
+   "started": true,
    "done": false
   },
   {
@@ -327,9 +363,21 @@
    "text": "Chapter select keeps your moths and glass.",
    "achievements": [
     "L10",
-    "L6"
+    "L6",
+    "L15"
    ],
-   "actions": [],
+   "actions": [
+    {
+     "where": "Chapter select",
+     "what": "Catch the moths you missed",
+     "achievement": "L10"
+    },
+    {
+     "where": "Harbor kilns",
+     "what": "Upgrade every lantern",
+     "achievement": "L6"
+    }
+   ],
    "missables": [],
    "unverified": false,
    "started": false,
@@ -359,6 +407,10 @@
     "depth": 2
    },
    {
+    "api": "L15",
+    "depth": 1
+   },
+   {
     "api": "L6",
     "depth": 0
    },
@@ -368,10 +420,22 @@
    }
   ],
   "alone": [
+   "L14",
    "L11",
    "L12",
    "L13",
    "L10"
   ]
- }
+ },
+ "frontier": [
+  "L11",
+  "L3",
+  "L13",
+  "L4",
+  "L7",
+  "L10",
+  "L6",
+  "L15",
+  "L14"
+ ]
 }

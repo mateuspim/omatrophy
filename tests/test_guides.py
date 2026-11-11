@@ -128,6 +128,9 @@ class GuideAnswer(unittest.TestCase):
         self.assertTrue(any(i.get('requires') for i in sample['items'].values()))
         self.assertTrue(any(s['actions'] for s in sample['walkthrough']))
         self.assertNotIn('L8', sample['next'])  # Lighthouse Keeper waits for Keeper
+        done = set(sample['ticks']) | {'L12'}  # Ferryman, unlocked in game-tree.json
+        self.assertEqual(sample['frontier'], guides.frontier(sample['order'], sample['items'], done,
+                                                             sample['walkthrough'], sample['step']))
 
     def test_walkthrough_maps_unlocked_trophies_not_in_the_plan(self):
         with tempfile.TemporaryDirectory() as d:
@@ -161,6 +164,17 @@ class GuideAnswer(unittest.TestCase):
         items = {'pro': {'requires': ['vet']}, 'vet': {}, 'x': {}}
         self.assertEqual(guides.open_order(['pro', 'vet', 'x'], items, set()), ['vet', 'x'])
         self.assertEqual(guides.open_order(['pro', 'vet', 'x'], items, {'vet'}), ['pro', 'x'])
+
+    def test_frontier_starts_at_the_current_step_with_its_missables(self):
+        items = {'old': {}, 'c1': {}, 'c2': {}, 'miss': {'missable': True}, 'pro': {'requires': ['vet']},
+                 'vet': {}, 'loose': {}}
+        steps = [{'achievements': ['old', 'c1']}, {'achievements': ['c2', 'miss'], 'missables': ['miss']},
+                 {'achievements': ['vet', 'pro']}]
+        out = guides.frontier(['loose', 'pro'], items, {'c1'}, steps, 1)
+        # Missable of this step first, then play order, the step-1 leftover
+        # last; pro waits for vet.
+        self.assertEqual(out, ['miss', 'c2', 'vet', 'loose', 'old'])
+        self.assertEqual(guides.frontier(['a'], {'a': {}}, {'a'}), [])
 
     def test_tree_puts_story_chains_and_the_rest_apart(self):
         items = {'c1': {'phase': 'story'}, 'c2': {'phase': 'story'}, 'vet': {'phase': 'challenge'},
