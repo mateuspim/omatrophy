@@ -544,7 +544,30 @@ class Bench(unittest.TestCase):
         m = guide_bench.metrics(plan, {'a', 'b', 'c', 'd'})
         self.assertEqual((m['coverage'], m['verified'], m['complete'], m['route'], m['sections']),
                          (0.5, 0.5, 0.625, 0.5, 0.5))
-        self.assertEqual(guide_bench.score(m), 35 * 0.5 + 25 * 0.5 + 20 * 0.625 + 10 * 0.5 + 10 * 0.5)
+        self.assertEqual(m['walkthrough'], 0.0)
+        self.assertEqual(guide_bench.score(m), round(35 * 0.5 + 25 * 0.5 + 15 * 0.625 + 10 * 0.5 + 5 * 0.5, 1))
+        self.assertEqual(sum(guide_bench.WEIGHTS.values()), 100)
+
+    def test_walkthrough_measure_places_open_ones_and_counts_grounded_steps(self):
+        import guide_bench
+        items = {'A': {'api': 'a', 'name': 'A'}, 'B': {'api': 'b', 'name': 'B'}, 'Done': {'api': 'z', 'name': 'Done'}}
+        plan = {'items': items, 'walkthrough': [
+            {'title': 'Prologue', 'achievements': ['Done', 'A'], 'cites': [{'verified': True}]},
+            {'title': 'Act 1', 'achievements': ['A'], 'cites': [{'verified': False}]},
+            {'title': 'Act 2', 'achievements': [], 'cites': []},
+            {'title': 'Epilogue', 'achievements': ['Ghost'], 'cites': [{'verified': True}]}]}
+        # A of a, b, c, d placed (the unlocked one and an unknown name don't
+        # count, A twice counts once); 2 of 4 steps grounded.
+        self.assertEqual(guide_bench.walkthrough_measure(plan, {'a', 'b', 'c', 'd'}), 0.5 * 0.25 + 0.5 * 0.5)
+        self.assertEqual(guide_bench.metrics(plan, {'a', 'b', 'c', 'd'})['steps'], 4)
+
+    def test_walkthrough_measure_is_zero_without_steps_or_open_ones(self):
+        import guide_bench
+        plan = {'items': {'A': {'api': 'a', 'name': 'A'}},
+                'walkthrough': [{'title': 'One', 'achievements': ['A'], 'cites': [{'verified': True}]}]}
+        self.assertEqual(guide_bench.walkthrough_measure(plan, {'a'}), 1.0)
+        self.assertEqual(guide_bench.walkthrough_measure(plan, set()), 0.0)
+        self.assertEqual(guide_bench.walkthrough_measure({'items': plan['items']}, {'a'}), 0.0)
 
     def test_ranked_ties_go_to_the_cheaper_then_faster(self):
         import guide_bench

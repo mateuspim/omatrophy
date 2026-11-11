@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.4 - 2026-11-10
+
+- `guide bench` scores the walkthrough: half for the open achievements
+  placed in a step, half for the steps backed by a verified quote. It
+  weighs 10 of the 100, taken from filled fields (now 15) and sections
+  (now 5), and shows as a `walk` column in the table. Scores from
+  earlier benches, the README's table among them, used the old weights.
+
 ## 0.6.3 - 2026-11-10
 
 A pass over every screen for text that was cut, overlapping or off its

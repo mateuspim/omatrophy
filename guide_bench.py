@@ -14,8 +14,10 @@ import guide_agents, guide_maker, guides
 from stores.base import write_json
 
 # Weights of the score, out of 100: grounded claims count most, then
-# covering every open achievement.
-WEIGHTS = {'verified': 35, 'coverage': 25, 'complete': 20, 'route': 10, 'sections': 10}
+# covering every open achievement. The walkthrough (ADR 17) took its 10
+# from fields and sections, the cheapest parts to fill; benches before
+# 0.6.4 scored without it.
+WEIGHTS = {'verified': 35, 'coverage': 25, 'complete': 15, 'route': 10, 'sections': 5, 'walkthrough': 10}
 FIELDS = ('phase', 'difficulty', 'time', 'tips')
 SECTIONS = ('overview', 'route', 'missables', 'combos')
 # agent:model[:effort][@endpoint]; a model may hold '/' (provider/model) and
@@ -38,6 +40,19 @@ def label(entry):
             + (':' + entry['effort'] if entry['effort'] else '') + ('@' + entry['endpoint'] if entry['endpoint'] else ''))
 
 
+def walkthrough_measure(plan, open_apis):
+    """0..1: half for the open achievements placed in a step, half for the
+    steps holding a verified quote. Both are checked the way items are; the
+    play order of a game's chapters isn't, so it isn't scored."""
+    steps = [s for s in plan.get('walkthrough') or [] if isinstance(s, dict)]
+    if not steps or not open_apis:
+        return 0.0
+    api_of = {i.get('name'): i.get('api') for i in (plan.get('items') or {}).values() if isinstance(i, dict)}
+    placed = {api_of.get(n) for s in steps for n in s.get('achievements') or []} & set(open_apis)
+    grounded = sum(1 for s in steps if any(c.get('verified') for c in s.get('cites') or []))
+    return round(0.5 * len(placed) / len(open_apis) + 0.5 * grounded / len(steps), 3)
+
+
 def metrics(plan, open_apis):
     """The checkable measures of one made plan, each 0..1."""
     items = {i['api']: i for i in (plan.get('items') or {}).values() if isinstance(i, dict) and i.get('api') in open_apis}
@@ -52,6 +67,8 @@ def metrics(plan, open_apis):
             'complete': round(sum(filled) / len(filled), 3) if filled else 0.0,
             'route': round(min(1.0, routed / n), 3),
             'sections': round(sum(1 for k in SECTIONS if sections.get(k)) / len(SECTIONS), 3),
+            'walkthrough': walkthrough_measure(plan, open_apis),
+            'steps': len(plan.get('walkthrough') or []),
             'items': len(items), 'cited': with_cite,
             'unverified': sum(len(i.get('unverified') or []) for i in items.values())}
 
@@ -77,12 +94,13 @@ def ranked(results):
 
 
 def table(results):
-    rows = [('', 'entry', 'score', 'verified', 'covered', 'fields', 'time', 'cost', 'state')]
+    rows = [('', 'entry', 'score', 'verified', 'covered', 'fields', 'walk', 'time', 'cost', 'state')]
     for n, r in enumerate(ranked(results), 1):
         m = r.get('metrics') or {}
         cost = r.get('cost_usd')
         rows.append((str(n), r['entry'], f"{r['score']:.1f}", f"{m.get('cited', 0)}/{m.get('items', 0)}",
                      f"{int(100 * m.get('coverage', 0))}%", f"{int(100 * m.get('complete', 0))}%",
+                     f"{int(100 * m.get('walkthrough', 0))}%",
                      f"{r.get('seconds', 0) // 60}m{r.get('seconds', 0) % 60:02d}s",
                      f'${cost:.2f}' if isinstance(cost, (int, float)) else '-', r['state']))
     widths = [max(len(row[i]) for row in rows) for i in range(len(rows[0]))]

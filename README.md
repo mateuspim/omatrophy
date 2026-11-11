@@ -245,7 +245,8 @@ omatrophy.py guide steam 620                   # the guide, as JSON
 
 Which model writes the best guide? `guide bench` makes one game's guide
 with each, side by side, and ranks them by what OmaTrophy can check
-(quotes verified, achievements covered, fields filled), with time and
+(quotes verified, achievements covered, fields filled, the walkthrough's
+reach), with time and
 cost. `--pick` makes the winner your default; `--keep` keeps its guide.
 A model on your own machine takes part through OpenCode (`opencode:<provider/model>`,
 once its **Check** passes) or through Claude Code pointed at a local
@@ -257,8 +258,9 @@ omatrophy.py guide bench steam 620 claude:haiku claude:sonnet:medium \
 ```
 
 One bench on three games (2026-11-06, unreleased guides build, web
-research on). Results vary per game, per run and per machine; full numbers
-and caveats in [docs/guide/guide-models.md](docs/guide/guide-models.md).
+research on), scored before the bench measured the walkthrough. Results
+vary per game, per run and per machine; full numbers and caveats in
+[docs/guide/guide-models.md](docs/guide/guide-models.md).
 
 | Agent · model | Where it runs | Score (small / DLC / big game) | Verified quotes | Coverage | Time (3 games) | Cost (3 games) | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |

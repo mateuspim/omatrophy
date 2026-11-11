@@ -234,13 +234,19 @@ pages and earlier sources so every entry starts from the same text; the
 owner's guide is untouched. It prints a line per stage, then a table, and
 writes `results.json` there: `{store, app, game, web, jail, weights,
 results: [{entry, agent, model, effort, endpoint, state, error, score,
-metrics, seconds, cost_usd, tokens, calls, folder, name}]}`, best first.
+metrics, seconds, cost_usd, tokens, calls, folder, name}]}`, best first;
+`metrics` holds each measure (0..1) and the counts `items`, `cited`,
+`unverified` and `steps`.
 
 The score (0-100) uses only what OmaTrophy checks: `verified` (share of
 covered items with a verified quote) 35, `coverage` (share of open
 achievements classified) 25, `complete` (phase, difficulty, time and tip
-filled) 20, `route` (open achievements placed in the order) 10,
-`sections` (overview, route, missables, combos written) 10. Ties go to
+filled) 15, `route` (open achievements placed in the order) 10,
+`walkthrough` (half the open achievements placed in a step, half the
+steps with a verified quote) 10, `sections` (overview, route, missables,
+combos written) 5. The play order of the steps isn't checked, so it
+isn't scored. Benches before 0.6.4 had no `walkthrough` measure and gave
+`complete` 20 and `sections` 10. Ties go to
 the cheaper (unknown cost last), then the faster. A failed or stopped
 entry scores 0. `--pick` saves the best as `guide-agent` and its
 `guide-models` pick (endpoint included); `--keep` copies its guide over

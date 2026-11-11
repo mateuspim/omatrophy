@@ -3,6 +3,9 @@
 Results of `omatrophy.py guide bench` on three Steam games, measured
 2026-11-06 with the unreleased 100% guides build (after OmaTrophy 0.5.2).
 How the score works: [docs/specs/guides.md](../specs/guides.md#benchmark).
+These guides had no walkthrough yet, so the scores use the weights before
+0.6.4 (no `walkthrough` measure; fields 20, sections 10); a bench today
+scores the walkthrough too, and its numbers don't compare one to one.
 Results vary per game, per run and, for a local model, per machine; treat
 them as one sample, not a ranking to trust blindly. Run your own with your
 games.
