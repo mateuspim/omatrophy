@@ -48,3 +48,17 @@ achievements took as much room as the hard ones.
 - An imported guide may hold a cycle; the tree walks each chain once
   and stops at the closing edge, and items with no root stay "on their
   own".
+
+## Update 2026-11-10: the Tree is drawn
+
+The owner found the outline "just plain": it listed what needs what but
+didn't show where the player is or what to do now. The Tree is now
+drawn, still inside the guide column and still from the same `tree`:
+Do now tiles from a new `frontier` (every open item whose `requires`
+are done, in play order from the current step), the walkthrough as a
+track that fills to the current step, each chain as a small skill tree
+(goal on top, lines lit as the lower item unlocks), and the rest as a
+grid by phase. What kept the outline readable carries over: everything
+fits the column at fonts 9 to 16, the track runs down the side when
+the column is narrow, and every node's tip and needs show inline on a
+click rather than in a hover.

@@ -11,9 +11,17 @@
   of more than 12 is asked again split by chapter or area. Guides
   without actions show as before.
 - The tracker's Guide view: the open step lists its actions as a
-  checklist, and **Tree** shows the guide as an outline (the story on
-  one line, chains of what needs what, the rest on their own). Only
-  `TrackerView.qml` changed, so no shell restart is needed.
+  checklist, and **Tree** shows the whole guide at a glance: **Do now**
+  tiles for every trophy you can get right now, the story as a track
+  that fills to **YOU ARE HERE** (a red flag where a missable was left
+  behind; a click shows that step's actions), chains as small skill
+  trees (lit lines, locks, READY), and the rest as a grid by phase.
+  Clicking any of them finds the trophy in the list and shows its tip,
+  needs and what it opens. The guide answer gains `frontier` for Do
+  now. Only `TrackerView.qml` changed in the shell, so no restart is
+  needed.
+- A done step's ✓ no longer wraps onto a line of its own at large
+  font sizes.
 - `guide bench` reports, unscored, the items with prerequisites (and
   how many a quote backs) and the share of step actions that name a
   place, as `needs` and `where` columns.
