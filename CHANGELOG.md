@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.7.0 - unreleased
+## 0.7.0 - 2026-11-11
 
 - Guides know hard prerequisites: an achievement the game locks until
   another is unlocked (Professional after Veteran) lists it under
@@ -31,7 +31,12 @@
   one you got, so a side trophy got early (RE5's flash grenade) or one
   left open no longer moves you. Guides made before say "older maker"
   (maker 5) and read as before. Without markers the step you're on
-  follows the last step you finished, not your latest unlock.
+  follows the last step you finished, not your latest unlock. Only a
+  story trophy counts as a marker, so an online game (ARC Raiders) whose
+  steps were given challenges as markers isn't held back by them.
+- **Tree** shows for any guide with walkthrough steps, not only ones
+  with story trophies or prerequisites: an online game gets Do now and
+  its step track too.
 - A done step's ✓ no longer wraps onto a line of its own at large
   font sizes.
 - `guide bench` reports, unscored, the items with prerequisites (and
@@ -42,6 +47,12 @@
   everyday words ("act fast", "the area") no longer pull an excerpt in
   as a walkthrough; a quote cut off on "the" or "and" no longer counts
   as verified.
+- Walkthroughs place every open achievement: one a model leaves out is
+  asked for again, and the tracker's "Not in a step" list should be
+  rare. Each achievement sits in one step, the one where it unlocks
+  (a "collect them all" where it finishes), and a step warns for every
+  missable it holds. A step's quote that only repeats the store's
+  description no longer counts as a source.
 
 ## 0.6.4 - 2026-11-10
 
@@ -50,12 +61,6 @@
   weighs 10 of the 100, taken from filled fields (now 15) and sections
   (now 5), and shows as a `walk` column in the table. Scores from
   earlier benches, the README's table among them, used the old weights.
-- Walkthroughs place every open achievement: one a model leaves out is
-  asked for again, and the tracker's "Not in a step" list should be
-  rare. Each achievement sits in one step, the one where it unlocks
-  (a "collect them all" where it finishes), and a step warns for every
-  missable it holds. A step's quote that only repeats the store's
-  description no longer counts as a source.
 
 ## 0.6.3 - 2026-11-10
 
