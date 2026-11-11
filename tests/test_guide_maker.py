@@ -386,6 +386,13 @@ class Checks(unittest.TestCase):
         self.assertIn('exactly one step', text)
         self.assertIn('goes where it finishes', text)
 
+    def test_walkthrough_prompt_drops_play_through_actions(self):
+        # Regression: the RE5 bench of 2026-11-10 gave 15 of 65 actions as
+        # "Play through to the end of the chapter" for the story trophy.
+        text = guide_maker.prompt('walkthrough', game='G', progress='0 of 1', excerpts='', table='- A: story')
+        self.assertIn('only says to play or finish the chapter', text)
+        self.assertIn('A step with nothing else to do has no', text)
+
     def test_walkthrough_excerpts_prefer_chapters(self):
         pieces = guide_maker.chunks({'https://x.example': {'text': 'unrelated words only'},
                                      'https://www.powerpyx.com/g': {'text': 'Chapter 2: the bridge. Mission 3 next.'}})

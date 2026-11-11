@@ -29,7 +29,11 @@ Steps:
   place as the game names it (a room, an area, a boss arena, a menu);
   `what` one short instruction; `achievement` the name it earns, or ""
   when the action only gets the player on. A story step says where to go
-  and what to do there too, not only "play through the chapter". A
+  and what to do there too, not only "play through the chapter". Leave
+  out an action that only says to play or finish the chapter for its
+  "Completed ..." achievement: the step already lists it, and the
+  tracker showed it twice. A step with nothing else to do has no
+  actions. A
   cleanup pass (chapter select, free roam) gets one action per place, in
   the order to replay them, each with its chapter or area in `where`;
   more than about 8 actions, split the step by chapter or area. At most
