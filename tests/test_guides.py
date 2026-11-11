@@ -155,6 +155,20 @@ class GuideAnswer(unittest.TestCase):
         self.assertEqual(guides.current_step(steps), 3)
         self.assertEqual(guides.current_step(guides.walkthrough_steps(plan, ids, set())), 0)
 
+    def test_current_step_ignores_a_side_trophy_got_early(self):
+        # Regression: RE5 showed a player who had cleared 3-1 at 4-1,
+        # because 4-1's step holds a trophy they had already got in 3-1.
+        plan = {'walkthrough': [{'title': '3-1', 'achievements': ['clear31']},
+                                {'title': '3-2', 'achievements': ['clear32', 'aspirin']},
+                                {'title': '3-3', 'achievements': ['clear33']},
+                                {'title': '4-1', 'achievements': ['clear41', 'knife', 'flash']}]}
+        ids = {n: n for s in plan['walkthrough'] for n in s['achievements']}
+        steps = guides.walkthrough_steps(plan, ids, {'clear31', 'flash'})
+        self.assertEqual(guides.current_step(steps), 1)
+        # Nothing finished yet: the latest step with an unlock stands in.
+        steps = guides.walkthrough_steps(plan, ids, {'flash'})
+        self.assertEqual(guides.current_step(steps), 3)
+
     def test_next_skips_done_and_puts_missables_first(self):
         items = {'a': {'name': 'a'}, 'b': {'name': 'b', 'missable': True}, 'c': {'name': 'c'}, 'd': {'name': 'd'}}
         done = {'c'}

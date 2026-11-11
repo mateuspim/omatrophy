@@ -262,10 +262,18 @@ def step_actions(raw, name_to_api):
 
 
 def current_step(steps):
-    """Where the player is: the first step with an achievement open, at or
-    after the last step where they unlocked one (a horse bond left open in
-    an early step mustn't pull a player back there); -1 when none is open."""
-    last = max((i for i, s in enumerate(steps) if s.get('started')), default=0)
+    """Where the player is: the first step with an achievement open after
+    the last step they finished (a horse bond left open in an early step
+    mustn't pull a player back there); -1 when none is open. A step only
+    started doesn't move them forward: RE5's guide puts the flash-grenade
+    trophy in 4-1, and a player who got it in 3-1 was shown at 4-1 with
+    3-2 and 3-3 still to play. With no step finished yet, the latest
+    step they unlocked anything in stands in."""
+    finished = [i for i, s in enumerate(steps) if s.get('done')]
+    if finished:
+        last = finished[-1] + 1
+    else:
+        last = max((i for i, s in enumerate(steps) if s.get('started')), default=0)
     open_at = [i for i, s in enumerate(steps) if s['achievements'] and not s['done']]
     return next((i for i in open_at if i >= last), open_at[0] if open_at else -1)
 
