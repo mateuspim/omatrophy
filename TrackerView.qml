@@ -106,6 +106,8 @@ Item {
   property var stepOpen: ({})
   readonly property var walkSteps: guide && Array.isArray(guide.walkthrough) ? guide.walkthrough : []
   readonly property int currentStep: guide && guide.step >= 0 ? guide.step : -1
+  // The player said where they are (`guide here`): `step` is that pin.
+  readonly property bool stepPinned: !!guide && guide.step_pinned === true
   readonly property bool walked: hasGuide && walkSteps.length > 0
   // Open trophies of the guide that no step holds, listed after the steps
   // so none is lost track of.
@@ -395,6 +397,17 @@ Item {
     showcaseKeys = add ? showcaseKeys.concat([key]) : showcaseKeys.filter(function(k) { return k !== key })
     var args = ["python3", helperPath, "showcase", add ? "add" : "remove", String(game.store), String(game.app)]
     saver.exec(api ? args.concat([api]) : args)
+  }
+
+  // "I'm here": pin the step at `index`, or with -1 go back to the
+  // automatic guess (OmaTrophy only sees trophies, so the guess can be
+  // wrong). `guide here` saves it and answers with the guide.
+  function pinStep(index) {
+    if (!game || !live) return
+    trackPick = -1
+    pinner.command = ["python3", helperPath, "guide", "here", String(game.store), String(game.app),
+                      index < 0 ? "clear" : String(index + 1)]
+    pinner.running = true
   }
 
   // Pins or unpins this finished game on the completionist tile.
@@ -861,6 +874,19 @@ Item {
       onStreamFinished: {
         try { root.guide = JSON.parse(text) || {} } catch (e) { root.guide = {} }
         root.makerOpen = !root.hasGuide
+      }
+    }
+  }
+
+  // A failed pin prints nothing: read the guide again rather than lose it.
+  Process {
+    id: pinner
+    stdout: StdioCollector {
+      onStreamFinished: {
+        var found = null
+        try { found = JSON.parse(text) } catch (e) {}
+        if (found && Array.isArray(found.walkthrough)) root.guide = found
+        else root.readGuide()
       }
     }
   }
@@ -1354,6 +1380,25 @@ Item {
     }
   }
 
+  // Under an open step: "I'm here" on a step that isn't where the player
+  // is, "Back to automatic" on the one they pinned; none on the guessed one.
+  component StepPinButton: Item {
+    id: pinBtn
+    property int index: -1
+    property bool shown: true
+    readonly property bool pinnedHere: root.stepPinned && index === root.currentStep
+    visible: shown && index >= 0 && (pinnedHere || index !== root.currentStep)
+    width: pinAction.width
+    height: visible ? pinAction.height + Commons.Style.space(4) : 0
+    ActionButton {
+      id: pinAction
+      y: Commons.Style.space(4)
+      accent: false
+      text: pinBtn.pinnedHere ? "Back to automatic" : "I'm here"
+      onClicked: root.pinStep(pinBtn.pinnedHere ? -1 : pinBtn.index)
+    }
+  }
+
   // Guide prose (Markdown from the agent or an imported guide). Links open
   // in the browser only when they are https.
   component Prose: Text {
@@ -1507,6 +1552,34 @@ Item {
       radius: parent.radius
       width: parent.width * Math.max(0, Math.min(1, meter.shown))
       color: meter.fill
+    }
+  }
+
+  // A drawn pin beside YOU ARE HERE when the player set the step; drawn,
+  // not an emoji, so it needs no emoji font.
+  component PinMark: Item {
+    property real size: Commons.Style.space(12)
+    width: size * 0.8
+    height: size
+    Accessible.name: "pinned by you"
+    Item {
+      anchors.fill: parent
+      rotation: 30
+      Rectangle {
+        x: (parent.width - width) / 2
+        y: parent.height * 0.42
+        width: Math.max(1.5, parent.width * 0.14)
+        height: parent.height * 0.58
+        radius: width / 2
+        color: Commons.Color.accent
+      }
+      Rectangle {
+        x: (parent.width - width) / 2
+        width: parent.width * 0.78
+        height: width
+        radius: width / 2
+        color: Commons.Color.accent
+      }
     }
   }
 
@@ -3419,6 +3492,7 @@ Item {
         SectionLabel {
           visible: root.hasGuide && root.walkSteps.length > 0 && root.listShown
           text: "WALKTHROUGH" + (root.guide && root.guide.step >= 0 ? " · STEP " + (root.guide.step + 1) + " OF " + root.walkSteps.length : "")
+                + (root.stepPinned ? " · PINNED BY YOU" : "")
         }
         Column {
           width: parent.width
@@ -3517,6 +3591,7 @@ Item {
                   font.italic: true
                   opacity: 0.45
                 }
+                StepPinButton { index: walkRow.index; shown: walkRow.open }
               }
             }
           }
@@ -3758,6 +3833,7 @@ Item {
                   }
                   Accessible.role: Accessible.Button
                   Accessible.name: tnodeTitle.text + ", " + got + " of " + total + (here ? ", you are here" : "")
+                                   + (here && root.stepPinned ? ", pinned by you" : "")
                   Rectangle {
                     x: Commons.Style.space(2)
                     y: track.tagH + Commons.Style.space(2)
@@ -3774,12 +3850,13 @@ Item {
                     }
                   }
                   // Kept inside the track at its ends.
-                  Tag {
+                  Row {
                     visible: tnode.here
-                    text: "YOU ARE HERE"
-                    solid: true
+                    spacing: Commons.Style.space(4)
                     x: Math.max(-tnode.x, Math.min(track.width - tnode.x - width, (tnode.width - width) / 2))
                     y: 0
+                    Tag { id: hereTag; text: "YOU ARE HERE"; solid: true }
+                    PinMark { visible: root.stepPinned; size: hereTag.height; anchors.verticalCenter: parent.verticalCenter }
                   }
                   TrackDot {
                     x: (tnode.width - width) / 2
@@ -3907,7 +3984,8 @@ Item {
                   Row {
                     spacing: Commons.Style.space(8)
                     Caption { visible: story.stepped; text: unode.got + " of " + unode.total; elide: Text.ElideNone }
-                    Tag { visible: unode.here; text: "YOU ARE HERE"; solid: true }
+                    Tag { id: uhereTag; visible: unode.here; text: "YOU ARE HERE"; solid: true }
+                    PinMark { visible: unode.here && root.stepPinned; size: uhereTag.height; anchors.verticalCenter: parent.verticalCenter }
                   }
                 }
               }
@@ -4021,6 +4099,7 @@ Item {
                 font.italic: true
                 opacity: 0.45
               }
+              StepPinButton { index: root.trackShown }
             }
           }
           Loader {

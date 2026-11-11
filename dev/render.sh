@@ -14,7 +14,10 @@
 #   dev/render.sh guide out.png          its Guide view (guide-making: a make running; guide-empty: none yet;
 #                                        guide-failed: the last make failed; guide-steps: a guide with
 #                                        step actions; guide-tree: its Tree; guide-tree-done, -locked,
-#                                        -bare (no steps, no chains), -narrow, -pick: its edge states)
+#                                        -bare (no steps, no chains), -narrow, -pick: its edge states;
+#                                        guide-tree-pinned: the player pinned step 3 (I'm here);
+#                                        guide-tree-pinnable: step 4 shown, its I'm here button;
+#                                        guide-steps-pinned: the Steps view with step 3 pinned)
 #   dev/render.sh gold out.png           a toast: bronze, silver, gold, platinum
 #   dev/render.sh --live tracker out.png the views read your real stores
 #   dev/render.sh --font 16 now out.png  at another theme font size (the base is 12)
@@ -39,7 +42,7 @@ while [[ ${1:-} == --* ]]; do
 done
 [[ -z $font || $font =~ ^[0-9]+$ && $font -ge 6 && $font -le 40 ]] ||
   { echo "--font takes a theme base size in pixels, 6 to 40, not '$font'" >&2; exit 2; }
-[[ $# -eq 2 ]] || { sed -n '5,21p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+[[ $# -eq 2 ]] || { sed -n '5,24p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 target=$1
 out=$(realpath -m "$2")
 theme=$HOME/.local/state/omarchy/current/theme
@@ -125,13 +128,13 @@ case $target in
         }
       }"
     data=game.json ;;
-  guide|guide-making|guide-empty|guide-failed|guide-steps|guide-tree|guide-tree-*)
+  guide|guide-making|guide-empty|guide-failed|guide-steps|guide-steps-pinned|guide-tree|guide-tree-*)
     w=1300 h=960 at=3000
     $tall && h=2400
     # guide-steps and guide-tree: a made-up game whose guide has requires
     # and step actions (maker 4).
     guideFile=guide.json data=game.json tree=false
-    [[ $target == guide-steps || $target == guide-tree* ]] && guideFile=guide-tree.json data=game-tree.json
+    [[ $target == guide-steps* || $target == guide-tree* ]] && guideFile=guide-tree.json data=game-tree.json
     [[ $target == guide-tree* ]] && tree=true
     # The Tree's edge states, from the same sample: every trophy done;
     # everything left waiting on something; no steps and no chains (the
@@ -144,6 +147,9 @@ case $target in
       guide-tree-bare) tweak="g.walkthrough = []; g.step = -1; g.tree.chains = []; g.tree.alone = g.tree.alone.concat(['L5', 'L6', 'L7', 'L8', 'L9', 'L15'])" ;;
       guide-tree-narrow) width=820 ;;
       guide-tree-pick) tweak="item.treePick = 'L8'; item.treePickIn = 'chains'" ;;
+      guide-tree-pinned|guide-steps-pinned) tweak="g.step = 2; g.step_pinned = true" ;;
+      # After the guide is set: its onGuideChanged can still see no steps.
+      guide-tree-pinnable) tweak="Qt.callLater(function() { item.trackPick = 3 })" ;;
       guide-tree) ;;
       guide-tree-*) echo "unknown view: $target" >&2; exit 2 ;;
     esac

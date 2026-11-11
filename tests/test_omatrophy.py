@@ -23,6 +23,13 @@ def setUpModule():
     global NO_NETWORK
     NO_NETWORK = mock.patch.object(stores_base.OPENER, 'open', side_effect=AssertionError('network in a test'))
     NO_NETWORK.start()
+    # guide_answer reads the "I'm here" pins from the state folder: a
+    # folder of the tests' own, never the owner's.
+    state = tempfile.TemporaryDirectory()
+    unittest.addModuleCleanup(state.cleanup)
+    patch = mock.patch.dict(os.environ, {'XDG_STATE_HOME': state.name})
+    patch.start()
+    unittest.addModuleCleanup(patch.stop)
 
 
 def tearDownModule():
@@ -873,6 +880,35 @@ class PanelJson(unittest.TestCase):
         found = json.loads(out.getvalue())
         self.assertEqual(found['game'], 'Half Game')
         self.assertEqual(found['guide'], {})  # no guide made for it
+
+    def test_guide_here_pins_and_clears_the_step(self):
+        plan = {'items': {}, 'walkthrough': [{'title': 'One', 'achievements': ['Half Game 0']},
+                                             {'title': 'Two', 'achievements': ['Half Game 2']},
+                                             {'title': 'Three', 'achievements': ['Half Game 3']}]}
+        with tempfile.TemporaryDirectory() as data, FakeLibrary(), \
+                mock.patch.dict(os.environ, {'XDG_DATA_HOME': data}):
+            folder = os.path.join(data, 'omatrophy', 'guides')
+            os.makedirs(folder)
+            with open(os.path.join(folder, 'half-game-20.md'), 'w') as f:
+                f.write('## Achievements\n')
+            with open(os.path.join(folder, 'half-game-20.plan.json'), 'w') as f:
+                json.dump(plan, f)
+
+            def here(where):
+                out = io.StringIO()
+                with redirect_stdout(out):
+                    omatrophy.guide(['here', 'steam', '20', where])
+                return json.loads(out.getvalue())
+
+            self.assertEqual((here('3')['step'], here('3')['step_pinned']), (2, True))
+            self.assertEqual((here('clear')['step'], here('clear')['step_pinned']), (1, False))
+            for wrong in ('0', '4', 'two'):
+                with self.assertRaises(SystemExit) as e, redirect_stdout(io.StringIO()):
+                    omatrophy.guide(['here', 'steam', '20', wrong])
+                self.assertIn('from 1 to 3', str(e.exception))
+            with self.assertRaises(SystemExit) as e, redirect_stdout(io.StringIO()):
+                omatrophy.guide(['here', 'steam', '30', '1'])
+            self.assertIn('make one first', str(e.exception))
 
     def test_game_detail_without_cached_achievements_says_what_to_do(self):
         with FakeLibrary():

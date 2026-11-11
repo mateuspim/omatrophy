@@ -1,4 +1,5 @@
 import json, os, sys, tempfile, unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 import guides
@@ -12,6 +13,16 @@ ACHS = [
     {'api': 'A2', 'name': 'Long Way Home', 'unlocked': True},
     {'api': 'A3', 'name': 'Moth to a Flame', 'unlocked': False},
 ]
+
+
+# guide_answer reads the "I'm here" pins from the state folder: a folder of
+# the tests' own, never the owner's.
+def setUpModule():
+    state = tempfile.TemporaryDirectory()
+    unittest.addModuleCleanup(state.cleanup)
+    patch = mock.patch.dict(os.environ, {'XDG_STATE_HOME': state.name})
+    patch.start()
+    unittest.addModuleCleanup(patch.stop)
 
 
 def touch(folder, name, text=''):
@@ -244,6 +255,75 @@ class GuideAnswer(unittest.TestCase):
                                                   'order': ['Star Counter'], 'progress': {}}))
             out = guides.guide_answer('steam', '7', ACHS, d)
             self.assertEqual(out['order'], ['ACH_STARS'])
+
+
+class Pin(unittest.TestCase):
+    PLAN = {'walkthrough': [{'title': '3-1', 'achievements': ['clear31']},
+                            {'title': '3-2', 'achievements': ['clear32', 'aspirin']},
+                            {'title': '3-3', 'achievements': ['clear33']},
+                            {'title': '4-1', 'achievements': ['clear41', 'flash']}]}
+    IDS = {n: n for s in PLAN['walkthrough'] for n in s['achievements']}
+
+    def steps(self, done):
+        return guides.walkthrough_steps(self.PLAN, self.IDS, set(done))
+
+    def test_pin_wins_over_the_guess(self):
+        steps = self.steps({'clear31', 'clear32'})
+        self.assertEqual(guides.current_step(steps), 1)  # aspirin open
+        pin = guides.make_pin(steps, 2)
+        self.assertEqual(pin, {'step': 2, 'title': '3-3', 'finished': [0]})
+        self.assertEqual(guides.pinned_step(steps, pin), 2)
+
+    def test_pin_dropped_when_its_title_changed(self):
+        pin = guides.make_pin(self.steps(set()), 2)
+        remade = [dict(s, title='Chapter ' + s['title']) for s in self.steps(set())]
+        self.assertEqual(guides.pinned_step(remade, pin), -1)
+        self.assertEqual(guides.pinned_step(self.steps(set())[:2], pin), -1)  # fewer steps now
+        self.assertEqual(guides.pinned_step(self.steps(set()), {'step': True, 'title': '3-2'}), -1)
+        self.assertEqual(guides.pinned_step(self.steps(set()), None), -1)
+
+    def test_pin_overtaken_once_a_step_at_or_after_it_finishes(self):
+        pin = guides.make_pin(self.steps({'clear31'}), 2)
+        # A step before the pin finishing doesn't move it.
+        self.assertEqual(guides.pinned_step(self.steps({'clear31', 'clear32', 'aspirin'}), pin), 2)
+        self.assertEqual(guides.pinned_step(self.steps({'clear31', 'clear33'}), pin), -1)
+        self.assertEqual(guides.pinned_step(self.steps({'clear31', 'clear41', 'flash'}), pin), -1)
+
+    def test_a_step_finished_before_pinning_doesnt_end_the_pin(self):
+        # 4-1's side trophies all got early: finished before the pin, so
+        # the pin on 3-3 still holds.
+        steps = self.steps({'clear31', 'clear41', 'flash'})
+        self.assertEqual(guides.pinned_step(steps, guides.make_pin(steps, 2)), 2)
+
+    def test_save_and_clear_keep_other_games(self):
+        with tempfile.TemporaryDirectory() as d, mock.patch.dict(os.environ, {'XDG_STATE_HOME': d}):
+            self.assertIsNone(guides.load_pin('steam', '1'))
+            guides.save_pin('steam', '1', {'step': 2, 'title': '3-3', 'finished': []})
+            guides.save_pin('gog', '1', {'step': 0, 'title': 'a', 'finished': []})
+            self.assertEqual(guides.load_pin('steam', '1')['step'], 2)
+            guides.save_pin('steam', '1', None)
+            self.assertIsNone(guides.load_pin('steam', '1'))
+            self.assertEqual(guides.load_pin('gog', '1')['title'], 'a')
+            self.assertTrue(guides.here_path().startswith(d))
+
+    def test_answer_gives_the_pin_and_says_so(self):
+        with tempfile.TemporaryDirectory() as d, tempfile.TemporaryDirectory() as state, \
+                mock.patch.dict(os.environ, {'XDG_STATE_HOME': state}):
+            guides.import_guides(SAMPLES, folder=d)
+            path = guides.find_guide('steam', '1', d)
+            plan = guides.load_plan(path)
+            plan['walkthrough'] = [{'title': 'Start', 'achievements': ['First Light']},
+                                   {'title': 'Middle', 'achievements': ['Last Lantern']},
+                                   {'title': 'End', 'achievements': ['Star Counter']}]
+            with open(guides.plan_path(path), 'w') as f:
+                json.dump(plan, f)
+            out = guides.guide_answer('steam', '1', ACHS, d)
+            self.assertEqual((out['step'], out['step_pinned']), (1, False))
+            guides.save_pin('steam', '1', guides.make_pin(out['walkthrough'], 2))
+            out = guides.guide_answer('steam', '1', ACHS, d)
+            self.assertEqual((out['step'], out['step_pinned']), (2, True))
+            # Do now starts at the pinned step: End's trophy before Middle's.
+            self.assertLess(out['frontier'].index('ACH_STARS'), out['frontier'].index('ACH_LANTERN'))
 
 
 class Import(unittest.TestCase):

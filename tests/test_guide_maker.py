@@ -4,6 +4,17 @@ from unittest import mock
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 import guide_agents, guide_maker, guides
 
+
+# guide_answer reads the "I'm here" pins from the state folder: a folder of
+# the tests' own, never the owner's.
+def setUpModule():
+    state = tempfile.TemporaryDirectory()
+    unittest.addModuleCleanup(state.cleanup)
+    patch = mock.patch.dict(os.environ, {'XDG_STATE_HOME': state.name})
+    patch.start()
+    unittest.addModuleCleanup(patch.stop)
+
+
 ACHS = [
     {'api': 'L', 'name': 'Last Lantern', 'desc': 'Carry the lantern to the end', 'unlocked': False, 'time': 0},
     {'api': 'S', 'name': 'Star Counter', 'desc': 'Count 50 stars', 'unlocked': False, 'time': 0},

@@ -160,9 +160,9 @@ Anything no source backs says
 A guide with a **walkthrough** leads with it, under a short overview: the
 game's chapters or missions in play order, each with its progress
 ("1 / 3") and its trophies in full, done ones ticked, a ⚠ on the ones you
-lose by moving on. The step you're on (the first with a trophy left, at
-or after your latest unlock) is open; click a step's title to open or
-fold it. Trophies no step holds follow under **Not in a step**. Without
+lose by moving on. The step you're on (the first with a trophy left
+after the last step you finished) is open; click a step's title to open
+or fold it. Trophies no step holds follow under **Not in a step**. Without
 a walkthrough, Up next and the route show as before
 ([ADR 17](docs/adr/0017-walkthrough-is-a-maker-stage.md)). A guide made
 before 0.6.1 has none: the tracker says "older maker", and **Make again**
@@ -186,6 +186,12 @@ place, then the move, ticked once the trophy it gives unlocks.
   step you left with a missable still open. Click a step to see its
   actions below the track. Without a walkthrough the story trophies are
   the stops; on a narrow tracker the track runs down the side.
+  OmaTrophy only sees your trophies, so the step you're on is a guess:
+  when it's wrong, click your step and **I'm here** (📌 beside YOU ARE
+  HERE). The pin holds until you finish that step or a later one, then
+  the guess takes over again; **Back to automatic** drops it sooner, and
+  a guide made again whose step has another title drops it too. From a
+  terminal: `omatrophy.py guide here <store> <app> <step number|clear>`.
 - **Chains**: each trophy that needs others first as a small tree, the
   goal on top. A line lights once the trophy under it unlocks; a locked
   one is greyed with a padlock and "needs ..."; **READY** (its needs

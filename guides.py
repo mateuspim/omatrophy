@@ -164,14 +164,15 @@ def guide_answer(store, app, achievements, folder=None):
         needs = item.get('requires') if isinstance(item.get('requires'), list) else []
         items[api] = dict(item, requires=[every_api[n] for n in needs if n in every_api and every_api[n] != api])
     steps = walkthrough_steps(plan, every_api, done)
-    at = current_step(steps)
+    pinned = pinned_step(steps, load_pin(store, app))
+    at = pinned if pinned >= 0 else current_step(steps)
     return {'store': store, 'app': str(app), 'file': os.path.basename(path),
             'generated': plan.get('generated', 0), 'order': order, 'items': items,
             'sections': plan.get('sections') or {}, 'notes': notes, 'ticks': ticks,
             'next': open_order(order, items, done),
             'agent': plan.get('agent') if isinstance(plan.get('agent'), dict) else {},
             'cost_usd': plan_cost(plan), 'outdated': outdated(plan),
-            'walkthrough': steps, 'step': at, 'tree': tree(order, items, steps),
+            'walkthrough': steps, 'step': at, 'step_pinned': pinned >= 0, 'tree': tree(order, items, steps),
             'frontier': frontier(order, items, done, steps, at)}
 
 
@@ -276,6 +277,78 @@ def current_step(steps):
         last = max((i for i, s in enumerate(steps) if s.get('started')), default=0)
     open_at = [i for i, s in enumerate(steps) if s['achievements'] and not s['done']]
     return next((i for i in open_at if i >= last), open_at[0] if open_at else -1)
+
+
+def step_finished(step):
+    """True when the player is past a step: none of its achievements is
+    left open."""
+    return bool(step.get('done'))
+
+
+# ------------------------------------------------------------ I'm here
+# OmaTrophy only sees achievements, so `current_step` is a guess; the
+# player can pin the step they are at (`guide here`). The pin is the
+# player's state, not the guide's: guides are never written here, so it
+# lives in the state folder, keyed by store and app.
+
+def here_path():
+    base = os.environ.get('XDG_STATE_HOME') or os.path.expanduser('~/.local/state')
+    return os.path.join(base, 'omatrophy', 'guide-here.json')
+
+
+def load_pins():
+    """{"store:app": pin} from the state file; {} when missing or broken."""
+    try:
+        with open(here_path(), encoding='utf-8') as f:
+            pins = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    return pins if isinstance(pins, dict) else {}
+
+
+def load_pin(store, app):
+    pin = load_pins().get(f'{store}:{app}')
+    return pin if isinstance(pin, dict) else None
+
+
+def save_pin(store, app, pin):
+    """Write one game's pin, or remove it with None; the others stay."""
+    pins = load_pins()
+    key = f'{store}:{app}'
+    if pin is None:
+        pins.pop(key, None)
+    else:
+        pins[key] = pin
+    path = here_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path + '.tmp', 'w', encoding='utf-8') as f:
+        json.dump(pins, f, indent=1, sort_keys=True)
+    os.replace(path + '.tmp', path)
+
+
+def make_pin(steps, index):
+    """A pin on step `index` (0-based): its title, so a guide made again
+    with other steps drops it, and the steps already finished, so only a
+    step the player finishes after pinning ends it."""
+    return {'step': index, 'title': steps[index]['title'],
+            'finished': [i for i, s in enumerate(steps) if step_finished(s)]}
+
+
+def pinned_step(steps, pin):
+    """The pinned step's index while the pin holds, else -1. It holds
+    until the player finishes a step at or after it (the automatic rule
+    takes over then), and not at all once its step's title changed."""
+    if not isinstance(pin, dict):
+        return -1
+    at = pin.get('step')
+    if not isinstance(at, int) or isinstance(at, bool) or not 0 <= at < len(steps):
+        return -1
+    if steps[at].get('title') != pin.get('title'):
+        return -1
+    before = set(pin.get('finished') if isinstance(pin.get('finished'), list) else [])
+    if any(step_finished(s) and i not in before for i, s in enumerate(steps) if i >= at):
+        return -1
+    return at
 
 
 def plan_cost(plan):
