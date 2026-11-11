@@ -247,6 +247,7 @@ Item {
     stepOpen = next
   }
 
+  onGuideChanged: if (trackPick >= walkSteps.length) trackPick = -1
   onGameChanged: {
     stepOpen = ({})
     trackPick = -1
@@ -3916,7 +3917,9 @@ Item {
           // no action names.
           Rectangle {
             id: stepPanel
-            readonly property var step: story.stepped && root.trackShown >= 0 ? root.walkSteps[root.trackShown] : null
+            // `|| null`: a guide made again can have fewer steps than the
+            // one a step was picked in.
+            readonly property var step: story.stepped && root.trackShown >= 0 ? root.walkSteps[root.trackShown] || null : null
             readonly property var loose: step ? step.achievements.filter(function(api) {
               return !(step.actions || []).some(function(a) { return a.achievement === api })
             }) : []
