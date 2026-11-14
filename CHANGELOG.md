@@ -5,11 +5,14 @@
 - **Pick the monitor** cards show on: Settings > Toasts > Screen lists
   Focused (as before) and each connected monitor by name (`set screen
   DP-1`, `set screen focused`). A monitor that isn't connected falls back
-  to the focused one until it is.
+  to the focused one until it is. A card stays on its starting monitor
+  unless it disconnects; long monitor lists wrap within Settings.
 - **Do Not Disturb**: while Omarchy's notifications are silenced, cards
   wait and show, with their chimes, when it ends. Settings > Toasts >
   Do Not Disturb, **Show anyway** to keep them coming (`set dnd ignore`).
   A card from Try or `test` shows either way, and carries `"test": true`.
+  Explicit tests bypass the queue cap; ordinary cards stop joining at 20
+  pending cards, while launch reminders and recaps are kept.
   Read from Omarchy's notification state (ADR 22). Needs one
   `omarchy restart shell`.
 

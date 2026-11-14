@@ -14,7 +14,7 @@ bar panel).
 | `chimes` | `"omatrophy"` (`assets/sounds/<tier>.wav`), `"classic"` (freedesktop sounds) | `"omatrophy"` |
 | `icons` | `"omarchy"`, `"vector"`, `"painted"` | `"omarchy"` |
 | `glass` | How much of the screen shows through a toast: `"clear"`, `"frosted"`, `"solid"` (the platinum card stays solid) | `"frosted"` |
-| `screen` | The monitor cards show on: `"focused"` (the focused one when each card starts) or a Hyprland monitor name like `"DP-1"`. A monitor not connected now falls back to the focused one. Settings > Toasts lists the connected ones. | `"focused"` |
+| `screen` | The monitor cards show on: `"focused"` (the focused one when each card starts) or a Hyprland monitor name like `"DP-1"`. A monitor not connected now falls back to the focused one. A visible card stays on its starting monitor unless it disconnects. Settings > Toasts lists the connected ones and preserves a disconnected choice as `(off)`. | `"focused"` |
 | `dnd` | While Omarchy's Do Not Disturb is on: `"hold"` keeps cards until it ends, then shows them in order (a card queued by `omatrophy.py test` still shows); `"ignore"` shows them anyway ([ADR 22](../adr/0022-hold-cards-during-do-not-disturb.md)). Settings > Toasts. | `"hold"` |
 | `games-sort` | The Games tab's last sort: `"recent"`, `"closest"`, `"name"`. Written when you pick one. | `"recent"` |
 | `games-difficulty` | The Games tab's Difficulty toggle: `true` keeps only games with a difficulty achievement left. Written when you click it. | `false` |

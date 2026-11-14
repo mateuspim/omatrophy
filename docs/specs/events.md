@@ -11,7 +11,9 @@ and whether a full queue (20) may drop it (`keep`). The test inbox lets
 through these types only.
 
 Any event may carry `"test": true`: `omatrophy.py test` sets it, and the
-shell shows such a card even while Do Not Disturb holds the rest
+shell shows such a card even while Do Not Disturb holds the rest. These
+explicit tests bypass the queue cap, wait for any current card to finish,
+and leave held cards queued
 ([ADR 22](../adr/0022-hold-cards-during-do-not-disturb.md)). The watcher
 never sets it.
 

@@ -30,6 +30,7 @@ Scope {
 
   property var queue: []
   property var current: null
+  property string currentScreenName: ""
   property string position: "top-center"
   property bool sound: true
   property string chimes: "omatrophy"
@@ -42,11 +43,12 @@ Scope {
   property string dndMode: "hold"
   // Omarchy's Do Not Disturb, from its notification service's quiet.json.
   property bool dnd: false
+  property bool quietLoaded: false
   // dev/preview.sh turns it off: a throwaway shell shows its cards whatever
   // the live shell's Do Not Disturb says.
   property bool followsDnd: true
   property string quietPath: Quickshell.env("HOME") + "/.local/state/omarchy/notifications/quiet.json"
-  readonly property bool holding: followsDnd && dndMode === "hold" && dnd
+  readonly property bool holding: followsDnd && dndMode === "hold" && (!quietLoaded || dnd)
   // Do Not Disturb ended (or `dnd` went to ignore): what waited shows now.
   onHoldingChanged: if (!holding && !current) next()
 
@@ -95,9 +97,9 @@ Scope {
     if (tiers.indexOf(ev.tier) < 0) ev.tier = "bronze"
     // A burst (a backfilled library, a flood in the inbox) shows the first
     // few cards, not a queue that runs for an hour. A card kept (a launch
-    // reminder: shown once, the watcher records it as sent) is never
-    // dropped.
-    if (!card.keep && queue.length >= 20) return
+    // reminder: shown once, the watcher records it as sent), or an explicit
+    // Try, is never dropped. Otherwise Try stops working after a DND burst.
+    if (!card.keep && ev.test !== true && queue.length >= 20) return
     // A ranked card goes ahead of every queued card of a lower rank and
     // after those of its own: the difficulty reminder first, then the
     // missable one, then toasts in the order they came.
@@ -122,6 +124,10 @@ Scope {
         if (queue[i].test === true) at = i
     }
     if (!queue.length || at < 0) { current = null; return }
+    // Capture before current changes: its signal builds the window. A live
+    // binding to focusedMonitor would move an already visible card.
+    var screen = toastScreen()
+    currentScreenName = screen ? screen.name : ""
     current = queue[at]
     queue = queue.slice(0, at).concat(queue.slice(at + 1))
     // The platinum card asks for its chime when the trophy lands; a
@@ -146,6 +152,14 @@ Scope {
     for (var i = 0; i < screens.length; i++)
       if (screens[i].name === name) return screens[i]
     return screens[0]
+  }
+
+  function currentToastScreen() {
+    var screens = Quickshell.screens
+    for (var i = 0; i < screens.length; i++)
+      if (screens[i].name === currentScreenName) return screens[i]
+    // A monitor can disappear during a card; keep it visible elsewhere.
+    return toastScreen()
   }
 
   FileView {
@@ -176,14 +190,30 @@ Scope {
   // the file; it is replaced atomically, which FileView follows. Empty,
   // missing or unreadable: notifications aren't silenced.
   FileView {
+    id: quietFile
     path: root.followsDnd ? root.quietPath : ""
     // Read before the first card: a held card must not slip out first.
     blockLoading: true
     watchChanges: true
     printErrors: false
     onFileChanged: reload()
-    onLoaded: root.dnd = root.quietOn(text())
-    onLoadFailed: root.dnd = false
+    onLoaded: {
+      root.dnd = root.quietOn(text())
+      root.quietLoaded = true
+    }
+    onLoadFailed: {
+      root.dnd = false
+      root.quietLoaded = true
+    }
+    // The gate (quietLoaded) must open at startup whatever the signals do:
+    // a gate left shut holds every card until the shell restarts. text()
+    // blocks until loaded and is "" when the file is missing. No reset on a
+    // path change: the path changes only with followsDnd, which skips the
+    // gate anyway.
+    Component.onCompleted: {
+      root.dnd = root.followsDnd && root.quietOn(quietFile.text())
+      root.quietLoaded = true
+    }
   }
 
   function quietOn(text) {
@@ -237,7 +267,7 @@ Scope {
 
     PanelWindow {
       id: win
-      screen: root.toastScreen()
+      screen: root.currentToastScreen()
       readonly property bool left: root.position === "top-left"
       readonly property bool right: root.position === "top-right"
 

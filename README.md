@@ -23,11 +23,15 @@ achievement list.
 - Toasts on the shell's Overlay layer, so they land over fullscreen games
   even when Steam's own popup doesn't. Click-through; never takes focus.
   On the focused monitor, or the one you pick in Settings > Toasts >
-  Screen (`omatrophy.py set screen DP-1`).
+  Screen (`omatrophy.py set screen DP-1`). A disconnected choice falls
+  back to the focused monitor. Cards stay on their starting monitor
+  unless it disconnects.
 - Do Not Disturb respected: while Omarchy's notifications are silenced (the
   bar's bell), cards wait and show when you turn it back on, chimes and
   all. **Show anyway** in Settings > Toasts > Do Not Disturb keeps them
   coming (`omatrophy.py set dnd ignore`); **Try** shows a card either way.
+  Ordinary cards stop joining when 20 are queued; launch reminders,
+  recaps and explicit tests are kept. A shell exit discards held cards.
 - About two seconds from unlock to toast: OmaTrophy reads the launcher's
   local achievement data (Steam's cache, the GOG database Heroic keeps),
   so no Web API key, no login and no public profile.

@@ -32,13 +32,16 @@ missing or unreadable reads as off.
 A setting, `dnd`, picks what happens while it is on:
 
 - `hold` (default): cards wait in the queue, in their usual order and
-  ranks, under the same 20-card limit (reminders and recaps are never
-  dropped), and show, with their chimes, when Do Not Disturb ends.
+  ranks, under the same queue rule (ordinary cards are dropped when 20
+  cards are pending; reminders and recaps are never dropped), and show,
+  with their chimes, when Do Not Disturb ends. A card already showing
+  finishes normally if Do Not Disturb turns on.
 - `ignore`: cards show as before.
 
 A card queued by `omatrophy.py test` (Settings' **Try**, the TRY IT tiles)
-carries `"test": true` and shows even while held: a Try that shows nothing
-looks broken. `dev/preview.sh` sets `followsDnd: false`, so a throwaway
+carries `"test": true` and shows even while held, bypassing the queue cap
+like a kept card: a Try that shows nothing looks broken. It waits for any
+current card to finish. `dev/preview.sh` sets `followsDnd: false`, so a throwaway
 shell shows its cards whatever the live shell's state.
 
 We considered dropping held cards to a count ("3 trophies while you were
@@ -52,6 +55,8 @@ own moment.
   path or shape changes, OmaTrophy reads Do Not Disturb as off and shows
   cards as before; nothing breaks louder than that. Recheck it when
   Omarchy's notification service changes.
-- With Do Not Disturb left on for hours, more than 20 unlock toasts wait
-  only for the first 20; the rest are dropped as in any burst.
+- With Do Not Disturb left on for hours, ordinary cards stop joining once
+  20 cards wait, as in any burst. Kept cards and explicit tests can grow
+  the queue beyond 20. This queue lives only in the shell's memory; a
+  shell exit discards it.
 - Changing `Service.qml` needs one `omarchy restart shell`.

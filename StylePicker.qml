@@ -45,6 +45,7 @@ Column {
   property string glass: "frosted"
   // The monitor cards show on (config `screen`): "focused" or a name.
   property string screenName: "focused"
+  property var screenChoices: screenOptions()
   // While Do Not Disturb is on (config `dnd`): "hold" or "ignore".
   property string dndMode: "hold"
   property bool community: false
@@ -1173,6 +1174,7 @@ Column {
     id: chips
     property var options: []
     property string value: ""
+    property real maxChipWidth: Infinity
     signal picked(string value)
     spacing: Commons.Style.space(2)
     Repeater {
@@ -1181,7 +1183,7 @@ Column {
         id: chip
         required property var modelData
         readonly property bool chosen: chips.value === modelData.value
-        width: chipText.implicitWidth + Commons.Style.space(16)
+        width: Math.min(chips.maxChipWidth, chipText.implicitWidth + Commons.Style.space(16))
         height: chipText.implicitHeight + Commons.Style.space(8)
         radius: height / 2
         color: chosen ? Qt.alpha(Commons.Color.accent, 0.18) : (chipHit.containsMouse ? Commons.Style.hoverFill : "transparent")
@@ -1193,6 +1195,8 @@ Column {
           textFormat: Text.PlainText
           id: chipText
           anchors.centerIn: parent
+          width: parent.width - Commons.Style.space(16)
+          elide: Text.ElideRight
           text: chip.modelData.label
           color: chip.chosen ? Commons.Color.accent : root.foreground
           opacity: chip.chosen ? 1 : 0.6
@@ -4222,12 +4226,25 @@ Column {
       }
 
       // Which monitor cards show on; Focused follows you, as before.
-      SettingRow {
-        label: "SCREEN"
-        Chips {
-          options: root.screenOptions()
-          value: root.screenName
-          onPicked: value => root.set("screen", value)
+      // Unlike the fixed choices below, monitor names and their count have
+      // no useful display bound: wrap rather than overlap the setting label.
+      Column {
+        width: parent.width
+        spacing: Commons.Style.space(6)
+        MiniLabel { text: "SCREEN" }
+        Flow {
+          width: parent.width
+          spacing: Commons.Style.space(2)
+          Repeater {
+            model: root.screenChoices
+            delegate: Chips {
+              required property var modelData
+              options: [modelData]
+              maxChipWidth: parent.width
+              value: root.screenName
+              onPicked: value => root.set("screen", value)
+            }
+          }
         }
       }
 
