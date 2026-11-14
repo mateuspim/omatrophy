@@ -11,7 +11,8 @@
 #   dev/render.sh tracker-loading out.png
 #   dev/render.sh settings out.png       its Settings tab (settings-toasts, -now, -guides, -stores: one section)
 #   dev/render.sh settings-monitors out.png  Toasts with many monitors and a long disconnected name
-#   dev/render.sh tracker out.png        the achievement tracker
+#   dev/render.sh tracker out.png        the achievement tracker (tracker-hand: ticks, a count and notes by hand;
+#                                        tracker-note: a note being written)
 #   dev/render.sh guide out.png          its Guide view (guide-making: a make running; guide-empty: none yet;
 #                                        guide-failed: the last make failed; guide-steps: a guide with
 #                                        step actions; guide-tree: its Tree; guide-tree-done, -locked,
@@ -22,7 +23,8 @@
 #                                        guide-tree-pinnable: step 4 shown, its I'm here button;
 #                                        guide-steps-pinned: the Steps view with step 3 pinned;
 #                                        guide-tree-narrow-pinned, -narrow-pinnable, ...: a state on
-#                                        the narrow card, its track down the side)
+#                                        the narrow card, its track down the side;
+#                                        guide-hand: ticks and notes by hand)
 #   dev/render.sh gold out.png           a toast: bronze, silver, gold, platinum; difficulty, missable: the launch reminders; recap: a session; milestone: a counter
 #   dev/render.sh --live tracker out.png the views read your real stores
 #   dev/render.sh --font 16 now out.png  at another theme font size (the base is 12)
@@ -151,20 +153,28 @@ case $target in
           item.tab = \"$tab\"
         }
       }" ;;
-  tracker|tracker-loading)
+  tracker|tracker-loading|tracker-hand|tracker-note)
     w=1000 h=900 at=3000
     [[ $target == tracker-loading ]] && live=skeleton
+    # By hand (ADR 21): The Quiet Part ticked, Collector counted by hand
+    # (its store count taken away, its guide's target kept), notes on a
+    # trophy and on the game; tracker-note opens a note for editing.
+    hand=""
+    [[ $target == tracker-hand || $target == tracker-note ]] && hand="var g = item.game; g.achievements.forEach(function(a) { if (a.api === 'A6') a.progress = null }); g.hand = { ticks: ['A4'], unticks: [], counts: { A6: 31 }, notes: { A4: 'Got it on the Deck copy; Steam never synced it.', A5: 'Skip the bridge guard: the vents past the canteen.' }, note: 'Hard first, then Madness unlocks.' }; item.guide = { items: { A6: { counter: { target: 80, label: 'relics' } } }, ticks: [] }; item.game = null; item.game = g; item.sortBy = 'game'"
+    # Opened after the rows' entry cascade, as a key press would be: a row
+    # that grows mid-transition isn't re-laid by ListView.
+    [[ $target == tracker-note ]] && hand="$hand; var t = Qt.createQmlObject(\"import QtQuick; Timer { interval: 1500; running: true }\", item); t.triggered.connect(function() { item.editNote('A5') })"
     view="Loader {
         anchors.centerIn: parent
         source: \"file:$repo/TrackerView.qml\"
         onLoaded: {
           item.maxWidth = 960; item.maxHeight = 860
           if (\"$live\" === \"true\") item.load({})
-          else if (\"$live\" === \"false\") item.game = JSON.parse(sample.text())
+          else if (\"$live\" === \"false\") { item.game = JSON.parse(sample.text()); ${hand:-} }
         }
       }"
     data=game.json ;;
-  guide|guide-making|guide-empty|guide-failed|guide-steps|guide-steps-pinned|guide-tree|guide-tree-*)
+  guide|guide-making|guide-empty|guide-failed|guide-steps|guide-steps-pinned|guide-tree|guide-tree-*|guide-hand)
     w=1300 h=960 at=3000
     $tall && h=2400
     # guide-steps and guide-tree: a made-up game whose guide has requires
@@ -182,6 +192,7 @@ case $target in
     state=$target
     if [[ $target == guide-tree-narrow-* ]]; then width=820; state=guide-tree-${target#guide-tree-narrow-}; fi
     case $state in
+      guide-hand) tweak="item.game = Object.assign({}, item.game, { hand: { ticks: ['A5'], unticks: [], counts: {}, notes: { A3: 'Ask the cartographer twice; the second talk marks the last system.' }, note: 'Played on the Deck first: Spark was unlocked there.\\nSave before the finale.' } })" ;;
       guide-tree-done) tweak="item.game = Object.assign({}, item.game, { achievements: item.game.achievements.map(function(a) { return Object.assign({}, a, { unlocked: true, time: a.time || 1793060000 }) }), unlocked: item.game.total }); g.step = -1; g.frontier = []; g.walkthrough.forEach(function(s) { s.done = true })" ;;
       guide-tree-locked) tweak="Object.keys(g.items).forEach(function(k) { if (!item.byApi[k].unlocked) g.items[k].requires = [k === 'L9' ? 'L8' : 'L9'] }); g.frontier = []" ;;
       guide-tree-bare) tweak="g.walkthrough = []; g.step = -1; g.tree.chains = []; g.tree.alone = g.tree.alone.concat(['L5', 'L6', 'L7', 'L8', 'L9', 'L15'])" ;;

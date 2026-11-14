@@ -24,8 +24,10 @@ class TreeKeys(unittest.TestCase):
                               text, re.M | re.S)
             self.assertIsNotNone(found, name)
             functions.append(found.group())
-        pressed = re.search(r'^      Keys.onPressed: function\(event\) \{\n(.*?)^      }',
-                            text, re.M | re.S)
+        # The tracker's own handler, the one that cycles filters: the note
+        # editor (ADR 21) has a Keys.onPressed at the same indent.
+        pressed = next((m for m in re.finditer(r'^      Keys.onPressed: function\(event\) \{\n(.*?)^      }',
+                                               text, re.M | re.S) if 'cycleFilter' in m[1]), None)
         self.assertIsNotNone(pressed)
         script = '\n'.join(functions) + '\nfunction press(event) {\n' + pressed[1] + '\n}\n' + checks
         harness = '''const vm = require('node:vm')
@@ -76,6 +78,22 @@ for (var key of [Qt.Key_Down, Qt.Key_Up, Qt.Key_Left, Qt.Key_Right,
   var event = {key}; press(event); assert.equal(event.accepted, true)
 }
 assert.deepEqual(calls, [[0, 1], [0, -1], [-1, 0], [1, 0], 15, 5, 0, 29])
+''')
+
+    def test_ctrl_keys_tick_and_count_by_hand_over_the_tree(self):
+        # ADR 21: Ctrl+Enter and Ctrl+Up/Down act on the highlighted trophy
+        # even while the Tree takes the plain arrows and Enter.
+        self.run_js('''
+var root = globalThis, treeKeys = true, search = '', calls = []
+var Qt = {Key_Right: 1, Key_Left: 2, Key_Down: 3, Key_Up: 4, Key_Return: 9, Key_Enter: 10,
+          Key_Space: 11, ShiftModifier: 1, ControlModifier: 2}
+var treeMove = function() { calls.push('move') }
+var treeActivate = function() { calls.push('activate'); return true }
+var keyApi = function() { return 'A' }
+var toggleTick = function(api) { calls.push('tick ' + api) }
+var stepCount = function(api, by) { calls.push('count ' + api + ' ' + by) }
+for (var key of [Qt.Key_Return, Qt.Key_Up, Qt.Key_Down]) press({key, modifiers: Qt.ControlModifier})
+assert.deepEqual(calls, ['tick A', 'count A 1', 'count A -1'])
 ''')
 
     def test_spatial_navigation_activation_and_hidden_targets(self):

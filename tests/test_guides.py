@@ -20,7 +20,8 @@ ACHS = [
 def setUpModule():
     state = tempfile.TemporaryDirectory()
     unittest.addModuleCleanup(state.cleanup)
-    patch = mock.patch.dict(os.environ, {'XDG_STATE_HOME': state.name})
+    # by-hand.json (ADR 21) is read from the data folder: the tests' own too.
+    patch = mock.patch.dict(os.environ, {'XDG_STATE_HOME': state.name, 'XDG_DATA_HOME': state.name})
     patch.start()
     unittest.addModuleCleanup(patch.stop)
 
@@ -104,6 +105,18 @@ class GuideAnswer(unittest.TestCase):
         self.assertEqual(out['next'], ['ACH_LANTERN', 'ACH_STARS', 'ACH_QUIET'])
         self.assertEqual(out['sections']['route'], 'Lantern first, then stars.')
         self.assertEqual(out['generated'], 1792990000)
+
+    def test_ticks_by_hand_join_the_md_ticks_and_can_overrule_them(self):
+        # ADR 21: the sample's .md ticks A3 by hand; the file adds Last
+        # Lantern and unticks A3, and Up next follows.
+        import by_hand
+        folder = self.folder()
+        with tempfile.TemporaryDirectory() as data, mock.patch.dict(os.environ, {'XDG_DATA_HOME': data}):
+            by_hand.update('steam', '1', lambda e, now: (by_hand.set_tick(e, 'ACH_LANTERN', True, now),
+                                                         by_hand.set_tick(e, 'A3', False, now)))
+            out = guides.guide_answer('steam', '1', ACHS, folder)
+        self.assertEqual(out['ticks'], ['ACH_LANTERN'])
+        self.assertNotIn('ACH_LANTERN', out['next'])
 
     def test_a_guide_without_stacks_says_nothing_about_them(self):
         out = guides.guide_answer('steam', '1', ACHS, self.folder())

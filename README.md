@@ -66,6 +66,8 @@ achievement list.
   80"); filtered to locked, unlocked or rare, sorted, and searched as you
   type, by mouse or keyboard. Hidden ones stay hidden until you hover or
   press Enter.
+- Ticks, counts and notes by hand in the tracker: keep track of what the
+  store missed, without changing its unlocks or platinum progress.
 - A 100% guide per game, made on request by your own coding agent (Claude
   Code today): the route, missables first, time and difficulty per
   achievement, combos and tips, with every claim checked against the page
@@ -183,6 +185,9 @@ Its keys:
 | Up, Down (outside the Tree), Page Up/Down, Home, End | Move the list highlight |
 | Arrows, Enter (the guide's Tree) | Move between its tiles, stops and trophies; open one |
 | Enter (or Space, when not searching) | Reveal a hidden achievement |
+| Ctrl+Enter | Tick or untick the highlighted achievement by hand |
+| Ctrl+N | Edit its note (or the game's note on Guide with no trophy selected) |
+| Ctrl+Up, Ctrl+Down | Raise or lower its count when the guide has a target and the store has no counter |
 | Shift+Enter | Reveal all hidden achievements, or hide them again (remembered) |
 | Tab, Shift+Tab | All, Locked, Unlocked, Rare, Difficulty, Guide |
 | Left, Right (outside the Tree) | Sort: recent, rarest, A–Z, the game's own order (remembered) |
@@ -194,6 +199,44 @@ From a script:
 ```bash
 omarchy-shell shell summon pym.omatrophy '{}'   # the running or last game
 ```
+
+### Ticks, counts and notes by hand
+
+Hover or highlight a locked trophy and click its round tick target, or
+press **Ctrl+Enter**, to mark something you finished that the store missed.
+It shows **✓ by hand**, with its trophy still dim. The store's unlocks,
+percentage, filters, cabinet and platinum stay as they were; the guide's
+Up next, steps, Do now and missable reminder count the tick as done. The
+header keeps both counts: "47 / 58 unlocked · 1 by hand". Ticks work with
+or without a guide; an achievement already unlocked cannot be ticked.
+A tick in a guide's `.md` also counts, and unticking it here overrules it
+without editing the guide.
+
+When the guide gives a counter target and the store gives no count, **−**
+and **+** beside it (or **Ctrl+Down/Up**) keep your count. Reaching the
+target does not tick or unlock it. A store counter always takes priority.
+
+Click **Note** on a highlighted or hovered trophy, or press **Ctrl+N**, to
+write a plain text note. **Enter** saves, **Shift+Enter** adds a line and
+**Escape** cancels; typing while editing stays in the note. Notes hold
+1000 characters per trophy. A hidden trophy keeps its note secret until
+revealed. On **Guide**, **Your notes** folds open under the overview;
+**Add a note** or **Edit** keeps a note on the game, up to 4000 characters,
+even without a guide. Emptying a note removes it.
+
+Your writing lives in `~/.local/share/omatrophy/by-hand.json`
+(`$XDG_DATA_HOME` respected), beside your guides. Back it up with them;
+it is your data, not a disposable cache. OmaTrophy never writes your guide
+to tick an item. From a terminal:
+
+```bash
+omatrophy.py hand tick steam 1 ACH_SAFE
+omatrophy.py hand count steam 1 ACH_RELICS +1
+omatrophy.py hand note steam 1 game "Save before the finale."
+```
+
+The ids above are examples; use the achievement `api` from `omatrophy.py
+game <store> <app>`. [All by-hand commands and storage](docs/specs/by-hand.md).
 
 ## 100% guides
 

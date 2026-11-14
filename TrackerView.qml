@@ -72,6 +72,25 @@ Item {
   // An achievement to highlight once the game loads, from the request.
   property string focusApi: ""
 
+  // By hand (ADR 21): `game`'s `hand`, kept apart so a tick shows at once
+  // and each write's answer replaces it. Writes go through `hand ...`,
+  // one process at a time; the tracker never writes a file itself.
+  readonly property var emptyHand: ({ ticks: [], unticks: [], counts: {}, notes: {}, note: "" })
+  property var hand: emptyHand
+  property var handQueue: []
+  property int handGeneration: 0
+  property var handJob: ({})
+  property int handReadGeneration: -1
+  property bool handRecovering: false
+  property var handCommitted: emptyHand
+  property var guideCommitted: null
+  property string handError: ""
+  // The note open for editing: an achievement's api, "game" for the
+  // game's own, "" for none.
+  property string noteApi: ""
+  property bool gameNotesOpen: true
+  readonly property int noteMax: noteApi === "game" ? 4000 : 1000
+
   // The 100% guide view (filter "guide"; docs/specs/guides.md). `live`
   // is set by load(): dev/render.sh fills these from samples instead.
   property bool live: false
@@ -234,6 +253,8 @@ Item {
     appliedSearch = ""
     revealed = ({})
     highlightApi = ""
+    noteApi = ""
+    handError = ""
     guide = null
     job = ({})
     jobSeen = false
@@ -266,6 +287,9 @@ Item {
 
   onGuideChanged: if (trackPick >= walkSteps.length) trackPick = -1
   onGameChanged: {
+    // A kept tracker can open another game before an earlier write ends.
+    handGeneration++
+    handRecovering = false
     stepOpen = ({})
     trackPick = -1
     treeKey = ""
@@ -275,6 +299,10 @@ Item {
     var index = {}
     if (game) game.achievements.forEach(function(a) { index[a.api] = a })
     byApi = index
+    hand = game && game.hand ? game.hand : emptyHand
+    handCommitted = hand
+    guideCommitted = null
+    noteApi = ""
     if (filter === "difficulty" && !count("difficulty")) filter = "all"
     rowModel.clear()
     shownApis = []
@@ -822,7 +850,7 @@ Item {
     var item = guideItem(api), a = byApi[api] || {}
     var max = item.counter && item.counter.target ? item.counter.target : a.progress ? a.progress.max : 0
     if (!max) return null
-    var value = guideDone(api) ? max : a.progress ? a.progress.value : 0
+    var value = guideDone(api) ? max : a.progress ? a.progress.value : (hand.counts || {})[api] || 0
     var label = item.counter && item.counter.label ? " " + item.counter.label : ""
     return { fraction: Math.min(1, value / max), text: unbroken(value + " / " + max + label) }
   }
@@ -907,9 +935,151 @@ Item {
     return a.hidden && !a.unlocked && !revealed[api] && !revealAll ? "Hidden achievement" : a.name
   }
 
+  // Done for the guide: unlocked, or ticked by hand, in the guide's .md
+  // unless the player unticked it, or in by-hand.json (ADR 21). The
+  // player's own ticks count before the write answers.
   function guideDone(api) {
     var a = byApi[api]
-    return (a && a.unlocked) || (!!guide && (guide.ticks || []).indexOf(api) >= 0)
+    if (a && a.unlocked) return true
+    if ((hand.ticks || []).indexOf(api) >= 0) return true
+    return !!guide && (guide.ticks || []).indexOf(api) >= 0 && (hand.unticks || []).indexOf(api) < 0
+  }
+
+  // Done by hand: done for the guide, but not unlocked in the store.
+  function byHand(api) {
+    var a = byApi[api]
+    return !!a && !a.unlocked && guideDone(api)
+  }
+
+  function handCount() {
+    return game ? game.achievements.filter(function(a) { return byHand(a.api) }).length : 0
+  }
+
+  // A count kept by hand, {value, target, label}, for a locked trophy the
+  // guide gives a counter and the store doesn't count; else null.
+  function handCounter(api) {
+    var a = byApi[api], item = guideItem(api)
+    if (!a || a.unlocked || a.progress || !item.counter || !(item.counter.target >= 2)) return null
+    return { value: (hand.counts || {})[api] || 0, target: item.counter.target, label: item.counter.label || "" }
+  }
+
+  function noteOf(api) {
+    return api === "game" ? hand.note || "" : (hand.notes || {})[api] || ""
+  }
+
+  function toggleTick(api) {
+    var a = byApi[api]
+    if (!game || !a || a.unlocked || handRecovering) return
+    var on = !guideDone(api)
+    var drop = function(k) { return k !== api }
+    var ticks = (hand.ticks || []).filter(drop), unticks = (hand.unticks || []).filter(drop)
+    if (on) ticks.push(api)
+    else unticks.push(api)
+    hand = Object.assign({}, hand, { ticks: ticks, unticks: unticks })
+    runHand([on ? "tick" : "untick", String(game.store), String(game.app), api])
+  }
+
+  function stepCount(api, step) {
+    if (handRecovering) return
+    var c = handCounter(api)
+    if (!c) return
+    var value = Math.max(0, Math.min(c.target, c.value + step))
+    if (value === c.value) return
+    var counts = Object.assign({}, hand.counts)
+    counts[api] = value
+    hand = Object.assign({}, hand, { counts: counts })
+    runHand(["count", String(game.store), String(game.app), api, String(value)])
+  }
+
+  // Opens a note for editing; the keyboard goes to the editor until it
+  // saves or cancels. A secret's note waits until it is revealed.
+  function editNote(api, revealedHere) {
+    if (!game || handRecovering || (api !== "game" && (!byApi[api] || (isSecret(api) && !revealedHere)))) return
+    if (revealedHere) revealed = Object.assign({}, revealed, { [api]: true })
+    if (api === "game") gameNotesOpen = true
+    else if (filter === "guide") highlightApi = api
+    noteApi = api
+  }
+
+  function saveNote(api, text) {
+    if (handRecovering) return
+    text = text.trim()
+    noteApi = ""
+    forceKeys()
+    if (!game || text === noteOf(api) || noteLength(text) > (api === "game" ? 4000 : 1000)) return
+    if (api === "game") {
+      hand = Object.assign({}, hand, { note: text })
+    } else {
+      var notes = Object.assign({}, hand.notes)
+      if (text) notes[api] = text
+      else delete notes[api]
+      hand = Object.assign({}, hand, { notes: notes })
+    }
+    runHand(["note", String(game.store), String(game.app), api, text])
+  }
+
+  function cancelNote() {
+    noteApi = ""
+    forceKeys()
+  }
+
+  function noteLength(text) {
+    // Python's limit counts characters, not UTF-16 halves of an emoji.
+    return Array.from(text.trim()).length
+  }
+
+  // The highlighted trophy the keys act on: the list's row, else the one
+  // picked on the guide side.
+  function keyApi() {
+    if (filter !== "guide" && list.currentIndex >= 0 && list.currentIndex < rows.length) return rows[list.currentIndex].api
+    return filter === "guide" ? highlightApi : ""
+  }
+
+  function runHand(args) {
+    if (!live || !game) return
+    handError = ""
+    handQueue = handQueue.concat([{ command: ["python3", helperPath, "hand"].concat(args), generation: handGeneration }])
+    nextHand()
+  }
+
+  function nextHand() {
+    if (handWriter.running || handReader.running || handQueue.length === 0) return
+    handJob = handQueue[0]
+    handWriter.command = handJob.command
+    handQueue = handQueue.slice(1)
+    handWriter.running = true
+  }
+
+  function acceptHand(found, generation) {
+    if (generation !== handGeneration || !game) return
+    hand = found.hand
+    if (found.guide) guide = found.guide
+  }
+
+  function finishHand(text) {
+    var found = null
+    try { found = JSON.parse(text) } catch (e) {}
+    var generation = handJob.generation
+    if (!found || !found.hand) {
+      handQueue = handQueue.filter(function(job) { return job.generation !== generation })
+      if (generation !== handGeneration || !game) return
+      hand = handCommitted
+      if (guideCommitted !== null) guide = guideCommitted
+      handError = handError || "The command gave no answer; check that the game is still cached and try again."
+      handRecovering = true
+      handReadGeneration = generation
+      // Read both back: an earlier successful write in this burst may
+      // have moved the guide's step even though its answer was deferred.
+      handReader.command = ["python3", helperPath, "game", String(game.store), String(game.app), "--guide"]
+      handReader.running = true
+      return
+    }
+    if (generation === handGeneration) {
+      handCommitted = found.hand
+      guideCommitted = found.guide || null
+    }
+    if (handQueue.some(function(job) { return job.generation === generation })) return
+    acceptHand(found, generation)
   }
 
   // The guide's open items by phase, in the route's order, missables first.
@@ -1100,6 +1270,39 @@ Item {
 
   Process { id: saver }
 
+  // `hand ...` answers {hand, guide}. Only the last write of a burst takes
+  // its answer, so a quick second click isn't undone by the first's. A
+  // failed write prints nothing: say why and read the truth back.
+  Process {
+    id: handWriter
+    onRunningChanged: if (!running) Qt.callLater(root.nextHand)
+    stdout: StdioCollector {
+      onStreamFinished: root.finishHand(text)
+    }
+    stderr: StdioCollector {
+      onStreamFinished: if (text.trim() && root.handJob.generation === root.handGeneration)
+                          root.handError = text.trim().replace(/^omatrophy: /, "")
+    }
+  }
+
+  Process {
+    id: handReader
+    onRunningChanged: if (!running) Qt.callLater(root.nextHand)
+    stdout: StdioCollector {
+      onStreamFinished: {
+        var found = null
+        try { found = JSON.parse(text) } catch (e) {}
+        if (root.handReadGeneration !== root.handGeneration) return
+        if (found && found.hand) {
+          root.acceptHand(found, root.handReadGeneration)
+          root.handCommitted = found.hand
+          root.guideCommitted = found.guide || null
+        }
+        root.handRecovering = false
+      }
+    }
+  }
+
   Process {
     id: loader
     stdout: StdioCollector {
@@ -1186,6 +1389,185 @@ Item {
             : pin.full ? "Your showcase is full (6) · unpin one first"
             : "Pin to your Profile's showcase"
     }
+  }
+
+  // A round target that ticks a locked trophy by hand (ADR 21): a ✓ in
+  // the accent while ticked, a faint ring on offer. Never an unlock.
+  component HandTick: Rectangle {
+    id: tick
+    property string api: ""
+    readonly property bool on: root.byHand(api)
+    readonly property bool hovered: tickHit.containsMouse
+    width: Commons.Style.space(26)
+    height: width
+    radius: width / 2
+    color: tickHit.containsMouse ? Commons.Style.hoverFill : "transparent"
+    Accessible.role: Accessible.CheckBox
+    Accessible.name: on ? "Done by hand" : "Tick by hand"
+    Accessible.checked: on
+    Rectangle {
+      anchors.centerIn: parent
+      width: Commons.Style.space(16)
+      height: width
+      radius: width / 2
+      color: tick.on ? Commons.Color.accent : "transparent"
+      border.width: tick.on ? 0 : 1.5
+      border.color: Qt.alpha(root.foreground, tickHit.containsMouse ? 0.85 : 0.45)
+      Text {
+        textFormat: Text.PlainText
+        anchors.centerIn: parent
+        visible: tick.on || tickHit.containsMouse
+        text: "✓"
+        color: tick.on ? root.background : root.foreground
+        opacity: tick.on ? 1 : 0.7
+        font.family: Commons.Style.font.family
+        font.pixelSize: Commons.Style.font.caption
+        font.bold: true
+      }
+    }
+    MouseArea {
+      id: tickHit
+      anchors.fill: parent
+      hoverEnabled: true
+      cursorShape: Qt.PointingHandCursor
+      onClicked: root.toggleTick(tick.api)
+    }
+    PanelToolTip {
+      visible: tickHit.containsMouse
+      text: tick.on ? "Done by hand · click to untick" : "Tick by hand: done, though the store didn't see it (not an unlock)"
+    }
+  }
+
+  // − and + around a count kept by hand.
+  component CountStep: Text {
+    id: step
+    property int by: 1
+    textFormat: Text.PlainText
+    text: by > 0 ? "+" : "−"
+    color: root.foreground
+    opacity: stepHit.containsMouse ? 1 : 0.6
+    font.family: Commons.Style.font.family
+    font.pixelSize: Commons.Style.font.body
+    font.bold: true
+    MouseArea {
+      id: stepHit
+      anchors.fill: parent
+      anchors.margins: -Commons.Style.space(4)
+      hoverEnabled: true
+      cursorShape: Qt.PointingHandCursor
+      onClicked: step.clicked()
+    }
+    signal clicked()
+  }
+
+  // The player's note under edit (root.noteApi): Enter saves, Shift+Enter
+  // starts a new line, Escape puts it away unchanged. Plain text only.
+  component NoteEditor: Rectangle {
+    id: editor
+    readonly property int length: root.noteLength(noteText.text)
+    readonly property bool over: length > root.noteMax
+    width: parent ? parent.width : 0
+    height: noteText.contentHeight + noteHint.height + Commons.Style.space(22)
+    radius: Commons.Style.cornerRadius
+    color: Qt.alpha(root.foreground, 0.04)
+    border.width: 1
+    border.color: over ? Commons.Color.urgent : Qt.alpha(Commons.Color.accent, 0.6)
+    Component.onCompleted: {
+      noteText.text = root.noteOf(root.noteApi)
+      noteText.cursorPosition = noteText.text.length
+      noteText.forceActiveFocus()
+    }
+    TextEdit {
+      id: noteText
+      x: Commons.Style.space(10)
+      y: Commons.Style.space(8)
+      width: parent.width - Commons.Style.space(20)
+      wrapMode: TextEdit.Wrap
+      textFormat: TextEdit.PlainText
+      color: root.foreground
+      selectionColor: Qt.alpha(Commons.Color.accent, 0.4)
+      font.family: Commons.Style.font.family
+      font.pixelSize: Commons.Style.font.bodySmall
+      Keys.onPressed: function(event) {
+        if (event.key === Qt.Key_Escape) {
+          root.cancelNote()
+        } else if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && !(event.modifiers & Qt.ShiftModifier)) {
+          if (!editor.over) root.saveNote(root.noteApi, noteText.text)
+        } else {
+          return
+        }
+        event.accepted = true
+      }
+      Text {
+        textFormat: Text.PlainText
+        visible: !noteText.text
+        text: root.noteApi === "game" ? "Your notes on this game" : "Your note on this trophy"
+        color: root.foreground
+        opacity: 0.4
+        font: noteText.font
+      }
+    }
+    Caption {
+      id: noteHint
+      anchors.right: parent.right
+      anchors.rightMargin: Commons.Style.space(10)
+      anchors.bottom: parent.bottom
+      anchors.bottomMargin: Commons.Style.space(5)
+      text: (editor.over ? "Too long · " : "") + editor.length + " / " + root.noteMax + " · Enter saves · ⇧Enter new line · Esc cancels"
+      color: editor.over ? Commons.Color.urgent : root.foreground
+      opacity: editor.over ? 1 : 0.45
+    }
+  }
+
+  // The player's note under a trophy, or the editor while it is open.
+  // An Item with its height bound, not a Column: a nested positioner only
+  // sizes itself on a later polish, after the ListView has placed the row,
+  // and a row grown mid-cascade then overlaps the one below it.
+  component NoteLine: Item {
+    id: noteLine
+    property string api: ""
+    property bool secret: false
+    property bool editable: true
+    readonly property bool editing: editable && root.noteApi === api
+    width: parent ? parent.width : 0
+    implicitHeight: !visible ? 0 : editing ? noteEditor.height : noteShown.implicitHeight
+    readonly property string text: root.noteOf(api)
+    visible: !secret && (editing || text !== "")
+    Text {
+      textFormat: Text.PlainText
+      id: noteShown
+      width: parent.width
+      visible: !noteLine.editing
+      text: "✎ " + noteLine.text
+      color: Commons.Color.accent
+      opacity: 0.9
+      wrapMode: Text.Wrap
+      maximumLineCount: 4
+      elide: Text.ElideRight
+      font.family: Commons.Style.font.family
+      font.pixelSize: Commons.Style.font.bodySmall
+      MouseArea {
+        anchors.fill: parent
+        cursorShape: Qt.IBeamCursor
+        onClicked: root.editNote(noteLine.api, true)
+      }
+    }
+    Loader {
+      id: noteEditor
+      width: parent.width
+      // An inline editor's explicit height must reach the row's Column;
+      // Loader's implicit size otherwise leaves following rows over it.
+      height: item ? item.height : 0
+      active: noteLine.editing && !noteLine.secret
+      visible: active
+      sourceComponent: Component { NoteEditor {} }
+    }
+  }
+
+  component NoteButton: Chip {
+    property string api: ""
+    text: root.noteOf(api) ? "Edit note" : "Note"
+    onClicked: root.editNote(api, true)
   }
 
   component Trophy: Item {
@@ -1858,7 +2240,7 @@ Item {
     readonly property bool missable: root.isMissable(api)
     readonly property bool picked: root.treePick === api && root.treePickIn === "now"
     readonly property real pad: Commons.Style.space(10)
-    implicitHeight: (stacked ? tileArt.height + Commons.Style.space(8) : 0) + tileBody.height + pad * 2
+    implicitHeight: (stacked ? tileArt.height + Commons.Style.space(8) : 0) + tileBody.height + pad * 2 + Commons.Style.space(24)
     implicitWidth: 0
     radius: Commons.Style.cornerRadius
     color: tileHover.hovered ? Commons.Style.hoverFill : first ? Qt.alpha(Commons.Color.accent, 0.08) : Qt.alpha(root.foreground, 0.035)
@@ -1878,6 +2260,15 @@ Item {
       size: Commons.Style.space(tile.stacked ? 34 : 40)
       badge: true
       picked: tile.picked
+    }
+    HandTick {
+      anchors.right: parent.right
+      anchors.rightMargin: tile.pad
+      anchors.bottom: parent.bottom
+      anchors.bottomMargin: tile.pad
+      api: tile.api
+      visible: !tile.ach.unlocked
+      opacity: on || tileHover.hovered || tile.picked || hovered ? 1 : 0
     }
     // Share of players, in the metal's colour, as the list has it.
     Text {
@@ -2562,7 +2953,8 @@ Item {
       if (item.time) parts.push(root.unbroken(item.time))
       if (item.difficulty) parts.push(root.dots(item.difficulty))
       if (item.counter && item.counter.target) {
-        var at = ach.progress ? ach.progress.value + " / " : ""
+        var hand = root.handCounter(api)
+        var at = ach.progress ? ach.progress.value + " / " : hand ? hand.value + " / " : ""
         parts.push(root.unbroken(at + item.counter.target + (item.counter.label ? " " + item.counter.label : "")))
       }
       if (item.dlc) parts.push("DLC: " + item.dlc)
@@ -2620,8 +3012,16 @@ Item {
       Caption {
         anchors.right: parent.right
         visible: text !== ""
-        text: grow.ach.unlocked ? root.day(grow.ach.time) : (root.guide && (root.guide.ticks || []).indexOf(grow.api) >= 0 ? "ticked" : "")
-        opacity: 0.45
+        text: grow.ach.unlocked ? root.day(grow.ach.time) : grow.done ? "✓ by hand" : ""
+        color: grow.done && !grow.ach.unlocked ? Commons.Color.accent : root.foreground
+        opacity: grow.done && !grow.ach.unlocked ? 0.95 : 0.45
+      }
+      HandTick {
+        anchors.right: parent.right
+        anchors.rightMargin: -Commons.Style.space(5)
+        visible: !grow.ach.unlocked && grow.api !== ""
+        api: grow.api
+        opacity: on || grow.lit || growHover.hovered || hovered ? 1 : 0
       }
     }
 
@@ -2692,6 +3092,14 @@ Item {
         text: (grow.item.combine_with || []).length ? "Do with " + grow.item.combine_with.join(", ") : ""
         opacity: 0.5
       }
+      Row {
+        spacing: Commons.Style.space(12)
+        visible: !grow.secret && (growHover.hovered || grow.lit)
+        CountStep { by: -1; visible: !!root.handCounter(grow.api); onClicked: root.stepCount(grow.api, -1) }
+        CountStep { by: 1; visible: !!root.handCounter(grow.api); onClicked: root.stepCount(grow.api, 1) }
+        NoteButton { api: grow.api; visible: root.noteApi !== grow.api }
+      }
+      NoteLine { api: grow.api; secret: grow.secret; editable: grow.listed && root.filter === "guide" }
       // A claim no quote backs is shown, but says so (ADR 14).
       Caption {
         width: parent.width
@@ -2730,11 +3138,12 @@ Item {
           root.cycleFilter(1)
         } else if (event.key === Qt.Key_Backtab) {
           root.cycleFilter(-1)
-        } else if (root.treeKeys && (event.key === Qt.Key_Right || event.key === Qt.Key_Left
-                                     || event.key === Qt.Key_Down || event.key === Qt.Key_Up)) {
+        } else if (root.treeKeys && !(event.modifiers & Qt.ControlModifier)
+                   && (event.key === Qt.Key_Right || event.key === Qt.Key_Left
+                       || event.key === Qt.Key_Down || event.key === Qt.Key_Up)) {
           root.treeMove(event.key === Qt.Key_Right ? 1 : event.key === Qt.Key_Left ? -1 : 0,
                         event.key === Qt.Key_Down ? 1 : event.key === Qt.Key_Up ? -1 : 0)
-        } else if (root.treeKeys && !(event.modifiers & Qt.ShiftModifier)
+        } else if (root.treeKeys && !(event.modifiers & (Qt.ShiftModifier | Qt.ControlModifier))
                    && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || (event.key === Qt.Key_Space && !root.search))
                    && root.treeActivate()) {
           // Done: the focused part acted as on a click.
@@ -2744,6 +3153,14 @@ Item {
           root.cycleSort(-1)
         } else if (event.key === Qt.Key_Backspace) {
           root.search = root.search.slice(0, -1)
+        } else if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && (event.modifiers & Qt.ControlModifier)) {
+          // By hand (ADR 21): Ctrl+Enter ticks, Ctrl+N notes, Ctrl+Up and
+          // Down count, on the highlighted trophy.
+          if (root.keyApi()) root.toggleTick(root.keyApi())
+        } else if (event.key === Qt.Key_N && (event.modifiers & Qt.ControlModifier)) {
+          root.editNote(root.keyApi() || (root.filter === "guide" ? "game" : ""))
+        } else if ((event.key === Qt.Key_Up || event.key === Qt.Key_Down) && (event.modifiers & Qt.ControlModifier)) {
+          if (root.keyApi()) root.stepCount(root.keyApi(), event.key === Qt.Key_Up ? 1 : -1)
         } else if (event.key === Qt.Key_Down) {
           root.moveTo(list.currentIndex + 1)
         } else if (event.key === Qt.Key_Up) {
@@ -2968,7 +3385,7 @@ Item {
           }
           Caption {
             anchors.right: parent.right
-            text: "unlocked"
+            text: "unlocked" + (root.handCount() > 0 ? " · " + root.handCount() + " by hand" : "")
           }
         }
         Item {
@@ -3175,6 +3592,13 @@ Item {
         // hover or press Enter to reveal them.
         readonly property bool secret: ach.hidden && !ach.unlocked && !rowHover.containsMouse && !root.revealed[ach.api]
                                        && !root.revealAll
+        // Ticked by hand (ADR 21), and a count kept by hand where the
+        // store keeps none.
+        readonly property bool ticked: root.byHand(api)
+        readonly property var handCount: root.handCounter(api)
+        readonly property var count: ach.progress ? ach.progress
+                                     : handCount ? { value: handCount.value, max: handCount.target } : null
+        readonly property bool active: ListView.isCurrentItem || rowHover.containsMouse
         width: list.width
         // Grows for a name or description on two lines, instead of cutting
         // them at one.
@@ -3262,6 +3686,8 @@ Item {
             text: row.secret ? "Hover or press Enter to reveal" : row.ach.desc
             visible: text !== ""
           }
+          NoteButton { api: row.api; visible: !row.secret && row.active && root.noteApi !== row.api }
+          NoteLine { api: row.api; secret: row.secret; editable: root.filter !== "guide" }
         }
 
         // Only an earned trophy can go on the showcase; the star shows on
@@ -3275,6 +3701,13 @@ Item {
           on: root.pinned(row.ach.api)
           opacity: on || rowHover.containsMouse || hovered ? 1 : 0
           onToggled: root.togglePin(row.ach.api)
+        }
+        // Where an earned trophy has its star, a locked one can be ticked.
+        HandTick {
+          anchors.centerIn: rowPin
+          visible: !row.ach.unlocked
+          api: row.api
+          opacity: on || row.active || hovered ? 1 : 0
         }
 
         Column {
@@ -3312,15 +3745,21 @@ Item {
           Row {
             anchors.right: parent.right
             spacing: Commons.Style.space(6)
+            CountStep {
+              anchors.verticalCenter: parent.verticalCenter
+              visible: !!row.handCount && row.active
+              by: -1
+              onClicked: root.stepCount(row.api, -1)
+            }
             Rectangle {
-              visible: !!row.ach.progress
+              visible: !!row.count
               anchors.verticalCenter: parent.verticalCenter
               width: Commons.Style.space(48)
               height: 3
               radius: 1.5
               color: Qt.alpha(root.foreground, 0.15)
               Rectangle {
-                width: row.ach.progress ? parent.width * row.ach.progress.value / row.ach.progress.max : 0
+                width: row.count ? parent.width * row.count.value / row.count.max : 0
                 height: parent.height
                 radius: parent.radius
                 color: Commons.Color.accent
@@ -3337,8 +3776,18 @@ Item {
               opacity: 0.9
             }
             Caption {
+              anchors.verticalCenter: parent.verticalCenter
               text: row.ach.unlocked ? (row.ach.time ? root.day(row.ach.time) : "Unlocked")
-                : row.ach.progress ? row.ach.progress.value + " / " + row.ach.progress.max : "Locked"
+                : row.ticked ? "✓ by hand"
+                : row.count ? row.count.value + " / " + row.count.max + (row.handCount ? " by hand" : "") : "Locked"
+              color: row.ticked ? Commons.Color.accent : root.foreground
+              opacity: row.ticked ? 0.95 : 0.6
+            }
+            CountStep {
+              anchors.verticalCenter: parent.verticalCenter
+              visible: !!row.handCount && row.active
+              by: 1
+              onClicked: root.stepCount(row.api, 1)
             }
           }
         }
@@ -3832,6 +4281,38 @@ Item {
             }
             Prose { width: parent.width; text: root.safeMarkdown(walkOverview.text) }
           }
+        }
+
+        // The player's notes on the game (ADR 21), with a guide or without.
+        Column {
+          width: parent.width
+          visible: root.game !== null && !root.appliedSearch && !root.makingHere
+          spacing: Commons.Style.space(4)
+          Item {
+            width: parent.width
+            height: Math.max(notesTitle.implicitHeight, notesEdit.height)
+            SectionLabel {
+              id: notesTitle
+              anchors.verticalCenter: parent.verticalCenter
+              text: (root.gameNotesOpen ? "▾ " : "▸ ") + "YOUR NOTES"
+              MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.gameNotesOpen = !root.gameNotesOpen
+              }
+            }
+            Chip {
+              id: notesEdit
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              visible: root.noteApi !== "game"
+              text: root.hand.note ? "Edit" : "Add a note"
+              onClicked: root.editNote("game")
+            }
+          }
+          // Folded hides it as a secret does; overriding `visible` would
+          // show a bare ✎ for a game with no note.
+          NoteLine { api: "game"; secret: !root.gameNotesOpen; editable: root.filter === "guide" }
         }
 
         // The walkthrough (ADR 17): the game's chapters in play order, each
@@ -4843,14 +5324,19 @@ Item {
         Key { cap: root.treeKeys ? "↑↓←→" : "↑↓"; action: "move" }
         Key { cap: "Enter"; action: root.treeKeys ? "open" : "reveal" }
         Key { cap: "⇧Enter"; action: "reveal all" }
+        Key { cap: "^Enter"; action: "tick" }
+        Key { cap: "^N"; action: "note" }
         Key { cap: "Tab"; action: "filter" }
         Key { visible: !root.treeKeys; cap: "←→"; action: "sort" }
         Key { cap: "Esc"; action: root.search ? "clear search" : root.treeKeys && root.treePick ? "close details" : "close" }
       }
       Caption {
         anchors.horizontalCenter: parent.horizontalCenter
-        text: "Type to search · rarity is the share of all players"
-        opacity: 0.35
+        width: Math.min(implicitWidth, card.width - Commons.Style.space(40))
+        text: root.handError ? "Couldn't save: " + root.handError
+              : "Type to search · rarity is the share of all players · a tick by hand is never an unlock"
+        color: root.handError ? Commons.Color.urgent : root.foreground
+        opacity: root.handError ? 1 : 0.35
       }
     }
   }
