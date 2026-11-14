@@ -10,6 +10,7 @@
 #   dev/render.sh loading out.png        the Now tab's skeleton, before data
 #   dev/render.sh tracker-loading out.png
 #   dev/render.sh settings out.png       its Settings tab (settings-toasts, -now, -guides, -stores: one section)
+#   dev/render.sh settings-monitors out.png  Toasts with many monitors and a long disconnected name
 #   dev/render.sh tracker out.png        the achievement tracker
 #   dev/render.sh guide out.png          its Guide view (guide-making: a make running; guide-empty: none yet;
 #                                        guide-failed: the last make failed; guide-steps: a guide with
@@ -122,6 +123,7 @@ case $target in
   now|idle|empty|profile|settings|settings-*|games|loading)
     w=$(( panel + 40 )) h=900 at=2500
     section=overview; [[ $target == settings-* ]] && { section=${target#settings-}; target=settings; }
+    monitors=false; [[ $section == monitors ]] && { monitors=true; section=toasts; }
     tab=now; [[ $target == settings || $target == games || $target == profile ]] && tab=$target
     data=now.json; [[ $target == idle || $target == empty ]] && data=$target.json; [[ $target == games ]] && data=games.json
     feed="item.cabinet = JSON.parse(sample.text())"
@@ -135,6 +137,9 @@ case $target in
     if [[ $target == settings ]]; then
       extra="FileView { id: agentSample; path: \"$repo/dev/samples/agents.json\"; blockLoading: true }"
       feed="$feed; item.guideAgents = JSON.parse(agentSample.text()); item.guideModels = ({ claude: { model: \"sonnet\", effort: \"medium\" } }); item.guideJail = true; item.defaultKeyCheck = ({ key: \"SUPER + CTRL + G\", valid: true, taken: \"\" }); item.settingsSection = \"$section\""
+      if $monitors; then
+        feed="$feed; item.screenName = 'HEADLESS-' + 'LONG'.repeat(14); item.screenChoices = [{ value: 'focused', label: 'Focused' }].concat(['DP-1', 'DP-2', 'HDMI-A-1', 'HDMI-A-2', 'eDP-1', item.screenName].map(function(name) { return { value: name, label: name + (name === item.screenName ? ' (off)' : '') } }))"
+      fi
     fi
     view="Loader {
         x: 20; y: 20; width: $panel
