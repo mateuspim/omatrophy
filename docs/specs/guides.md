@@ -1,6 +1,6 @@
 # 100% guides
 
-Status: slices b to e built; f (manual ticks) waits on its own ADR. The slices below
+Status: slices b to e built; f (manual ticks) is proposed in [ADR 21](../adr/0021-tick-and-note-by-hand.md), not built. The slices below
 build it in order, and each one updates this page to match the code. Why it works this way: [ADR 14](../adr/0014-generate-guides-through-the-users-agent.md).
 
 ## Slices
@@ -12,7 +12,7 @@ build it in order, and each one updates this page to match the code. Why it work
 | c (built) | Maker: gather, the four agent adapters, prompts, verify, `guide make/stop/status`, tests with a fake agent. |
 | d (built) | Tracker Guide view (`TrackerView.qml`, hot-reloads): route, phases, missables first, next up, Make guide button; `dev/render.sh guide`. |
 | e (built) | Now tab "Up next" from the plan. |
-| f | Manual ticks, counters, notes: needs its own ADR (ADR 9's open question). |
+| f (proposed) | Ticks, counts and notes by hand: [ADR 21](../adr/0021-tick-and-note-by-hand.md), [by hand](by-hand.md). |
 
 ## Files
 
@@ -59,7 +59,10 @@ per-DLC sections, Efficiency combos. Links are the citations.>
 The reader takes the prose between `## Guide notes` and `## Achievements`.
 A `[x]` line without `_(unlocked ...)_` is a hand tick and counts as done
 (slice b). OmaTrophy rewrites the checklist from the store when it makes a
-guide; it never changes a hand tick.
+guide; it never changes a hand tick. *Proposed (ADR 21):* `ticks` also takes
+the ticks in `by-hand.json`, which can overrule a `.md` hand tick
+([by hand](by-hand.md#in-game-and-guide)); OmaTrophy still never writes a
+guide to tick.
 
 ### `.plan.json`
 

@@ -91,7 +91,8 @@ step: the watcher keeps `{"store:app": {"step": "<step>:<title>",
 "shown": [apis]}}` in `~/.local/state/omatrophy/missable-reminded.json`
 and sends it again only on a new step (number or title), or when a
 missable it never named on this step appears (the card then lists every
-open one). A missable unlocked since sends nothing new. Not sent with `missable-reminder` off, for a
+open one). A missable unlocked since sends nothing new, nor one ticked by hand
+(the guide's `ticks`; with ADR 21, proposed, also `by-hand.json`). Not sent with `missable-reminder` off, for a
 game without a guide, or for a game already running when the watcher
 started. The shell shows it right after any `difficulty` card, before
 queued toasts, never drops it, and plays no chime.
