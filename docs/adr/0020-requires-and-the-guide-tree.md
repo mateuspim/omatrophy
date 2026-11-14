@@ -62,3 +62,21 @@ grid by phase. What kept the outline readable carries over: everything
 fits the column at fonts 9 to 16, the track runs down the side when
 the column is narrow, and every node's tip and needs show inline on a
 click rather than in a hover.
+
+## Update 2026-11-14: a stated prerequisite is checked
+
+"A prerequisite no excerpt states is left out" turned out to cover one
+that an excerpt did state: RE5's guide left War Hero (Professional)
+with no `requires` under "Professional difficulty is unlocked after
+beating the game on Veteran". The owner asked classify to push harder
+(2026-11-11). The prompt now says a quoted prerequisite must land in
+`requires`, and the maker reads, for each item left without one, the
+excerpts it was given, its quotes and its tip for a sentence that
+names the item (its name or the setting it needs) and another
+achievement (its name or setting) around "is unlocked after", "is
+locked until", "unlocks", "to unlock ... you must" or "you must ...
+before you can play". One found is an error that asks again;
+the answer after it stands, as the model may know no achievement
+stands for that prerequisite. It reads sentences, not meaning, so it
+finds only these shapes; a miss costs no more than before.
+`guides.MAKER` goes to 7.

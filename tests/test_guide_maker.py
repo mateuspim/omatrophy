@@ -99,6 +99,15 @@ class Job(unittest.TestCase):
         with open(os.path.join(self.agent_dir, 'calls')) as f:
             return len(f.read())
 
+    def test_classify_asks_again_for_a_prerequisite_its_excerpts_state(self):
+        write(self.guides, 'sources/starfall-odyssey-1/notes.txt',
+              'Star Counter mode is unlocked after you finish Last Lantern. Count the stars at night.')
+        write(self.agent_dir, 'items.retry', ITEMS.replace('"phase": "grind",', '"phase": "grind", "requires": ["Last Lantern"],'))
+        self.assertEqual(guide_maker.make(self.job())['state'], 'done')
+        plan = json.loads(read(os.path.join(self.guides, 'starfall-odyssey-1.plan.json')))
+        self.assertEqual(plan['items']['Star Counter']['requires'], ['Last Lantern'])
+        self.assertEqual(plan['items']['Last Lantern']['requires'], [])
+
     def test_fetch_replaces_agent_summaries_and_skips_listings(self):
         fetched = []
         job = guide_maker.Job('steam', '1', 'G', [dict(a) for a in ACHS], FakeAgent(self.agent_dir), web=False,
@@ -272,6 +281,83 @@ class Checks(unittest.TestCase):
         self.assertEqual(len(errors), 1)
         self.assertIn("'Z'", errors[0])
         self.assertEqual(guide_maker.check_item({'name': 'A', 'requires': 'B'}, {'A', 'B'})[0]['requires'], [])
+
+    def test_missable_is_only_for_one_the_save_cannot_get_again(self):
+        # Regression: MGSV side ops, replayable from the mission list, came
+        # back missable (owner, 2026-11-11).
+        item, errors = guide_maker.check_item({'name': 'A', 'phase': 'missable', 'missable': True,
+                                               'missable_note': 'Before the mission ends',
+                                               'tips': 'Replay the mission later from the list.'}, {'A'})
+        self.assertTrue(item['missable'])
+        self.assertEqual(len(errors), 1)
+        self.assertIn("'Replay the mission'", errors[0])
+        self.assertIn('keep the warning in tips', errors[0])
+        for words in ('There is no chapter select.', 'Free roam ends after the finale.', 'Lost when chapter 5 ends.',
+                      'Chapter select is not available.', 'Chapter select is unavailable here.',
+                      'Chapter select resets your progress.'):
+            self.assertEqual(guide_maker.check_item({'name': 'A', 'phase': 'missable', 'missable': True, 'missable_note': words},
+                                                    {'A'})[1], [], words)
+        # A warning in tips of one that isn't missable is what we want.
+        self.assertEqual(guide_maker.check_item({'name': 'A', 'phase': 'quick', 'missable': False,
+                                                 'tips': 'Easiest now; chapter select brings it back.'}, {'A'})[1], [])
+
+    def test_classify_prompt_says_missable_is_lost_for_the_save(self):
+        text = guide_maker.prompt('classify', game='G', excerpts='', achievements='- A', all_names='- A', phases='x')
+        self.assertIn('no chapter select, mission replay or', text)
+        self.assertIn('keep the warning in `tips`', text)
+        walk = guide_maker.prompt('walkthrough', game='G', progress='0 of 1', excerpts='', table='- A: story')
+        self.assertIn('back only through a replay', walk)
+
+    def test_prerequisite_said_finds_the_three_shapes(self):
+        achs = [{'name': 'War Hero', 'desc': 'Complete all chapters on Professional'},
+                {'name': 'Veteran Soldier', 'desc': 'Complete all chapters on Veteran'},
+                {'name': 'Ace', 'desc': 'Clear chapter 1-1'}]
+        words = guide_maker.prerequisite_words(achs)
+        self.assertEqual(words['War Hero'], ({'War Hero', 'Professional'}, {'Veteran Soldier', 'Veteran'}))
+        for said in ('Professional difficulty is unlocked after beating the game on Veteran.',
+                     'Beating the game on Veteran unlocks Professional.',
+                     'To unlock Professional mode, you must first complete the game on Veteran.'):
+            self.assertEqual(guide_maker.prerequisite_said([said], *words['War Hero']), (said, 'Veteran'))
+            # The other way round: Veteran needs nothing.
+            self.assertEqual(guide_maker.prerequisite_said([said], *words['Veteran Soldier']), ('', ''))
+        for said in ('Play Professional with a partner. Veteran is easier.', 'Professional unlocks a costume.'):
+            self.assertEqual(guide_maker.prerequisite_said([said], *words['War Hero']), ('', ''), said)
+
+    def test_prerequisite_said_more_shapes_and_no_false_ones(self):
+        achs = [{'name': 'War Hero', 'desc': 'Complete all chapters on Professional'},
+                {'name': 'Hero', 'desc': 'Complete all chapters on Veteran'}]
+        words = guide_maker.prerequisite_words(achs)
+        for said in ('You need to beat Veteran before you can play on Professional.',
+                     'Professional is locked until you finish Veteran.'):
+            self.assertEqual(guide_maker.prerequisite_said([said], *words['War Hero']), (said, 'Veteran'), said)
+        # "by default" is no gate, and "Hero" inside the item's own "War
+        # Hero" is not another achievement.
+        for said in ('Professional is unlocked by default, unlike Veteran.',
+                     'War Hero is unlocked after any clear.'):
+            self.assertEqual(guide_maker.prerequisite_said([said], *words['War Hero']), ('', ''), said)
+
+    def test_a_quoted_prerequisite_left_out_of_requires_asks_again(self):
+        # Regression: RE5's War Hero kept `requires` empty under this quote
+        # (owner, 2026-11-11).
+        quote = 'Professional difficulty is unlocked after beating the game on Veteran.'
+        every = ['War Hero', 'Veteran Soldier']
+        words = guide_maker.prerequisite_words([{'name': 'War Hero', 'desc': 'Complete all chapters on Professional'},
+                                                {'name': 'Veteran Soldier', 'desc': 'Complete all chapters on Veteran'}])
+        prereqs = {n: words[n] + ([quote],) for n in every}
+        empty = '<items>[{"name": "War Hero", "phase": "challenge", "requires": []}]</items>'
+        items, errors = guide_maker.check_items(empty, ['War Hero'], every, {}, prereqs)
+        self.assertEqual(len(errors), 1)
+        self.assertIn('opens only after Veteran', errors[0])
+        filled = '<items>[{"name": "War Hero", "phase": "challenge", "requires": ["Veteran Soldier"]}]</items>'
+        self.assertEqual(guide_maker.check_items(filled, ['War Hero'], every, {}, prereqs)[1], [])
+        # Its own quote counts as much as the excerpts it was shown.
+        cited = ('<items>[{"name": "War Hero", "phase": "challenge", "cites": [{"source": "S1.1", "quote": "%s"}]}]'
+                 '</items>' % quote)
+        self.assertEqual(len(guide_maker.check_items(cited, ['War Hero'], every, {}, {'War Hero': words['War Hero'] + ([],)})[1]), 1)
+
+    def test_classify_prompt_puts_a_quoted_prerequisite_in_requires(self):
+        text = guide_maker.prompt('classify', game='G', excerpts='', achievements='- A', all_names='- A', phases='x')
+        self.assertIn('must be in `requires`', text)
 
     def test_requires_cycles_break_at_the_closing_edge(self):
         text = ('<items>[{"name": "Pro", "phase": "challenge", "difficulty": 4, "requires": ["Vet"]},'
@@ -731,8 +817,54 @@ class Bench(unittest.TestCase):
         self.assertEqual((m['coverage'], m['verified'], m['complete'], m['route'], m['sections']),
                          (0.5, 0.5, 0.625, 0.5, 0.5))
         self.assertEqual(m['walkthrough'], 0.0)
-        self.assertEqual(guide_bench.score(m), round(35 * 0.5 + 25 * 0.5 + 15 * 0.625 + 10 * 0.5 + 5 * 0.5, 1))
+        # No actions scores 0; no prerequisites and no markers to get wrong, 1.
+        self.assertEqual((m['useful_actions'], m['prerequisites'], m['story_markers']), (0.0, 1.0, 1.0))
+        self.assertEqual(guide_bench.score(m), round(30 * 0.5 + 20 * 0.5 + 10 * 0.625 + 10 * 0.5 + 5 * 0.5 + 5 + 5, 1))
         self.assertEqual(sum(guide_bench.WEIGHTS.values()), 100)
+
+    def test_filler_actions_only_say_to_play_on(self):
+        import guide_bench
+        # Regression: 15 of the RE5 bench's 65 actions (2026-11-10) were
+        # "Play through to the end of the chapter".
+        for what in ('Play through to the end of the chapter', 'Finish the chapter.', 'Complete Chapter 3-2',
+                     'Continue the story to unlock Hero', 'Play through the chapter for the Completed 1-1 trophy'):
+            self.assertTrue(guide_bench.filler(what), what)
+        for what in ('Complete the mission without being spotted', 'Beat Uroboros with the flame jets',
+                     'Clear the area and get the Survivor trophy', 'Finish the game on Veteran', ''):
+            self.assertFalse(guide_bench.filler(what), what)
+        plan = {'walkthrough': [{'actions': [{'what': 'Finish the chapter'}, {'what': 'Shoot the lamp'}]},
+                                {'actions': [{'what': 'Open the gate'}, {'what': 'Take the key'}]}]}
+        self.assertEqual(guide_bench.useful_measure(plan), 0.75)
+        self.assertEqual(guide_bench.useful_measure({'walkthrough': [{'title': 'x'}]}), 0.0)
+
+    def test_prerequisites_score_the_quoted_ones_and_the_cited_ones(self):
+        import guide_bench
+        achs = [{'name': 'War Hero', 'desc': 'Complete all chapters on Professional'},
+                {'name': 'Pro Shot', 'desc': 'Clear chapter 1-1 on Professional'},
+                {'name': 'Veteran Soldier', 'desc': 'Complete all chapters on Veteran'}]
+        said = {'quote': 'Professional difficulty is unlocked after beating the game on Veteran.', 'verified': True}
+        items = {'War Hero': {'name': 'War Hero', 'requires': ['Veteran Soldier'], 'cites': [said]},
+                 'Pro Shot': {'name': 'Pro Shot', 'requires': [], 'cites': [said]},
+                 'Veteran Soldier': {'name': 'Veteran Soldier', 'cites': [dict(said, verified=False)]}}
+        # One of two quoted prerequisites landed; the one requires is cited.
+        self.assertEqual(guide_bench.prerequisite_measure(items, achs), 0.5 * 0.5 + 0.5 * 1)
+        items['War Hero']['unverified'] = ['requires']
+        self.assertEqual(guide_bench.prerequisite_measure(items, achs), 0.25)
+        # Nothing stated and nothing claimed: nothing to get wrong.
+        self.assertEqual(guide_bench.prerequisite_measure({'A': {'name': 'A'}}, ()), 1.0)
+
+    def test_markers_score_story_markers_and_marked_story_steps(self):
+        import guide_bench
+        plan = {'items': {'C1': {'name': 'C1', 'phase': 'story'}, 'C2': {'name': 'C2', 'phase': 'story'},
+                          'Flash': {'name': 'Flash', 'phase': 'quick'}},
+                'walkthrough': [{'achievements': ['C1', 'Flash'], 'marker': 'C1'},
+                                {'achievements': ['C2'], 'marker': ''},
+                                {'achievements': ['Flash'], 'marker': 'Flash'},
+                                {'achievements': ['Old'], 'marker': 'Old'}]}
+        # Of the markers C1 and Flash (Old is no item), one is story; of the
+        # two story steps, one names a marker.
+        self.assertEqual(guide_bench.marker_measure(plan), 0.5 * 0.5 + 0.5 * 0.5)
+        self.assertEqual(guide_bench.marker_measure({'items': {}, 'walkthrough': [{'achievements': []}]}), 1.0)
 
     def test_walkthrough_measure_places_open_ones_and_counts_grounded_steps(self):
         import guide_bench

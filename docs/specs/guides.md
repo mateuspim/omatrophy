@@ -69,7 +69,7 @@ OmaTrophy doesn't know survive a rewrite.
 ```json
 {
   "format": 2,
-  "maker": 6,
+  "maker": 7,
   "generated": 1793059700,
   "agent": {"name": "claude", "model": "", "stages": {"classify": 4, "route": 1}},
   "order": ["Name", "..."],
@@ -118,13 +118,21 @@ OmaTrophy doesn't know survive a rewrite.
   time, classify estimates one (`"time_estimate": true` in its answer,
   not stored) and `time` is always in `unverified`, even when another
   quote verifies the item.
-- `missable_note` says where the point of no return is; it's empty when
-  that's unknown.
+- `missable` (and the `missable` phase) means lost for that save: since
+  maker 7, one that chapter select, a mission replay or free roam brings
+  back isn't missable, and its `tips` carry the warning. A missable item
+  whose own `missable_note` or `tips` name such a way back ("chapter
+  select", "replay the mission", "free roam", not "there is no chapter
+  select", "chapter select is not available" or "free roam ends") is an error that asks again.
+  `missable_note` says where the point of no return is; it's empty when
+  that's unknown. A walkthrough step's `missables` still warn about
+  ones only a replay brings back.
 - `counter` is set only for a target of 2 or more; `null` otherwise.
 - `combine_with`: achievements best done in the same run, a choice.
   `requires` (maker 4, [ADR 20](../adr/0020-requires-and-the-guide-tree.md)):
   achievements that must be unlocked first because the game locks this
-  one until then, only when a source says so. Both hold names known to
+  one until then, only when a source says so; a quoted prerequisite
+  must land there (maker 7, checked in classify). Both hold names known to
   the game, never the item itself; `requires` has no cycles (the maker
   drops the edge that closes one). Older plans have no `requires`.
 - `stacks` (maker 6): for an achievement that needs a difficulty setting,
@@ -208,7 +216,17 @@ it.
    `<items>[...]</items>`. A `requires` naming an unknown achievement, or
    closing a cycle with this batch, earlier ones or the earlier guide's
    unlocked items, is an error that asks again; the closing edge is
-   dropped.
+   dropped. So is an item with no `requires` (maker 7) when a sentence of
+   the excerpts it was given, its quotes or its tip says it opens only
+   after another achievement: the sentence names the item (its name, or
+   the difficulty setting it needs, `difficulty.py`) and another one's
+   name or setting, as "<it> is unlocked/available after <other>",
+   "<other> unlocks <it>", "to unlock <it>, you must ... <other>", "you
+   must ... <other> before you can play <it>" or "<it> is locked until
+   <other>" ("unlocked by default" is no gate)
+   ("Professional difficulty is unlocked after beating the game on
+   Veteran" for a Professional clear). An answer that still leaves it
+   out is kept.
 4. **Route** (model, no tools). The compact table of every item (no
    excerpts), the player's progress, DLC. Answers
    `<route>{order, sections}</route>`. Plain prose for the player: no
@@ -283,21 +301,31 @@ metrics, seconds, cost_usd, tokens, calls, folder, name}]}`, best first;
 `requires`), `needs_cited` (those whose `requires` a verified quote
 backs), `actions` (all steps' actions), `where` (0..1, the share of
 actions naming a place) and `markers` (0..1, the share of steps naming a
-marker); the table shows them as `needs` (cited/all), `where` and
-`marker`. They stay out of the score: a game may have no prerequisites,
-so more `requires` isn't better, a place is easy to fill with words no
-check reads, and a game may have no chapter-clear achievements, so a
-step without a marker can be right.
+marker). The table shows `acts` (useful_actions), `needs`
+(prerequisites, then cited/all), `marker` (story_markers) and `where`.
 
-The score (0-100) uses only what OmaTrophy checks: `verified` (share of
-covered items with a verified quote) 35, `coverage` (share of open
-achievements classified) 25, `complete` (phase, difficulty, time and tip
-filled) 15, `route` (open achievements placed in the order) 10,
-`walkthrough` (half the open achievements placed in a step, half the
-steps with a verified quote) 10, `sections` (overview, route, missables,
-combos written) 5. The play order of the steps isn't checked, so it
-isn't scored. Benches before 0.6.4 had no `walkthrough` measure and gave
-`complete` 20 and `sections` 10. Ties go to
+The score (0-100) uses only what OmaTrophy checks:
+
+| Measure | Weight | What it is |
+| --- | --- | --- |
+| `verified` | 30 | share of covered items with a verified quote |
+| `coverage` | 20 | share of open achievements classified |
+| `complete` | 10 | phase, difficulty, time and tip filled |
+| `route` | 10 | open achievements placed in the order |
+| `walkthrough` | 10 | half the open achievements placed in a step, half the steps with a verified quote |
+| `sections` | 5 | overview, route, missables, combos written |
+| `useful_actions` | 5 | share of the steps' actions that say more than "play on": an action whose `what`, with a trailing "to unlock X" or "for the X trophy" taken off, is only "play through / finish / complete / continue / beat / clear the chapter, mission, level, story, game, episode, act, stage or campaign" (one more word allowed: "Complete Chapter 3-2") is filler; 0 when the walkthrough has no actions |
+| `prerequisites` | 5 | half the covered items whose verified quotes state a prerequisite (the classify check, `guide_maker.prerequisite_said`, with the store's descriptions naming the settings) that have a `requires`, half the items with a `requires` that a verified quote backs; each half 1 when it has nothing to count, so a game with no prerequisites scores 1 |
+| `story_markers` | 5 | half the markers that are `story` items (a marker that is no classified item is left out), half the steps holding a `story` item that name a marker; each half 1 when it has nothing to count |
+
+The play order of the steps isn't checked, so it isn't scored, and nor
+is the number of `requires`, markers or places: more isn't better. The
+weights changed in 0.9.0 (actions, prerequisites and markers were
+counted, unscored: `verified` 35, `coverage` 25, `complete` 15, `route`
+10, `walkthrough` 10, `sections` 5), so scores before it don't compare
+one to one; `results.json` keeps the `weights` it used. Benches before
+0.6.4 had no `walkthrough` measure and gave `complete` 20 and
+`sections` 10. Ties go to
 the cheaper (unknown cost last), then the faster. A failed or stopped
 entry scores 0. `--pick` saves the best as `guide-agent` and its
 `guide-models` pick (endpoint included); `--keep` copies its guide over

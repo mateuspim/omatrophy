@@ -5,7 +5,9 @@ Results of `omatrophy.py guide bench` on three Steam games, measured
 How the score works: [docs/specs/guides.md](../specs/guides.md#benchmark).
 These guides had no walkthrough yet, so the scores use the weights before
 0.6.4 (no `walkthrough` measure; fields 20, sections 10); a bench today
-scores the walkthrough too, and its numbers don't compare one to one.
+scores the walkthrough, and since 0.9.0 its actions, prerequisites and
+markers too, so its numbers don't compare one to one. Re-running these
+benches with today's weights costs money; it's the owner's call.
 Results vary per game, per run and, for a local model, per machine; treat
 them as one sample, not a ranking to trust blindly. Run your own with your
 games.

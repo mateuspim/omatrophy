@@ -44,8 +44,9 @@ Steps:
   builds up over many steps (collect them all, every mission, every rank)
   goes where it finishes, often a late step of its own, not the first
   step that starts it.
-- `missables`: names from `achievements` that are lost if the player
-  moves on without them.
+- `missables`: names from `achievements` to get before moving on: lost
+  for good, or back only through a replay (chapter select, a mission
+  replay); the step warns about them.
 - `marker`: the one name from this step's `achievements` that proves
   the step is finished, the way a chapter or mission clear does ("Clear
   Chapter 3-2"); the tracker places the player after the last step whose

@@ -19,8 +19,10 @@ Every achievement in the game, for `combine_with` and `requires`:
 For each achievement to classify, give:
 
 - `name`: exactly as listed.
-- `phase`: one of {{phases}}. `missable` for anything that can be locked
-  out (a point of no return, a choice, a timed event); `story` for
+- `phase`: one of {{phases}}. `missable` for one that, once passed, the
+  same save can never get again (a point of no return, a choice, a timed
+  event) and nothing brings back: no chapter select, mission replay or
+  free roam afterwards; `story` for
   progression; `quick` for things under 15 minutes; `challenge` for skill or
   difficulty runs; `grind` for long counters; `collect` for collectibles;
   `online` for multiplayer.
@@ -29,8 +31,12 @@ For each achievement to classify, give:
   as whole numbers. When no source gives a time, estimate one from what
   the achievement asks and the game's length, and set
   `"time_estimate": true`; the guide shows it as unverified.
-- `missable`: true or false; `missable_note`: where the point of no return
-  is, or "" when unknown.
+- `missable`: true only by the same rule as the `missable` phase: lost
+  for that save. One that chapter select, a mission replay or free roam
+  can get later is not missable (give it the phase of what it asks):
+  keep the warning in `tips` instead ("easiest before leaving the
+  village; chapter select brings it back"). `missable_note`: where the
+  point of no return is, or "" when unknown.
 - `counter`: `{"target": 50, "label": "kills"}` for a count of 2 or more,
   else null.
 - `combine_with`: names of achievements best done in the same run (a
@@ -39,8 +45,12 @@ For each achievement to classify, give:
   can be, because the game locks it until then: a harder difficulty that
   opens only after an easier one is beaten, a mode or chapter that opens
   after the story. Only when an excerpt says so, with a cite; else `[]`.
-  Never the chapters played on the way, and never a "same run" partner:
-  those go in `combine_with`.
+  When an excerpt says this one's difficulty, mode or chapter opens only
+  after another ("Professional is unlocked after beating the game on
+  Veteran"), the achievement for that prerequisite (the Veteran clear)
+  must be in `requires`, with that quote in `cites`; every achievement
+  on the locked setting needs it. Never the chapters played on the way,
+  and never a "same run" partner: those go in `combine_with`.
 - `stacks`: only for an achievement that needs a difficulty setting
   ("finish the game on Normal"): `true` when an excerpt says a run on a
   harder setting also unlocks it (beating Hard gives the Normal and Easy

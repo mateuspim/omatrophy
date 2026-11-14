@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.9.0 - 2026-11-14
+
+- Guides: **missable** now means lost for that save. Classify marks one
+  missable only when no chapter select, mission replay or free roam
+  brings it back, and asks again when its own note says one does; the
+  tip and the walkthrough step still warn you to get it on the way.
+  Guides made before say "older maker" (maker 7); **Make again** sorts
+  their missables.
+- Guides: a prerequisite a source states lands in `requires`, so the
+  Tree's chains show it ("Professional difficulty is unlocked after
+  beating the game on Veteran" makes every Professional achievement
+  need the Veteran clear). Classify asks again when an excerpt, quote
+  or tip says an achievement opens only after another and its
+  `requires` is empty.
+- `guide bench` scores the walkthrough's actions (those that say more
+  than "play through the chapter"), prerequisites (quoted ones in
+  `requires`, every `requires` quoted) and markers (story clears, story
+  steps marked), 5 points each, instead of only counting them; verified
+  goes to 30, coverage to 20, fields to 10. The table shows them as
+  `acts`, `needs` and `marker`. Scores from earlier benches, the
+  README's results table included, used the old weights.
+
 ## 0.8.1 - 2026-11-14
 
 - `test difficulty` and Settings > Toasts > Difficulty > Try show the

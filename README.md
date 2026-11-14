@@ -182,6 +182,10 @@ return is, a tip and what it combines with. A hidden achievement keeps its
 name and tip secret until you hover it, or **Reveal all** (next to Up
 next and the trophy list, or Shift+Enter) shows every one, in every game,
 until you hide them again.
+Missable means lost for that save: one that chapter select, a mission
+replay or free roam brings back isn't, though its tip and its
+walkthrough step still warn you to get it on the way (guides made
+before 0.9.0 flag more; **Make again** sorts them).
 Anything no source backs says
 "(unverified)". With a guide, the Now tab's **Up next** follows its route.
 
@@ -224,7 +228,9 @@ place, then the move, ticked once the trophy it gives unlocks.
 - **Chains**: each trophy that needs others first as a small tree, the
   goal on top. A line lights once the trophy under it unlocks; a locked
   one is greyed with a padlock and "needs ..."; **READY** (its needs
-  done, itself open) glows.
+  done, itself open) glows. A source saying a setting opens only after
+  another ("Professional is unlocked after Veteran") always makes a
+  chain in a guide made since 0.9.0.
 - **On their own**: the rest as a grid by phase (click a phase to fold
   it), with a bar for counters.
 
@@ -311,8 +317,10 @@ omatrophy.py guide steam 620                   # the guide, as JSON
 Which model writes the best guide? `guide bench` makes one game's guide
 with each, side by side, and ranks them by what OmaTrophy can check
 (quotes verified, achievements covered, fields filled, the walkthrough's
-reach), with time and
-cost. `--pick` makes the winner your default; `--keep` keeps its guide.
+reach, and since 0.9.0 whether its actions say more than "play on",
+whether prerequisites the quotes state are in the chains, and whether
+its markers are story clears), with time and cost. Weights:
+[docs/specs/guides.md](docs/specs/guides.md#benchmark). `--pick` makes the winner your default; `--keep` keeps its guide.
 A model on your own machine takes part through OpenCode (`opencode:<provider/model>`,
 once its **Check** passes) or through Claude Code pointed at a local
 Anthropic-compatible server:
@@ -323,7 +331,9 @@ omatrophy.py guide bench steam 620 claude:haiku claude:sonnet:medium \
 ```
 
 One bench on three games (2026-11-06, unreleased guides build, web
-research on), scored before the bench measured the walkthrough. Results
+research on), scored before the bench measured the walkthrough and
+before the 0.9.0 weights (actions, prerequisites, markers), so a bench
+today scores differently. Results
 vary per game, per run and per machine; full numbers and caveats in
 [docs/guide/guide-models.md](docs/guide/guide-models.md).
 
