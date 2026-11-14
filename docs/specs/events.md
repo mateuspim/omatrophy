@@ -96,3 +96,27 @@ queued toasts, never drops it, and plays no chime.
 | `step`, `steps` | number | The step, 1-based, and how many the walkthrough has. |
 | `title` | string | The step's title. |
 | `missables` | object[] | `{api, name, hidden, note}` per open missable, the step's `missables` first. `name` is `"Hidden achievement"` and `hidden` `true` for a hidden achievement unless `reveal-hidden` is on; `note` is the guide's `missable_note` (when it is lost), or `""`. |
+
+## `recap`
+
+The game a store was running at the last check stopped (nothing runs
+now, or another game does), and its session unlocked something: an
+unlock with a time at or after the session's start that didn't come from
+a backfill (`remote`). The session starts a check (5 s) before its
+launch was seen, or, for a game already running when the watcher
+started, at the watcher's start. A store that fails to say what runs
+keeps its last answer, so one bad read neither ends a session nor sends
+its recap. Not sent with `session-recap` off or after a session with no
+unlock. The shell queues it like a toast (a full queue may drop it) and
+plays no chime.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `type` | `"recap"` | |
+| `store`, `app`, `game` | string | As above. |
+| `header` | string | Banner URL, or `""`. |
+| `minutes` | number | How long the session ran, rounded, at least 1. |
+| `count` | number | Unlocks in the session. |
+| `unlocked`, `total` | number | Unlocked now, and the game's total. |
+| `rarest` | object or null | The session's rarest unlock, `{name, percent, tier, icon}` (`tier` and `icon` as in `unlock`), or null when the store gives none of them a rarity. |
+| `platinum` | bool | The session took the game to 100%. |

@@ -29,6 +29,11 @@ achievement list.
   10% or fewer, with glitter and a sweep of light for gold.
 - A platinum card at 100%: the trophy spins in over the game's hero art and
   the count rolls up.
+- A recap when you quit a game: how long you played, the trophies the
+  session brought, the rarest of them, and where the game stands now.
+  Only after a session that unlocked something; no chime. Off in
+  Settings > Toasts > Recap, where **Try** shows one (`omatrophy.py set
+  session-recap off`, `omatrophy.py test recap`).
 - The achievement icon, its description, the share of players, and your
   progress through the game, filling in as you watch.
 - A trophy cabinet in the bar: the game you're playing with this session's
@@ -394,7 +399,7 @@ omatrophy.py set sound off              # on, off, omatrophy, classic
 omatrophy.py set icons vector           # omarchy, vector, painted
 omatrophy.py set glass clear            # clear, frosted, solid
 omatrophy.py hide steam 20920           # out of "closest to platinum" and the shelf; unhide brings it back
-omatrophy.py test platinum              # bronze, silver, gold, platinum, difficulty, missable
+omatrophy.py test platinum              # bronze, silver, gold, platinum, difficulty, missable, recap
 omatrophy.py status                     # progress of every game
 omatrophy.py now                        # the panel's Now tab, as JSON
 omatrophy.py game                       # every achievement of the running game

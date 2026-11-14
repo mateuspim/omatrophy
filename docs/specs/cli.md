@@ -7,7 +7,7 @@ installed.
 | Command | Does |
 | --- | --- |
 | `watch` | The default. Prints [event lines](events.md) until killed. `Service.qml` runs this. After `ready` it looks up uncached game names in the background (eight at a time, 4 s timeout each); events never wait on it. |
-| `test [kind]` | Queues one sample event for a running watcher, built from your most recently played game. `kind`: `bronze`, `silver`, `gold` (or `rare`), `platinum`, `difficulty` (the launch reminder; made-up settings when the game has none), `missable` (the missable reminder; a made-up step when the game's guide has none open); `unlock` (the default) keeps the achievement's real rarity. |
+| `test [kind]` | Queues one sample event for a running watcher, built from your most recently played game. `kind`: `bronze`, `silver`, `gold` (or `rare`), `platinum`, `difficulty` (the launch reminder; made-up settings when the game has none), `missable` (the missable reminder; a made-up step when the game's guide has none open), `recap` (the session recap, from the game's last four unlocks, with made-up rarity and length); `unlock` (the default) keeps the achievement's real rarity. |
 | `status` | Prints `[{store, app, unlocked, total}]` for every game with achievements, most complete first. |
 | `cabinet` | Prints `{games, trophies, platinums, nearest}`: totals across every game, and `nearest`, the four started, unfinished games closest to 100%, each a `status` row plus `game` (name) and `header` (art URL). |
 | `now` | Prints [what the bar panel's Now tab shows](#now), in one read of every store, and keeps a copy in `~/.cache/omatrophy/panel/now.json` that the panel shows on its next open until a fresh read answers. |
@@ -32,6 +32,7 @@ installed.
 | `set reveal-hidden on\|off` | The tracker's Reveal all; the tracker writes it when you change it. |
 | `set difficulty-reminder on\|off` | The difficulty reminder when a game starts (Settings > Toasts). |
 | `set missable-reminder on\|off` | The missable reminder when a game starts (Settings > Toasts). |
+| `set session-recap on\|off` | The recap when a game stops (Settings > Toasts). |
 | `set games-sort recent\|closest\|name`, `set games-difficulty on\|off`, `set rarest ever\|month\|platinum`, `set settings-section overview\|toasts\|now\|guides\|stores` | The panel's last Games sort, its Difficulty toggle and rarest list; the panel writes them when you pick one, so the next open shows the same view. |
 | `set now-metals\|now-recent\|now-rarest\|now-shelf on\|off` | Shows or hides that section of the panel's Now tab. |
 | `set community on\|off` | The opt-in backfill of games that never ran on this machine from your public Steam profile ([ADR 11](../adr/0011-backfill-from-the-community-profile.md)). With it on, the watcher fetches in the background after `ready`. |

@@ -1586,7 +1586,8 @@ class Qml(unittest.TestCase):
         # Cards are built from their text (FreshObject.qml, ADR 10) and stay
         # standalone so each reads on its own.
         siblings = {n[:-4] for n, _ in self.qml()}
-        for name in ('TrophyToast.qml', 'PlatinumCard.qml', 'DifficultyCard.qml', 'MissableCard.qml', 'StylePicker.qml',
+        for name in ('TrophyToast.qml', 'PlatinumCard.qml', 'DifficultyCard.qml', 'MissableCard.qml', 'RecapCard.qml',
+                     'StylePicker.qml',
                      'TrackerView.qml'):
             text = dict(self.qml())[name]
             for other in siblings - {name[:-4]}:
@@ -1851,6 +1852,78 @@ class MissableReminder(unittest.TestCase):
         ev = omatrophy.sample_event('missable', self.store(), '7', self.ACHS)
         self.assertEqual((ev['type'], ev['step']), ('missable', 3))
         self.assertEqual([r['api'] for r in ev['missables']], ['b', 'c'])
+
+
+class SessionRecap(unittest.TestCase):
+    class Fake(LaunchReminder.Fake):
+        def percents(self, game):
+            return {'a': 40.0, 'b': 3.4, 'c': 2.0}
+
+    # Before the session (t 50): A; in it (t 100 on): B and C, and D came
+    # from a backfill.
+    ACHS = [ach('a', True, 50), ach('b', True, 120), ach('c', True, 130), ach('d', True, 140, remote=True), ach('e')]
+
+    def setUp(self):
+        patch = mock.patch.object(omatrophy, 'icon', lambda store, game, url: url)
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def test_the_recap_counts_the_sessions_own_unlocks(self):
+        ev = omatrophy.recap_event(self.Fake(self.ACHS), '7', self.ACHS, 100, 100 + 95 * 60)
+        self.assertEqual(ev, {'type': 'recap', 'store': 'steam', 'app': '7', 'game': 'G', 'header': 'h.jpg',
+                              'minutes': 95, 'count': 2, 'unlocked': 4, 'total': 5,
+                              'rarest': {'name': 'C', 'percent': 2.0, 'tier': 'gold', 'icon': 'c.jpg'},
+                              'platinum': False})
+
+    def test_a_session_without_unlocks_has_no_recap(self):
+        self.assertIsNone(omatrophy.recap_event(self.Fake(self.ACHS), '7', self.ACHS, 200, 300))
+        self.assertIsNone(omatrophy.session_recap(self.Fake(self.ACHS), '7', 100, 300, {'session-recap': False}))
+
+    def test_rarity_unknown_leaves_no_rarest_and_a_failed_lookup_costs_only_that(self):
+        store = LaunchReminder.Fake(self.ACHS)
+        store.percents = mock.Mock(side_effect=OSError('offline'))
+        self.assertIsNone(omatrophy.recap_event(store, '7', self.ACHS, 100, 200)['rarest'])
+
+    def test_platinum_only_when_the_session_finished_the_game(self):
+        done = [ach('a', True, 50), ach('b', True, 120)]
+        self.assertTrue(omatrophy.recap_event(self.Fake(done), '7', done, 100, 200)['platinum'])
+        old = [ach('a', True, 50), ach('b', True, 60)]
+        self.assertIsNone(omatrophy.recap_event(self.Fake(old), '7', old, 100, 200))
+
+    def run_watch(self, store, polls, clock):
+        with mock.patch.object(omatrophy, 'launch_reminder_for', return_value=lambda *a: None):
+            return LaunchReminder.run_launches(self, store, polls, clock=clock)
+
+    def test_the_watcher_recaps_a_game_when_it_stops(self):
+        # Launched at poll 1 (t 105, so the session starts at 100), quit
+        # at poll 3.
+        store = self.Fake(self.ACHS, runs=[None, {'game': '7', 'since': 1}, {'game': '7', 'since': 1}, None, None])
+        polls = []
+        real = store.running
+        store.running = lambda: polls.append(1) or real()
+        events = self.run_watch(store, 4, clock=lambda: 100 + len(polls) * 5)
+        self.assertEqual([(e['type'], e['count']) for e in events], [('recap', 2)])
+
+    def test_a_game_running_at_start_counts_from_the_watchers_start(self):
+        store = self.Fake(self.ACHS, runs=[{'game': '7', 'since': 1}, None])
+        events = self.run_watch(store, 2, clock=lambda: 125)
+        self.assertEqual([(e['type'], e['count']) for e in events], [('recap', 1)])
+
+    def test_one_failed_read_neither_ends_the_session_nor_recaps_it(self):
+        store = self.Fake(self.ACHS, runs=[None, {'game': '7', 'since': 1}, {'game': '7', 'since': 1}])
+        calls = []
+        real = store.running
+        def running():
+            calls.append(1)
+            if len(calls) == 3:
+                raise OSError('bad file')
+            return real()
+        store.running = running
+        self.assertEqual(self.run_watch(store, 3, clock=lambda: 100), [])
+
+    def test_the_sample_works(self):
+        ev = omatrophy.sample_event('recap', self.Fake(self.ACHS), '7', self.ACHS)
+        self.assertEqual((ev['type'], ev['count'], ev['rarest']['tier']), ('recap', 4, 'gold'))
 
 
 class CardTable(unittest.TestCase):

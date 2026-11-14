@@ -4,7 +4,7 @@
 Usage:
   omatrophy.py watch                  print one JSON event per new unlock (the shell service runs this)
   omatrophy.py test [kind]            queue a fake event for a running watcher: bronze, silver, gold, platinum, difficulty,
-                                      missable
+                                      missable, recap
   omatrophy.py status                 progress of every game with achievements, as JSON
   omatrophy.py cabinet                trophy totals and the games nearest platinum, as JSON
   omatrophy.py now                    what is playing, recent games, platinums and totals, as JSON (the bar panel)
@@ -271,31 +271,82 @@ LAUNCH_POLL = 5
 LAUNCH_RETRY = 120
 
 
-def running_game_id(store):
+def running_game_id(store, unknown=None):
     """The store's running game id, or None; a store that fails to say
-    counts as running nothing rather than ending the launch watch."""
+    counts as running `unknown` rather than ending the launch watch: the
+    game it ran before, so one bad read neither ends a session (and sends
+    its recap early) nor starts a new one."""
     try:
         return (store.running() or {}).get('game')
     except Exception as e:
         print(f'omatrophy: {store.id}: reading the running game failed: {e}', file=sys.stderr, flush=True)
+        return unknown
+
+
+def session_unlocks(achs, start):
+    """The unlocks of a session that began at `start`: unlocked at or after
+    it, with a time, and not remote (a backfill's unlock happened on
+    another machine, ADR 11)."""
+    return [a for a in achs if a['unlocked'] and a['time'] and a['time'] >= start and not a.get('remote')]
+
+
+def recap_event(store, game, achs, start, end):
+    """The card the shell shows when a game stops: what the session
+    earned, its rarest unlock and where the game stands. None when the
+    session unlocked nothing (a recap of nothing is noise)."""
+    got = session_unlocks(achs, start)
+    if not got:
         return None
+    try:
+        pcts = store.percents(game)
+    except Exception:
+        pcts = {}
+    ranked = sorted((a for a in got if pcts.get(a['api']) is not None), key=lambda a: (pcts[a['api']], -a['time']))
+    rarest = None
+    if ranked:
+        a = ranked[0]
+        pct = pcts[a['api']]
+        rarest = {'name': a['name'], 'percent': pct, 'tier': tier(pct), 'icon': icon(store, game, a['icon'])}
+    done = sum(a['unlocked'] for a in achs)
+    return {'type': 'recap', 'store': store.id, 'app': game, 'game': store.game_name(game),
+            'header': store.art(game)['header'], 'minutes': max(1, int((end - start) / 60 + 0.5)),
+            'count': len(got), 'unlocked': done, 'total': len(achs), 'rarest': rarest,
+            # Reached 100% in this session, not merely played a finished game.
+            'platinum': done == len(achs) and platinum_time(achs) >= start}
+
+
+def session_recap(store, game, start, end, cfg):
+    """The recap of a game that just stopped; None when switched off or
+    when the session unlocked nothing."""
+    if cfg.get('session-recap') is False:
+        return None
+    achs, _ = unlocked_set(store, game)
+    return recap_event(store, game, achs, start, end)
 
 
 def watch_launches(found, sleep=time.sleep, clock=time.time):
-    """Shows the launch reminders (LAUNCH_KINDS) when a game starts. A
-    game already running when the watcher starts (a shell restart
-    mid-game) is no launch. Each reminder is tried every poll while the
-    game runs, for LAUNCH_RETRY seconds, until it has something to say. In
-    a thread of its own: reading achievements, guides and names can take a
-    while and must never hold up an unlock."""
+    """Shows the launch reminders (LAUNCH_KINDS) when a game starts, and
+    the session recap when it stops. A game already running when the
+    watcher starts (a shell restart mid-game) is no launch; its session
+    counts from the watcher's start. Each reminder is tried every poll
+    while the game runs, for LAUNCH_RETRY seconds, until it has something
+    to say. In a thread of its own: reading achievements, guides and names
+    can take a while and must never hold up an unlock."""
     playing = {s.id: running_game_id(s) for s in found}
+    started = clock()
+    sessions = {s.id: started for s in found}  # store id: when its running game's session began
     pending = {}  # store id: (game, give up at, kinds not yet spoken)
     while True:
         sleep(LAUNCH_POLL)
         for s in found:
-            game = running_game_id(s)
+            game = running_game_id(s, unknown=playing[s.id])
+            if playing[s.id] and playing[s.id] != game:
+                stopped(s, playing[s.id], sessions[s.id], clock())
             if new_launch(playing[s.id], {'game': game} if game else None):
                 pending[s.id] = (game, clock() + LAUNCH_RETRY, list(LAUNCH_KINDS))
+                # It started at most a poll ago; an unlock in its first
+                # seconds still belongs to it.
+                sessions[s.id] = clock() - LAUNCH_POLL
             playing[s.id] = game
             wanted, until, kinds = pending.get(s.id, (None, 0, []))
             if not wanted or wanted != game or clock() > until:
@@ -315,6 +366,19 @@ def watch_launches(found, sleep=time.sleep, clock=time.time):
                     emit(ev)
             if not kinds:
                 pending.pop(s.id, None)
+
+
+def stopped(store, game, start, end):
+    """Say the recap of a game that stopped, if it has one; a failure only
+    costs the recap."""
+    cfg = read_json(config_path(), {})
+    try:
+        ev = session_recap(store, game, start, end, cfg if isinstance(cfg, dict) else {})
+    except Exception as e:
+        print(f'omatrophy: session recap failed: {e}', file=sys.stderr, flush=True)
+        return
+    if ev:
+        emit(ev)
 
 
 def unlocked_set(store, game):
@@ -628,6 +692,8 @@ def sample_event(kind, store, game, achs):
             'stacks': True, 'stacks_verified': True}
     if kind == 'missable':
         return missable_event(store, game, achs) or sample_missable(store, game, achs)
+    if kind == 'recap':
+        return sample_recap(store, game, achs)
     ach = next((a for a in achs if a['unlocked']), achs[0])
     ev = unlock_event(store, game, ach, achs)
     if kind in ('rare', 'gold'):
@@ -648,7 +714,19 @@ def sample_missable(store, game, achs):
                           for a, note in zip(picks, notes)]}
 
 
-TEST_KINDS = ('unlock', 'bronze', 'silver', 'gold', 'rare', 'platinum', 'difficulty', 'missable')
+def sample_recap(store, game, achs):
+    """A session recap of a real game: its last few unlocks as the
+    session, with made-up rarity for the rarest and a made-up length."""
+    got = sorted((a for a in achs if a['unlocked']), key=lambda a: -a['time'])[:4] or achs[:1]
+    a = got[-1]
+    return {'type': 'recap', 'store': store.id, 'app': game, 'game': store.game_name(game),
+            'header': store.art(game)['header'], 'minutes': 95, 'count': len(got),
+            'unlocked': sum(x['unlocked'] for x in achs), 'total': len(achs),
+            'rarest': {'name': a['name'], 'percent': 3.4, 'tier': 'gold', 'icon': icon(store, game, a['icon'])},
+            'platinum': False}
+
+
+TEST_KINDS = ('unlock', 'bronze', 'silver', 'gold', 'rare', 'platinum', 'difficulty', 'missable', 'recap')
 
 
 def test(kind):
@@ -1424,6 +1502,8 @@ SETTINGS = {'position': ('top-center', 'top-left', 'top-right'),
             'difficulty-reminder': ('on', 'off'),
             # The missable reminder when a game starts; on unless switched off.
             'missable-reminder': ('on', 'off'),
+            # The recap when a game stops; on unless switched off.
+            'session-recap': ('on', 'off'),
             'rarest': ('ever', 'month', 'platinum'),
             'settings-section': ('overview', 'toasts', 'now', 'guides', 'stores'),
             'community': ('on', 'off'),
@@ -1436,7 +1516,7 @@ NOW_SECTIONS = ('metals', 'recent', 'rarest', 'shelf')
 SETTINGS.update({f'now-{name}': ('on', 'off') for name in NOW_SECTIONS})
 # Settings stored as true/false rather than the word given.
 SWITCHES = {'community', 'guide-web', 'guide-jail', 'reveal-hidden', 'games-difficulty', 'difficulty-reminder',
-            'missable-reminder'} | {f'now-{name}' for name in NOW_SECTIONS}
+            'missable-reminder', 'session-recap'} | {f'now-{name}' for name in NOW_SECTIONS}
 
 
 def set_option(key, value):
@@ -1472,6 +1552,7 @@ def set_option(key, value):
                          f'       omatrophy.py set games-difficulty on|off\n'
                          f'       omatrophy.py set difficulty-reminder on|off\n'
                          f'       omatrophy.py set missable-reminder on|off\n'
+                         f'       omatrophy.py set session-recap on|off\n'
                          f'       omatrophy.py set rarest {"|".join(SETTINGS["rarest"])}\n'
                          f'       omatrophy.py set community on|off\n'
                          f'       omatrophy.py set reveal-hidden on|off\n'

@@ -18,7 +18,7 @@
 #                                        guide-tree-pinned: the player pinned step 3 (I'm here);
 #                                        guide-tree-pinnable: step 4 shown, its I'm here button;
 #                                        guide-steps-pinned: the Steps view with step 3 pinned)
-#   dev/render.sh gold out.png           a toast: bronze, silver, gold, platinum; difficulty, missable: the launch reminders
+#   dev/render.sh gold out.png           a toast: bronze, silver, gold, platinum; difficulty, missable: the launch reminders; recap: a session
 #   dev/render.sh --live tracker out.png the views read your real stores
 #   dev/render.sh --font 16 now out.png  at another theme font size (the base is 12)
 #   dev/render.sh --tall guide-tree out.png  a guide view on a tall card, to see the whole guide column
@@ -181,10 +181,10 @@ case $target in
           if ($tall) tallTimer.start()
         }
       }" ;;
-  bronze|silver|gold|platinum|difficulty|missable)
+  bronze|silver|gold|platinum|difficulty|missable|recap)
     # The platinum card takes about six seconds to open fully.
-    w=1000 h=$([[ $target == platinum || $target == missable ]] && echo 400 || echo 260) at=$([[ $target == platinum ]] && echo 6500 || echo 3500)
-    card=TrophyToast; [[ $target == platinum ]] && card=PlatinumCard; [[ $target == difficulty ]] && card=DifficultyCard; [[ $target == missable ]] && card=MissableCard
+    w=1000 h=$([[ $target == platinum || $target == missable || $target == recap ]] && echo 400 || echo 260) at=$([[ $target == platinum ]] && echo 6500 || echo 3500)
+    card=TrophyToast; [[ $target == platinum ]] && card=PlatinumCard; [[ $target == difficulty ]] && card=DifficultyCard; [[ $target == missable ]] && card=MissableCard; [[ $target == recap ]] && card=RecapCard
     view="Loader {
         anchors.horizontalCenter: parent.horizontalCenter
         source: \"file:$repo/$card.qml\"

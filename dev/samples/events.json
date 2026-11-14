@@ -98,5 +98,23 @@
     "note": "Talk to the keeper before the eclipse"
    }
   ]
+ },
+ "recap": {
+  "type": "recap",
+  "store": "steam",
+  "app": "1",
+  "game": "Starfall Odyssey",
+  "header": "dev/samples/art/starfall-odyssey-header.svg",
+  "minutes": 95,
+  "count": 4,
+  "unlocked": 31,
+  "total": 52,
+  "rarest": {
+   "name": "Long Way Home",
+   "percent": 3.4,
+   "tier": "gold",
+   "icon": "dev/samples/art/icon-long-way-home.svg"
+  },
+  "platinum": false
  }
 }
