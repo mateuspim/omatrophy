@@ -47,7 +47,9 @@ Scope {
 
   FileView {
     path: decodeURIComponent(String(Qt.resolvedUrl("cards.json")).replace(/^(qs|file):\/\//, ""))
-    // Read before the watcher's first line can arrive.
+    // It still loads after the component completes (checked offscreen), but
+    // long before the watcher's first card: the watcher reads every store
+    // before it prints `ready`, and a launch reminder waits a poll on top.
     blockLoading: true
     watchChanges: true
     printErrors: false

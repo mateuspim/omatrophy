@@ -130,6 +130,7 @@ only today) passed 50, 75 or 90% of its goal since the watcher's last read
 of the game. One line per achievement, for the highest milestone it
 passed, upward only. The baseline is the watcher's first read and lives in
 memory: a game just appeared sends none, and a restart never repeats one.
+A counter that game's last read lacked (its stat never set) counts from 0.
 A hidden achievement is skipped unless `reveal-hidden` is on; none is sent
 with `milestones` off. The watcher reads a game when its file changes;
 whether Steam writes `UserGameStats` the moment a stat changes, or only

@@ -1995,6 +1995,14 @@ class Milestones(unittest.TestCase):
             omatrophy.check_game(store, '7', seen, counters)
         self.assertEqual([json.loads(line)['threshold'] for line in out.getvalue().splitlines()], [50, 75])
 
+    def test_a_counter_the_baseline_lacked_counts_from_zero(self):
+        # Its stat was never set, so the last read had no progress for it.
+        store = LaunchReminder.Fake([self.counter('a', 50)])
+        counters = {('steam', '7'): {}}
+        with redirect_stdout(io.StringIO()) as out:
+            omatrophy.check_game(store, '7', {('steam', '7'): set()}, counters)
+        self.assertEqual([json.loads(line)['threshold'] for line in out.getvalue().splitlines()], [50])
+
     def test_a_game_with_no_baseline_sends_none(self):
         store = LaunchReminder.Fake([self.counter('a', 70)])
         counters = {}

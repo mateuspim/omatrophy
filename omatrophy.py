@@ -446,7 +446,10 @@ def milestone_events(store, game, achs, before):
     if before is None:
         return []
     now = counters_of(achs)
-    crossed = {api: crossed_milestone(before.get(api), count) for api, count in now.items()}
+    # A counter the last read lacked had no stat yet (Steam leaves a stat
+    # it never set out of its cache, so the store gives no progress): it
+    # started from 0, and its first value can cross a milestone.
+    crossed = {api: crossed_milestone(before.get(api, (0, count[1])), count) for api, count in now.items()}
     crossed = {api: t for api, t in crossed.items() if t}
     if not crossed:
         return []
@@ -738,7 +741,10 @@ def watch(interval=1.0):
     for s in found:
         for g in tokens[s.id]:
             achs, seen[(s.id, g)] = unlocked_set(s, g)
-            counters[(s.id, g)] = counters_of(achs)
+            # A read that found nothing (a file mid-write) is no baseline:
+            # every counter would look new against it.
+            if achs:
+                counters[(s.id, g)] = counters_of(achs)
     inbox = os.path.getsize(INBOX) if os.path.exists(INBOX) else 0
     emit({'type': 'ready', 'stores': [s.id for s in found], 'games': len(seen)})
     # In the background, after `ready`: name lookups go to the network and
