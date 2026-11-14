@@ -36,9 +36,10 @@ ACCENT = [
 ]
 # Two 8-unit breaks: left edge and lower edge. Each terminal drops from
 # 8 units to 4 units. This is an original single-frame construction.
+# A closed square rail: the two breaks after the Omarchy mark it once had
+# read as rendering glitches at card size (1.0.0 image review).
 FRAME = [
-    "M4 4H124V124H96V120H92V116H116V12H12V44H8V48H4Z",
-    "M4 56H8V60H12V116H80V120H84V124H4Z",
+    "M4 4H124V124H4Z M12 12V116H116V12Z",
 ]
 
 PALETTES = {

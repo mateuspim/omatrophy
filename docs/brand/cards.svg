@@ -4,9 +4,10 @@
      Each card is cropped from a 2x dev/render.sh capture (fake data, dos-moos);
      the background is that theme's, so the crops' corners blend in. -->
 <rect width="2100" height="1030" fill="#131516"/>
-<!-- Left: the missable reminder over a milestone toast. -->
-<svg x="60" y="60" width="960" height="583" viewBox="520 80 960 583"><image width="2000" height="1120" xlink:href="captures/missable.png"/></svg>
-<svg x="120" y="793" width="840" height="177" viewBox="580 80 840 177"><image width="2000" height="520" xlink:href="captures/milestone.png"/></svg>
+<!-- Left: the missable reminder over a milestone toast, both 960 wide;
+     the columns end level at y = 970. -->
+<svg x="60" y="60" width="960" height="664" viewBox="520 80 960 664"><image width="2000" height="1120" xlink:href="captures/missable.png"/></svg>
+<svg x="60" y="793" width="960" height="177" viewBox="520 80 960 177"><image width="2000" height="520" xlink:href="captures/milestone.png"/></svg>
 <!-- Right: the session recap over the difficulty reminder. -->
 <svg x="1080" y="60" width="960" height="441" viewBox="520 80 960 441"><image width="2000" height="800" xlink:href="captures/recap.png"/></svg>
 <svg x="1080" y="541" width="960" height="429" viewBox="520 80 960 429"><image width="2000" height="520" xlink:href="captures/difficulty.png"/></svg>

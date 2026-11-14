@@ -39,6 +39,15 @@
   platinum all but vanished, and locked cups are dimmed less.
 - The Guide's Do now tiles lose the empty strip under them: the tick by
   hand sits beside the share of players instead.
+- The platinum card's frames are closed: the border and the trophy's
+  earned frame broke like the Omarchy mark (a gap bottom right, a notch
+  at the left), which read as rendering glitches, and the "exit 0" joke
+  beside the count is gone (it read as a bug in the saved image).
+- A finished game's platinum cup sits top-right on a dark plate over its
+  art in the Games tab and the Now tab's recent games; bottom-right it
+  covered the title the art carries there.
+- The milestone toast is as wide as every other card (480), so cards
+  line up wherever they show.
 - `dev/render.sh` draws on the GPU (as `omatrophy.py share` does), so
   card banners and the omarchy cups' inlay show in captures; without a GPU
   it falls back to software. New view: `settings-restart`.

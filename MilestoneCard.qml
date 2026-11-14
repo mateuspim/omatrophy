@@ -21,7 +21,7 @@ Item {
   signal finished()
 
   readonly property int pad: 40
-  readonly property int cardWidth: 420
+  readonly property int cardWidth: 480
   readonly property color fg: Commons.Color.notifications.text
   readonly property color accent: Commons.Color.accent
   readonly property real share: event && event.max ? Math.min(1, event.value / event.max) : 0

@@ -1234,6 +1234,25 @@ Column {
     onClicked: if (game) root.track(game.store, game.app, game.api || "")
   }
 
+  // A finished game's platinum cup over its art: top-right on a dark plate,
+  // so it reads over any header. Bottom-right it sat on the title a header
+  // carries there ("LANTERNS OF ASTER").
+  component PlatinumBadge: Rectangle {
+    property real size: 16
+    anchors.margins: 2
+    width: size + 4
+    height: size + 4
+    radius: 3
+    color: Qt.rgba(0, 0, 0, 0.55)
+    Thumb {
+      anchors.centerIn: parent
+      style: root.iconSet
+      metal: "platinum"
+      width: parent.size
+      height: parent.size
+    }
+  }
+
   // A quiet choice of a few options (the Games sort): plain words, the
   // chosen one on a soft accent pill. Lighter than ButtonGroup, so it
   // doesn't compete with the tabs above it.
@@ -2666,15 +2685,11 @@ Column {
           label: recentCard.modelData.game
           zoom: recentHit.containsMouse ? 1.06 : 1
         }
-        Thumb {
+        PlatinumBadge {
           visible: recentCard.platinum
           anchors.right: recentArt.right
-          anchors.bottom: recentArt.bottom
-          anchors.margins: 2
-          style: root.iconSet
-          metal: "platinum"
-          width: 20
-          height: 20
+          anchors.top: recentArt.top
+          size: 18
         }
 
         Column {
@@ -3907,15 +3922,11 @@ Column {
           opacity: gameRow.dim
           zoom: gameHit.containsMouse ? 1.06 : 1
         }
-        Thumb {
+        PlatinumBadge {
           visible: gameRow.platinum
           anchors.right: gameArt.right
-          anchors.bottom: gameArt.bottom
-          anchors.margins: 2
-          style: root.iconSet
-          metal: "platinum"
-          width: 16
-          height: 16
+          anchors.top: gameArt.top
+          size: 14
         }
         Column {
           id: gameBody

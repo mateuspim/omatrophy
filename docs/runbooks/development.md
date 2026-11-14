@@ -122,6 +122,9 @@ colours and layout; `design/hero/` holds the brief it was drawn from.
      QT_SCALE_FACTOR=2 dev/render.sh --theme dos-moos "$v" "docs/brand/captures/$v.png"
    done
    dev/render.sh --theme dos-moos share docs/brand/captures/platinum-share.png
+   # The Games tab fills only its top half: trim it to its content.
+   magick docs/brand/captures/games.png -fuzz 2% -trim +repage \
+     -bordercolor '#131516' -border 40 docs/brand/captures/games.png
    ```
 
 2. Render the hero from the repository root:

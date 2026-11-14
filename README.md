@@ -86,7 +86,7 @@ achievement list.
 - Steam and GOG today, and built for more: each store is a small module
   ([adding a store](docs/guide/stores.md)).
 
-![Four sample cards: a missable reminder naming the step and three trophies lost by moving on, a session recap with its rarest unlock, a difficulty reminder saying to start on Nightmare, and a milestone toast at 75% of a counter](docs/brand/captures/cards.png)
+![Four sample cards: a missable reminder naming the step and four trophies lost by moving on, a session recap with its rarest unlock, a difficulty reminder saying to start on Nightmare, and a milestone toast at 75% of a counter](docs/brand/captures/cards.png)
 
 ## Install
 
