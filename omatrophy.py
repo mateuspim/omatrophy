@@ -213,11 +213,27 @@ def missable_event(store, game, achs, reveal=False):
             'title': step['title'], 'missables': rows}
 
 
-def missable_signature(ev):
-    """What the missable reminder said: its step and the achievements it
-    named. The same again at the next launch is noise; a new step, or one
-    of them got (or a new one placed), is news."""
-    return f"{ev['step']}:{ev['title']}:" + ','.join(sorted(r['api'] for r in ev['missables']))
+def missable_step(ev):
+    """The step a missable reminder is about, by number and title, so a
+    guide made again with other steps counts as a new one."""
+    return f"{ev['step']}:{ev['title']}"
+
+
+def missable_news(ev, record):
+    """What to keep after showing `ev`, or None when it says nothing new
+    against `record` ({step, shown} from the last reminder): the owner
+    wants it again on a new step, or when a missable it never named
+    appears. One of them got only makes the card shorter, so it stays
+    quiet then."""
+    step = missable_step(ev)
+    apis = [r['api'] for r in ev['missables']]
+    record = record if isinstance(record, dict) else {}
+    shown = record.get('shown') if isinstance(record.get('shown'), list) else []
+    if record.get('step') != step:
+        return {'step': step, 'shown': sorted(apis)}
+    if set(apis) <= set(shown):
+        return None
+    return {'step': step, 'shown': sorted(set(shown) | set(apis))}
 
 
 def missable_reminded_path():
@@ -225,9 +241,9 @@ def missable_reminded_path():
 
 
 def missable_reminder(store, game, cfg):
-    """The missable reminder for a game that just started, once per step
-    and set of open missables. None when switched off, with nothing to
-    say, or when it would say what it said last time."""
+    """The missable reminder for a game that just started: once per step,
+    and again on that step only when a missable it never named appears.
+    None when switched off, with nothing to say, or nothing new."""
     if cfg.get('missable-reminder') is False:
         return None
     achs, _ = unlocked_set(store, game)
@@ -237,10 +253,10 @@ def missable_reminder(store, game, cfg):
     key = game_key(store.id, game)
     shown = read_json(missable_reminded_path(), {})
     shown = shown if isinstance(shown, dict) else {}
-    signature = missable_signature(ev)
-    if shown.get(key) == signature:
+    record = missable_news(ev, shown.get(key))
+    if record is None:
         return None
-    write_json(missable_reminded_path(), dict(shown, **{key: signature}))
+    write_json(missable_reminded_path(), dict(shown, **{key: record}))
     return ev
 
 

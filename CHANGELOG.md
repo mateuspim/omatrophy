@@ -4,13 +4,14 @@
 
 - A **missable reminder** when a game starts whose guide puts you on a
   step with missables still open: a card names the step and each trophy
-  you lose by moving on, with the guide's note on when. Once per step and
-  set of missables; right after the difficulty reminder, silent. Off in
+  you lose by moving on, with the guide's note on when. Once per step, and
+  again only for a missable not named before; right after the difficulty reminder, silent. Off in
   Settings > Toasts > Missable, where Try shows one (`set
   missable-reminder off`, `test missable`).
 - A **session recap** when you quit a game: how long you played, the
   trophies the session brought, the rarest of them and where the game
-  stands now; only after a session that unlocked something, silent. Off
+  stands now; only after a session that unlocked something, silent, and never
+  dropped from a full queue. Off
   in Settings > Toasts > Recap, where Try shows one (`set session-recap
   off`, `test recap`).
 - **Milestones**: a small toast when a locked counter achievement

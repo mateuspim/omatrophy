@@ -31,7 +31,8 @@ achievement list.
   the count rolls up.
 - A recap when you quit a game: how long you played, the trophies the
   session brought, the rarest of them, and where the game stands now.
-  Only after a session that unlocked something; no chime. Off in
+  Only after a session that unlocked something; no chime, and never
+  dropped when many toasts are waiting. Off in
   Settings > Toasts > Recap, where **Try** shows one (`omatrophy.py set
   session-recap off`, `omatrophy.py test recap`).
 - Milestones on a grind: a small toast when a locked counter achievement
@@ -257,8 +258,8 @@ open, a card names the step ("Step 4 of 12 · The Drowned Observatory")
 and each trophy you lose by moving on, with the guide's note on when
 ("Before the lift up to the dome"). A hidden one says "Hidden
 achievement" unless you reveal hidden ones. It comes once per step: the
-next launch on the same step with the same trophies open stays quiet,
-and a new step, or one of them got, brings it back. It shows right after
+next launch on the same step stays quiet, also after you get one of
+them, and a new step, or a missable it never named, brings it back. It shows right after
 the difficulty reminder, without a chime. Turn it off in Settings >
 Toasts > Missable, where **Try** shows one (`omatrophy.py set
 missable-reminder off`, `omatrophy.py test missable`).

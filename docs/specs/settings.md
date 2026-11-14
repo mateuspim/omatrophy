@@ -20,7 +20,7 @@ bar panel).
 | `settings-section` | The Settings tab's last section: `"overview"`, `"toasts"`, `"now"`, `"guides"`, `"stores"`. Written when you pick one. | `"overview"` |
 | `tracker-sort` | `"recent"`, `"rarity"`, `"name"`, `"game"` (the store's own order) | `"recent"` |
 | `difficulty-reminder` | `true`, `false`: when a game with difficulty achievements left starts, a card names the settings they need, once per game. Settings > Toasts. | `true` |
-| `missable-reminder` | `true`, `false`: when a game starts whose guide's current step has missables still open, a card names them, once per step and set. Settings > Toasts. | `true` |
+| `missable-reminder` | `true`, `false`: when a game starts whose guide's current step has missables still open, a card names them, once per step, again for a missable not named before. Settings > Toasts. | `true` |
 | `session-recap` | `true`, `false`: when a game stops after a session that unlocked anything, a card sums the session up. Settings > Toasts. | `true` |
 | `milestones` | `true`, `false`: a small toast when a locked counter achievement passes 50, 75 or 90% of its goal. Settings > Toasts. | `true` |
 | `reveal-hidden` | `true`, `false`: the tracker shows hidden achievements' names and tips without a hover. Written by the tracker's Reveal all and Shift+Enter. | `false` |

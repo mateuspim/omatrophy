@@ -1813,17 +1813,32 @@ class MissableReminder(unittest.TestCase):
         got = [ach('a', True, 5), ach('b', True, 6), ach('c'), ach('d', True, 7), ach('e')]
         self.assertIsNone(omatrophy.missable_event(self.store(got), '7', got))
 
-    def test_once_per_step_and_set(self):
+    def test_once_per_step_and_again_only_for_a_missable_not_named(self):
         write_guide(self.PLAN)
         self.assertEqual(omatrophy.missable_reminder(self.store(), '7', {})['step'], 2)
         self.assertIsNone(omatrophy.missable_reminder(self.store(), '7', {}))
-        # B got: the set changed, so the next launch says what is left.
+        # B got: the card would only be shorter, so it stays quiet.
         fewer = [ach('a', True, 5), ach('b', True, 6), ach('c'), ach('d', hidden=True), ach('e')]
-        self.assertEqual([r['api'] for r in omatrophy.missable_reminder(self.store(fewer), '7', {})['missables']], ['d'])
         self.assertIsNone(omatrophy.missable_reminder(self.store(fewer), '7', {}))
+        # A guide made again marks C missable on this step: news, and the
+        # card lists every open one.
+        plan = json.loads(json.dumps(self.PLAN))
+        plan['items']['C']['missable'] = True
+        write_guide(plan)
+        self.assertEqual([r['api'] for r in omatrophy.missable_reminder(self.store(fewer), '7', {})['missables']],
+                         ['d', 'c'])
+        self.assertIsNone(omatrophy.missable_reminder(self.store(fewer), '7', {}))
+        # Step 2 done: step 3's E is a new step.
+        later = [ach('a', True, 5), ach('b', True, 6), ach('c', True, 7), ach('d', True, 8), ach('e')]
+        self.assertEqual(omatrophy.missable_reminder(self.store(later), '7', {})['title'], 'The Dome')
         # Another game is its own.
         write_guide(self.PLAN, '8')
         self.assertIsNotNone(omatrophy.missable_reminder(self.store(), '8', {}))
+
+    def test_news_against_a_broken_record_is_news(self):
+        ev = {'step': 2, 'title': 'T', 'missables': [{'api': 'b'}]}
+        for record in (None, 'old', {'step': '2:T', 'shown': 'b'}):
+            self.assertEqual(omatrophy.missable_news(ev, record), {'step': '2:T', 'shown': ['b']})
 
     def test_switched_off_stays_quiet_and_unrecorded(self):
         write_guide(self.PLAN)
@@ -2017,6 +2032,10 @@ class CardTable(unittest.TestCase):
         ranks = [cards[k]['rank'] for k in omatrophy.LAUNCH_KINDS]
         self.assertEqual(ranks, sorted(ranks, reverse=True))
         self.assertTrue(all(cards[k].get('keep') for k in omatrophy.LAUNCH_KINDS))
+        # The recap ends a session once: never dropped, but no rank, so it
+        # waits behind the reminders.
+        self.assertTrue(cards['recap'].get('keep'))
+        self.assertEqual(cards['recap'].get('rank', 0), 0)
 
 
 class TestCommand(unittest.TestCase):

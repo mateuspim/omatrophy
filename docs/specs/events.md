@@ -80,10 +80,11 @@ A game started (as for `difficulty`) whose guide's current step (`guide`'s
 can be missed there: the step's `missables` and the items marked
 `missable` it places, the ones the tracker's Do now puts first. Tried at
 each check for two minutes, each launch reminder on its own. Once per
-step and set: the watcher keeps `{"store:app": "<step>:<title>:<apis>"}`
-in `~/.local/state/omatrophy/missable-reminded.json` and stays quiet while
-the next launch would say the same; a new step, a missable got or a new
-one placed sends it again. Not sent with `missable-reminder` off, for a
+step: the watcher keeps `{"store:app": {"step": "<step>:<title>",
+"shown": [apis]}}` in `~/.local/state/omatrophy/missable-reminded.json`
+and sends it again only on a new step (number or title), or when a
+missable it never named on this step appears (the card then lists every
+open one). A missable unlocked since sends nothing new. Not sent with `missable-reminder` off, for a
 game without a guide, or for a game already running when the watcher
 started. The shell shows it right after any `difficulty` card, before
 queued toasts, never drops it, and plays no chime.
@@ -107,8 +108,9 @@ launch was seen, or, for a game already running when the watcher
 started, at the watcher's start. A store that fails to say what runs
 keeps its last answer, so one bad read neither ends a session nor sends
 its recap. Not sent with `session-recap` off or after a session with no
-unlock. The shell queues it like a toast (a full queue may drop it) and
-plays no chime.
+unlock. The shell queues it after the launch reminders, in arrival order
+with toasts, never drops it from a full queue (it ends a session once),
+and plays no chime.
 
 | Field | Type | Meaning |
 | --- | --- | --- |

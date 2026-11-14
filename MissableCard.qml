@@ -8,7 +8,8 @@ import qs.Commons as Commons
 // player knows before playing past them. Names the step and each
 // missable with the guide's note on when it's lost; a hidden one comes
 // as "Hidden achievement" unless the owner reveals hidden ones. Once per
-// step and set (the watcher keeps what it said). Slides in like the
+// step, and again only for a missable it never named (the watcher keeps
+// what it said). Slides in like the
 // difficulty card, holds longer the more it names, slides out and
 // reports finished.
 //
