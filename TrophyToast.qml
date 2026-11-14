@@ -33,6 +33,13 @@ Item {
 
   readonly property int pad: 40
   readonly property int cardWidth: 480
+  // The omarchy art is a 16-cell grid drawn without smoothing: at 80 px
+  // each cell is 5 px, so every pixel edge stays even (52 px gave cells of
+  // 3 and 4 px, a lopsided cup that read small in its tile).
+  readonly property int tileSize: 92
+  readonly property int trophySize: 80
+  // What the text beside the achievement art leaves for it.
+  readonly property real artRoom: iconBox.visible ? iconBox.width + 12 : 0
   readonly property string tier: event && event.tier ? event.tier : "bronze"
   readonly property bool gold: tier === "gold"
   readonly property color tierColor: ({ bronze: "#e9a46b", silver: "#dfe6ee", gold: "#f3cf4a" })[tier] || "#e9a46b"
@@ -141,20 +148,25 @@ Item {
     id: show
     ScriptAction { script: {
       card.slideX = root.outX; card.slideY = root.outY; card.opacity = 0
-      iconBox.scale = 0.55; medal.scale = 0; medal.spin = 540; medal.shine = -1; halo.opacity = 0
+      iconBox.scale = 0.92; iconBox.opacity = 0; medal.scale = 0; medal.spin = 540; medal.shine = -1; halo.opacity = 0
       bar.shown = root.before; roll.offset = 0; sweep.x = -sweep.width
     } }
     ParallelAnimation {
       NumberAnimation { target: card; property: "slideX"; to: 0; duration: 420; easing.type: Easing.OutCubic }
       NumberAnimation { target: card; property: "slideY"; to: 0; duration: 420; easing.type: Easing.OutCubic }
       NumberAnimation { target: card; property: "opacity"; to: 1; duration: 260 }
-      SequentialAnimation {
-        PauseAnimation { duration: 140 }
-        NumberAnimation { target: iconBox; property: "scale"; to: 1; duration: 520; easing.type: Easing.OutBack; easing.overshoot: 2.4 }
-      }
     }
     // The trophy flips onto the icon's corner.
     ParallelAnimation {
+      // The achievement's art fades in and settles as the cup lands, after
+      // the trophy has the eye; no bounce, so it doesn't compete with it.
+      SequentialAnimation {
+        PauseAnimation { duration: 380 }
+        ParallelAnimation {
+          NumberAnimation { target: iconBox; property: "opacity"; to: 1; duration: 360; easing.type: Easing.OutCubic }
+          NumberAnimation { target: iconBox; property: "scale"; to: 1; duration: 360; easing.type: Easing.OutCubic }
+        }
+      }
       NumberAnimation { target: medal; property: "spin"; to: 0; duration: 700; easing.type: Easing.OutCubic }
       SequentialAnimation {
         NumberAnimation { target: medal; property: "scale"; to: 1.25; duration: 420; easing.type: Easing.OutCubic }
@@ -291,24 +303,42 @@ Item {
       }
     }
 
-    // The achievement's own art, small, in the top-right corner.
-    Rectangle {
+    // The achievement's own art in the top-right corner, framed like the
+    // trophy tile: a dark mat and a border in the metal. The tier, name and
+    // description stop short of it; the game line and bar run under it.
+    Item {
       id: iconBox
+      readonly property bool flat: root.iconSet === "omarchy"
+      visible: !!(root.event && root.event.icon)
       x: card.width - width - 16
-      y: 16
-      width: 44
-      height: 44
-      color: Qt.alpha(root.fg, 0.06)
-      border.width: 1
-      border.color: Qt.alpha(root.fg, 0.18)
-      radius: Commons.Style.cornerRadius
-      clip: true
-      Image {
+      y: row.y
+      width: 56
+      height: 56
+
+      Rectangle {
+        id: iconFrame
         anchors.fill: parent
-        anchors.margins: 1
-        source: root.event ? root.event.icon : ""
-        fillMode: Image.PreserveAspectCrop
-        asynchronous: true
+        radius: iconBox.flat ? 0 : Commons.Style.cornerRadius
+        color: Qt.alpha(Commons.Color.notifications.background, 0.8)
+        border.width: 1
+        border.color: Qt.alpha(root.tierColor, 0.6)
+        clip: true
+        Image {
+          anchors.fill: parent
+          anchors.margins: 3
+          source: root.event ? root.event.icon : ""
+          fillMode: Image.PreserveAspectCrop
+          asynchronous: true
+        }
+        // Glass on the art: light on its top half.
+        Rectangle {
+          anchors.fill: parent
+          anchors.margins: 3
+          gradient: Gradient {
+            GradientStop { position: 0; color: Qt.rgba(1, 1, 1, 0.14) }
+            GradientStop { position: 0.5; color: Qt.rgba(1, 1, 1, 0) }
+          }
+        }
       }
     }
 
@@ -316,12 +346,14 @@ Item {
       id: row
       x: 20
       y: 16
-      spacing: 16
+      spacing: 20
 
-      // The trophy leads: a tile washed in its metal.
+      // The trophy leads: a tile washed in its metal, centred on the text
+      // beside it so a two-line name doesn't leave it hanging at the top.
       Item {
-        width: 72
-        height: 72
+        width: root.tileSize
+        height: root.tileSize
+        anchors.verticalCenter: parent.verticalCenter
 
         ParticleSystem {
           anchors.centerIn: parent
@@ -361,37 +393,79 @@ Item {
           opacity: 0
         }
 
-        // Square on the omarchy grid, theme-rounded for the other sets.
+        // Square on the omarchy grid, theme-rounded for the other sets,
+        // over a dark base (as on the platinum card) so the metal reads on
+        // clear glass over a bright game.
         Rectangle {
+          id: tile
           anchors.fill: parent
           radius: root.iconSet === "omarchy" ? 0 : Commons.Style.cornerRadius
           scale: medal.scale
-          border.width: 1
-          border.color: Qt.alpha(root.tierColor, 0.6)
-          gradient: Gradient {
-            GradientStop { position: 0; color: Qt.alpha(root.tierColor, 0.18) }
-            GradientStop { position: 1; color: Qt.alpha(root.tierColor, 0.04) }
+          color: Qt.alpha(Commons.Color.notifications.background, 0.6)
+          clip: true
+          Rectangle {
+            anchors.fill: parent
+            radius: parent.radius
+            border.width: 1
+            border.color: Qt.alpha(root.tierColor, 0.6)
+            gradient: Gradient {
+              GradientStop { position: 0; color: Qt.alpha(root.tierColor, 0.2) }
+              GradientStop { position: 1; color: Qt.alpha(root.tierColor, 0.04) }
+            }
+          }
+          // A spotlight in the metal behind the cup.
+          Shape {
+            anchors.fill: parent
+            ShapePath {
+              strokeColor: "transparent"
+              fillGradient: RadialGradient {
+                centerX: tile.width / 2; centerY: tile.height * 0.45
+                focalX: centerX; focalY: centerY
+                centerRadius: tile.width * 0.5; focalRadius: 0
+                GradientStop { position: 0; color: Qt.alpha(root.tierColor, 0.3) }
+                GradientStop { position: 1; color: Qt.alpha(root.tierColor, 0) }
+              }
+              PathRectangle { x: 0; y: 0; width: tile.width; height: tile.height }
+            }
+          }
+          // A floor line the cup stands on, lit in the metal at its middle.
+          Rectangle {
+            x: parent.width * 0.2
+            y: medal.y + medal.height * (112 / 128) - parent.y
+            width: parent.width * 0.6
+            height: 1
+            gradient: Gradient {
+              orientation: Gradient.Horizontal
+              GradientStop { position: 0; color: Qt.alpha(root.tierColor, 0) }
+              GradientStop { position: 0.5; color: Qt.alpha(root.tierColor, 0.55) }
+              GradientStop { position: 1; color: Qt.alpha(root.tierColor, 0) }
+            }
           }
         }
+        // The art's cup sits at rows 20 to 112 of 128, two rows low:
+        // lift it so it looks centred in the tile.
         Trophy {
           id: medal
           anchors.centerIn: parent
-          width: 52
-          height: 52
+          anchors.verticalCenterOffset: -Math.round(root.trophySize * 2 / 128)
+          width: root.trophySize
+          height: root.trophySize
           metal: root.tier
           set: root.iconSet
           accent: root.accent
         }
+
       }
 
       Column {
-        width: root.cardWidth - row.x - 72 - row.spacing - 16
+        anchors.verticalCenter: parent.verticalCenter
+        width: root.cardWidth - row.x - root.tileSize - row.spacing - 16
         spacing: 2
 
         // Stops short of the art in the corner too: a large theme font
         // ran "of players" into it.
         Row {
-          width: parent.width - iconBox.width - 12
+          width: parent.width - root.artRoom
           spacing: 8
           Text {
             textFormat: Text.PlainText
@@ -403,21 +477,30 @@ Item {
             font.bold: true
             font.letterSpacing: 2
           }
+          // "of players" goes first when the line is tight, so a large
+          // theme font keeps the number rather than eliding to "22.7% of…".
           Text {
             textFormat: Text.PlainText
+            id: rarity
+            readonly property string percent: root.event && root.event.percent !== null && root.event.percent !== undefined
+                                              ? root.event.percent.toFixed(1) + "%" : ""
             width: Math.max(0, parent.width - tierLabel.width - parent.spacing)
             elide: Text.ElideRight
-            text: root.event && root.event.percent !== null && root.event.percent !== undefined
-                  ? root.event.percent.toFixed(1) + "% of players" : ""
+            text: percent === "" ? "" : (rarityFull.width <= width ? percent + " of players" : percent)
             color: Qt.alpha(root.fg, 0.5)
             font.family: Commons.Style.font.family
             font.pixelSize: Commons.Style.font.bodySmall
+            TextMetrics {
+              id: rarityFull
+              font: rarity.font
+              text: rarity.percent + " of players"
+            }
           }
         }
         // The name and description stop short of the art in the corner.
         Text {
           textFormat: Text.PlainText
-          width: parent.width - iconBox.width - 12
+          width: parent.width - root.artRoom
           text: root.event ? root.event.name : ""
           color: root.fg
           font.family: Commons.Style.font.family
@@ -431,7 +514,7 @@ Item {
         }
         Text {
           textFormat: Text.PlainText
-          width: parent.width - iconBox.width - 12
+          width: parent.width - root.artRoom
           text: root.event ? root.event.desc : ""
           color: Qt.alpha(root.fg, 0.7)
           font.family: Commons.Style.font.family
