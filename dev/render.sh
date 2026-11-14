@@ -11,6 +11,7 @@
 #   dev/render.sh tracker-loading out.png
 #   dev/render.sh settings out.png       its Settings tab (settings-toasts, -now, -guides, -stores: one section)
 #   dev/render.sh settings-monitors out.png  Toasts with many monitors and a long disconnected name
+#   dev/render.sh settings-restart out.png   Toasts after an update the shell hasn't loaded yet
 #   dev/render.sh tracker out.png        the achievement tracker (tracker-hand: ticks, a count and notes by hand;
 #                                        tracker-note: a note being written; tracker-done: a finished game,
 #                                        its Save image)
@@ -58,7 +59,7 @@ while [[ ${1:-} == --* ]]; do
 done
 [[ -z $font || $font =~ ^[0-9]+$ && $font -ge 6 && $font -le 40 ]] ||
   { echo "--font takes a theme base size in pixels, 6 to 40, not '$font'" >&2; exit 2; }
-[[ $# -eq 2 ]] || { sed -n '5,33p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+[[ $# -eq 2 ]] || { sed -n '5,34p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 target=$1
 out=$(realpath -m "$2")
 theme=$HOME/.local/state/omarchy/current/theme
@@ -148,6 +149,7 @@ case $target in
     w=$(( panel + 40 )) h=900 at=2500
     section=overview; [[ $target == settings-* ]] && { section=${target#settings-}; target=settings; }
     monitors=false; [[ $section == monitors ]] && { monitors=true; section=toasts; }
+    restart=false; [[ $section == restart ]] && { restart=true; section=toasts; }
     tab=now; [[ $target == settings || $target == games || $target == profile ]] && tab=$target
     data=now.json; [[ $target == idle || $target == empty ]] && data=$target.json; [[ $target == games ]] && data=games.json
     feed="item.cabinet = JSON.parse(sample.text())"
@@ -161,6 +163,8 @@ case $target in
     if [[ $target == settings ]]; then
       extra="FileView { id: agentSample; path: \"$repo/dev/samples/agents.json\"; blockLoading: true }"
       feed="$feed; item.guideAgents = JSON.parse(agentSample.text()); item.guideModels = ({ claude: { model: \"sonnet\", effort: \"medium\" } }); item.guideJail = true; item.defaultKeyCheck = ({ key: \"SUPER + CTRL + G\", valid: true, taken: \"\" }); item.settingsSection = \"$section\""
+      # settings-restart: OmaTrophy updated, the shell still on 0.14.0.
+      $restart && feed="$feed; item.shellState = ({ installed: '1.0.0', running: true, stale: true, watcher: '0.14.0', shell: '0.14.0', cards: ['unlock', 'platinum', 'difficulty'] })"
       if $monitors; then
         feed="$feed; item.screenName = 'HEADLESS-' + 'LONG'.repeat(14); item.screenChoices = [{ value: 'focused', label: 'Focused' }].concat(['DP-1', 'DP-2', 'HDMI-A-1', 'HDMI-A-2', 'eDP-1', item.screenName].map(function(name) { return { value: name, label: name + (name === item.screenName ? ' (off)' : '') } }))"
       fi

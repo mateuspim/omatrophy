@@ -2,7 +2,10 @@
 """Watch game stores' achievement data and print new unlocks as JSON lines.
 
 Usage:
-  omatrophy.py watch                  print one JSON event per new unlock (the shell service runs this)
+  omatrophy.py watch [--shell <version>]
+                                      print one JSON event per new unlock (the shell service runs this,
+                                      passing its Service.qml's version)
+  omatrophy.py running                which OmaTrophy the shell runs, and whether it needs a restart, as JSON
   omatrophy.py test [kind]            queue a fake event for a running watcher: bronze, silver, gold, platinum, difficulty,
                                       missable, recap, milestone
   omatrophy.py status                 progress of every game with achievements, as JSON
@@ -544,6 +547,99 @@ INBOX_TYPES = card_types()
 # A real event line is a few hundred bytes; the shell parses every line.
 MAX_INBOX_LINE = 64 * 1024
 
+# What the running watcher is: its version, the Service.qml version that
+# started it, and the cards its inbox lets through. The shell keeps the
+# Service.qml and watcher it started with until `omarchy restart shell`, so
+# after an update the panel (built fresh from its text) offered Try for
+# cards the old watcher dropped, and nothing showed.
+WATCHER_FILE = f'{STATE}/watcher.json'
+# A watcher from before watcher.json (0.14.0 and older) writes none; the
+# cards every such watcher since 0.8.0 lets through.
+LEGACY_CARDS = ('unlock', 'platinum', 'difficulty')
+
+
+def plugin_version():
+    found = read_json(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'manifest.json'), {})
+    return str(found.get('version') or '') if isinstance(found, dict) else ''
+
+
+def watcher_record(shell_version=''):
+    """watcher.json's contents for this process."""
+    return {'pid': os.getpid(), 'version': plugin_version(), 'shell': shell_version or '',
+            'parent': parent_name(), 'cards': list(INBOX_TYPES), 'started': int(time.time())}
+
+
+def parent_name():
+    try:
+        with open(f'/proc/{os.getppid()}/comm') as f:
+            return f.read().strip()
+    except OSError:
+        return ''
+
+
+def is_watcher(cmdline):
+    """True when a /proc cmdline (NUL-separated) is `omatrophy.py watch`
+    (or the bare `omatrophy.py`, which watches too)."""
+    args = [a for a in cmdline.split('\0') if a]
+    for at, arg in enumerate(args):
+        if os.path.basename(arg) == 'omatrophy.py':
+            rest = args[at + 1:]
+            return not rest or rest[0] == 'watch'
+    return False
+
+
+def proc_cmdline(pid):
+    try:
+        with open(f'/proc/{int(pid)}/cmdline') as f:
+            return f.read()
+    except (OSError, ValueError):
+        return ''
+
+
+def watcher_pids():
+    """Every live `omatrophy.py watch` process of any install."""
+    try:
+        pids = [p for p in os.listdir('/proc') if p.isdigit()]
+    except OSError:
+        return []
+    return [int(p) for p in pids if is_watcher(proc_cmdline(p))]
+
+
+def shell_state(record, record_alive, watchers, installed):
+    """Is the shell running the installed OmaTrophy? `record` is
+    watcher.json, `record_alive` whether its pid is still that watcher,
+    `watchers` how many watchers run, `installed` this copy's version.
+    Stale when the running watcher, or the Service.qml that started it, is
+    another version, or a watcher runs that wrote no record (older than
+    1.0.0); then `cards` says which cards it shows."""
+    answer = {'installed': installed, 'running': False, 'watcher': None, 'shell': None,
+              'cards': None, 'stale': False}
+    if isinstance(record, dict) and record_alive:
+        cards = record.get('cards')
+        watcher = str(record.get('version') or '')
+        shell = str(record.get('shell') or '')
+        # Started by the shell without a version: a Service.qml from before
+        # 1.0.0 restarted it with new code. Started by hand (a terminal): no
+        # Service.qml of its own, only its version counts.
+        by_shell = shell != '' or str(record.get('parent') or '').startswith('quickshell')
+        return dict(answer, running=True, watcher=watcher or None, shell=shell or None,
+                    cards=[c for c in cards if isinstance(c, str)] if isinstance(cards, list) else list(LEGACY_CARDS),
+                    stale=watcher != installed or (by_shell and shell != installed))
+    if watchers:
+        return dict(answer, running=True, cards=list(LEGACY_CARDS), stale=True)
+    return answer
+
+
+def running_state():
+    record = read_json(WATCHER_FILE, None)
+    alive = isinstance(record, dict) and is_watcher(proc_cmdline(record.get('pid', 0)))
+    return shell_state(record, alive, len(watcher_pids()), plugin_version())
+
+
+def test_card_type(kind):
+    """The event type `test <kind>` queues."""
+    return {'bronze': 'unlock', 'silver': 'unlock', 'gold': 'unlock', 'rare': 'unlock'}.get(kind, kind)
+
 
 def inbox_event(line):
     """The line itself when it is one card event (a type in cards.json),
@@ -745,7 +841,7 @@ def steam_load(everything=False):
         raise SystemExit(1)
 
 
-def watch(interval=1.0):
+def watch(interval=1.0, shell_version=''):
     found = found_stores()
     tokens = {s.id: s.games() for s in found}
     # The first read is the baseline for unlocks and counters alike; it
@@ -759,7 +855,13 @@ def watch(interval=1.0):
             if achs:
                 counters[(s.id, g)] = counters_of(achs)
     inbox = os.path.getsize(INBOX) if os.path.exists(INBOX) else 0
-    emit({'type': 'ready', 'stores': [s.id for s in found], 'games': len(seen)})
+    # Before `ready`: the panel asks `running` which cards this watcher shows.
+    try:
+        write_json(WATCHER_FILE, watcher_record(shell_version))
+    except OSError as e:
+        print(f'omatrophy: could not write {WATCHER_FILE} ({e}); the panel may ask for a restart it doesn\'t need',
+              file=sys.stderr, flush=True)
+    emit({'type': 'ready', 'stores': [s.id for s in found], 'games': len(seen), 'version': plugin_version()})
     # In the background, after `ready`: name lookups go to the network and
     # must never hold up an unlock.
     threading.Thread(target=background, args=(found, [(s, g) for s in found for g in tokens[s.id]]),
@@ -862,6 +964,20 @@ def test(kind):
     with open(INBOX, 'a') as f:
         f.write(json.dumps(ev) + '\n')
     print(f"queued {kind}: {ev['game']}" + (f" / {ev['name']}" if 'name' in ev else ''))
+    note = stale_note(running_state(), kind)
+    if note:
+        print(f'omatrophy: test: {note}', file=sys.stderr)
+
+
+def stale_note(state, kind):
+    """Why a queued test card won't show, or '' when it will (or no
+    watcher runs: it shows once one starts)."""
+    if not state['running'] or not state['stale'] or test_card_type(kind) in (state['cards'] or ()):
+        return ''
+    running = state['shell'] or state['watcher']
+    running = f'OmaTrophy {running}' if running else 'an older OmaTrophy'
+    return (f'the shell still runs {running}, which has no {kind} card; '
+            f'run `omarchy restart shell` (not while a game runs) to use the new cards')
 
 
 def demo(kinds):
@@ -2072,8 +2188,12 @@ def showcase_items(keys, by_key):
 
 def main(argv):
     cmd = argv[1] if len(argv) > 1 else 'watch'
-    if cmd == 'watch':
+    if cmd == 'watch' and argv[2:3] == ['--shell'] and len(argv) == 4:
+        watch(shell_version=argv[3])
+    elif cmd == 'watch' and len(argv) <= 2:
         watch()
+    elif cmd == 'running':
+        print(json.dumps(running_state()))
     elif cmd == 'test':
         test(argv[2] if len(argv) > 2 else 'unlock')
     elif cmd == 'status':
