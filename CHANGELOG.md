@@ -1,7 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.7.1 - 2026-11-14
 
+- Toasts: the trophy is bigger and centred in its tile, drawn on an even
+  pixel grid (it read small and lopsided), over a dark base with a
+  spotlight in its metal. The achievement art in the corner is larger
+  and framed like the trophy tile, and fades in as the cup lands. A
+  large theme font keeps the rarity number instead of cutting it off.
+  The platinum card's trophy gets the same even grid. No restart needed.
 - The panel opens fast again: the views built from their text
   (`FreshObject.qml`) compile once per edit instead of on every open.
   Reopening the panel went from about 250-330 ms to about 20 ms, the
