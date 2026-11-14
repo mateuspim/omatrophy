@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.10.0 - 2026-11-14
 
 - A **missable reminder** when a game starts whose guide puts you on a
   step with missables still open: a card names the step and each trophy
