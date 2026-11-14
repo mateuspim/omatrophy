@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.11.0 - 2026-11-14
+
+- Guide Tree from the keyboard: while the Tree shows, the arrows move a
+  ring between Do now tiles, the story track, the open step's actions,
+  chain nodes and the grid, by where each sits, and Enter does what a
+  click does (Left/Right sort only outside the Tree). Escape closes
+  picked trophy details first; press it again to close the overlay.
+  Space still types into a search while it is being filtered. Needs no restart.
+- Chain cards: rows are as tall as their labels (no empty band under a
+  short chain), "needs ..." names the first need in full and counts the
+  rest instead of cutting it short, cards fill half or all of the row,
+  and a chain wider than its card scrolls sideways instead of spilling
+  out of it.
+- On a narrow tracker the story step you open shows right under its
+  stop, not below every other step, and the trophy list's title
+  shortens instead of running under **Reveal all**.
+- Light themes: rarity percentages and trophy counts stay readable;
+  the pale metal colours all but vanished on a light card.
+- `dev/render.sh --theme <name>` renders under another installed theme,
+  and gains `guide-tree-keys`, `guide-tree-wide`, `guide-tree-wide-keys` and
+  `guide-tree-narrow-<state>` views. Missing theme or font values fail
+  with a usage error instead of looping.
+
 ## 0.10.0 - 2026-11-14
 
 - A **missable reminder** when a game starts whose guide puts you on a

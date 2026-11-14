@@ -170,13 +170,14 @@ Its keys:
 
 | Key | Does |
 | --- | --- |
-| Up, Down, Page Up/Down, Home, End | Move the highlight |
+| Up, Down (outside the Tree), Page Up/Down, Home, End | Move the list highlight |
+| Arrows, Enter (the guide's Tree) | Move between its tiles, stops and trophies; open one |
 | Enter (or Space, when not searching) | Reveal a hidden achievement |
 | Shift+Enter | Reveal all hidden achievements, or hide them again (remembered) |
 | Tab, Shift+Tab | All, Locked, Unlocked, Rare, Difficulty, Guide |
-| Left, Right | Sort: recent, rarest, A–Z, the game's own order (remembered) |
+| Left, Right (outside the Tree) | Sort: recent, rarest, A–Z, the game's own order (remembered) |
 | Any letter | Search; Backspace edits |
-| Escape | Clear the search, then close |
+| Escape | Clear the search or close picked Tree trophy details; press again to close |
 
 From a script:
 
@@ -232,7 +233,8 @@ place, then the move, ticked once the trophy it gives unlocks.
   ARE HERE**, each with its trophies done ("1/3"). A red **!** marks a
   step you left with a missable still open. Click a step to see its
   actions below the track. Without a walkthrough the story trophies are
-  the stops; on a narrow tracker the track runs down the side.
+  the stops; on a narrow tracker the track runs down the side and a
+  step opens right under its own stop.
   OmaTrophy only sees your trophies, so the step you're on is a guess:
   when it's wrong, click your step and **I'm here** (📌 beside YOU ARE
   HERE). The pin holds until you finish that step or a later one, then
@@ -241,15 +243,19 @@ place, then the move, ticked once the trophy it gives unlocks.
   terminal: `omatrophy.py guide here <store> <app> <step number|clear>`.
 - **Chains**: each trophy that needs others first as a small tree, the
   goal on top. A line lights once the trophy under it unlocks; a locked
-  one is greyed with a padlock and "needs ..."; **READY** (its needs
-  done, itself open) glows. A source saying a setting opens only after
+  one is greyed with a padlock and what it waits for ("needs Keeper and
+  1 more"); **READY** (its needs done, itself open) glows. A chain too
+  wide for its card scrolls sideways. A source saying a setting opens only after
   another ("Professional is unlocked after Veteran") always makes a
   chain in a guide made since 0.9.0.
 - **On their own**: the rest as a grid by phase (click a phase to fold
   it), with a bar for counters.
 
 Click any tile, stop or trophy and the list on the right finds it, while
-its tip, what it needs and what it opens show under that part. Up next
+its tip, what it needs and what it opens show under that part. The Tree
+works from the keyboard too: the arrows move a ring from part to part
+(Do now, the track, the open step's actions, chains, the grid) by where
+each sits, and Enter does what a click does. Up next
 leaves out a trophy until what it needs is done. Guides made before
 0.7.0 have no actions or chains; **Make again** adds them.
 

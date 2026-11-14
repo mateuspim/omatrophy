@@ -128,6 +128,13 @@ Item {
   // part it was picked in (`treePickIn`: "now", "story", "chains", "alone").
   property string treePick: ""
   property string treePickIn: ""
+  // The Tree's keyboard focus: the key of the tile, node or button the
+  // arrows are on ("now:<api>", "story:<index>", ...), and whether its
+  // ring shows (a click hides it until the next arrow). `treeTargets`
+  // holds every TreeFocus alive; plain JS, not bound to.
+  property string treeKey: ""
+  property bool treeKeyShown: false
+  property var treeTargets: []
   // On their own's phase groups the player folded, by phase.
   property var foldedPhases: ({})
   // Do now shows three; the rest unfold on a click.
@@ -175,6 +182,9 @@ Item {
   // prerequisites, and Do now and the track were hidden behind the rule.
   readonly property bool hasTree: hasGuide && guideTree.story.length + guideTree.chains.length + walkSteps.length > 0
   readonly property bool treeOn: treeShown && hasTree && !appliedSearch
+  // The arrows and Enter work the Tree while it shows (the list keeps
+  // Page Up/Down, Home and End).
+  readonly property bool treeKeys: filter === "guide" && treeOn
   // The steps, Up next and sections: hidden while the outline shows.
   readonly property bool listShown: !appliedSearch && !treeOn
   // The agent and model picker; folded away under a made guide.
@@ -200,6 +210,9 @@ Item {
   readonly property color foreground: Commons.Color.menu.text
   readonly property color background: Commons.Color.menu.background
   readonly property var metalColors: ({ bronze: "#e9a46b", silver: "#dfe6ee", gold: "#f3cf4a", platinum: "#e2eaff" })
+  // A light theme (flexoki-light, white): the metals are pale and their
+  // text all but vanished on the card, silver above all.
+  readonly property bool lightTheme: background.hslLightness > 0.5
   readonly property string helperPath: decodeURIComponent(String(Qt.resolvedUrl("omatrophy.py")).replace(/^file:\/\//, ""))
   readonly property real rarePercent: 10
 
@@ -255,6 +268,8 @@ Item {
   onGameChanged: {
     stepOpen = ({})
     trackPick = -1
+    treeKey = ""
+    treeKeyShown = false
     treePick = ""
     treePickIn = ""
     var index = {}
@@ -675,6 +690,98 @@ Item {
     treePickIn = same ? "" : part
   }
 
+  // A story node clicked or entered: a walkthrough step opens (the one
+  // the player is at goes back to following them), a story trophy picks.
+  function pickTrackNode(index, api) {
+    if (walkSteps.length === 0) pickInTree(api, "story")
+    else trackPick = index === trackHere ? -1 : index
+  }
+
+  // Every TreeFocus on screen with its box in the guide column, in
+  // reading order (rows top to bottom, each left to right).
+  function treeBoxes() {
+    var out = []
+    treeTargets.forEach(function(ring) {
+      var item = ring.parent
+      if (!ring.key || !item || !item.visible || item.width <= 0) return
+      var at = item.mapToItem(guideColumn, 0, 0)
+      out.push({ ring: ring, x: at.x, y: at.y, w: item.width, h: item.height })
+    })
+    out.sort(function(a, b) { return a.y - b.y || a.x - b.x })
+    return out
+  }
+
+  // The arrows in the Tree: to the nearest part that way. Up and down go
+  // to the closest part above or below, nearest in line first; left and
+  // right stay in the row and, at its end, go on in reading order, so
+  // Right walks a track across and Down a track that runs down. The
+  // first press only shows where the focus is.
+  function treeMove(dx, dy) {
+    var boxes = treeBoxes()
+    if (!boxes.length) return
+    var cur = boxes.find(function(b) { return b.ring.key === treeKey })
+    if (!cur || !treeKeyShown) {
+      var top = guidePane.contentY
+      setTreeKey(cur || boxes.find(function(b) { return b.y + b.h > top }) || boxes[0])
+      return
+    }
+    var cx = cur.x + cur.w / 2, cy = cur.y + cur.h / 2
+    var best = null, bestScore = Infinity
+    boxes.forEach(function(b) {
+      if (b === cur) return
+      var bx = b.x + b.w / 2, by = b.y + b.h / 2, score
+      if (dy !== 0) {
+        if (dy > 0 ? by <= cy + 1 : by >= cy - 1) return
+        var gap = Math.max(0, dy > 0 ? b.y - (cur.y + cur.h) : cur.y - (b.y + b.h))
+        var side = Math.max(0, b.x - (cur.x + cur.w), cur.x - (b.x + b.w))
+        score = gap + side * 2 + Math.abs(bx - cx) * 0.1
+      } else {
+        if (b.y >= cur.y + cur.h || b.y + b.h <= cur.y) return
+        if (dx > 0 ? bx <= cx + 1 : bx >= cx - 1) return
+        score = Math.abs(bx - cx) + Math.abs(by - cy) * 2
+      }
+      if (score < bestScore) { best = b; bestScore = score }
+    })
+    if (!best && dx !== 0) best = boxes[boxes.indexOf(cur) + dx] || null
+    if (best) setTreeKey(best)
+  }
+
+  function setTreeKey(box) {
+    treeKey = box.ring.key
+    treeKeyShown = true
+    revealInPane(box.ring.parent)
+  }
+
+  // Enter in the Tree: what a click on the focused part does. False when
+  // nothing has the focus, so Enter keeps its list meaning.
+  function treeActivate() {
+    if (!treeKeyShown) return false
+    var box = treeBoxes().find(function(b) { return b.ring.key === treeKey })
+    if (!box) return false
+    box.ring.activated()
+    return true
+  }
+
+  // Scrolls every Flickable an item sits in (the guide pane, a track or
+  // chain wider than its card) until the item shows; its top wins when it
+  // is taller than the view.
+  function revealInPane(item) {
+    var margin = Commons.Style.space(12)
+    for (var f = item.parent; f; f = f.parent) {
+      if (f.flickableDirection === undefined || !f.contentItem) continue
+      var at = item.mapToItem(f.contentItem, 0, 0)
+      if (f.contentWidth > f.width) f.contentX = scrolledTo(f.contentX, f.width, f.contentWidth, at.x, item.width, margin)
+      if (f.contentHeight > f.height) f.contentY = scrolledTo(f.contentY, f.height, f.contentHeight, at.y, item.height, margin)
+    }
+  }
+
+  function scrolledTo(pos, view, content, start, size, margin) {
+    var next = pos
+    if (start + size + margin > next + view) next = start + size + margin - view
+    if (start - margin < next) next = start - margin
+    return Math.max(0, Math.min(content - view, next))
+  }
+
   function stepOf(api) {
     for (var i = 0; i < walkSteps.length; i++)
       if ((walkSteps[i].achievements || []).indexOf(api) >= 0) return i
@@ -785,6 +892,14 @@ Item {
     return needs.filter(function(r) { return !guideDone(r) })
   }
 
+  // A locked chain node's label: the first need in full, the rest
+  // counted ("needs Keeper and 1 more").
+  function needsLine(waits) {
+    if (!waits.length) return ""
+    var first = "needs " + shownName(waits[0])
+    return waits.length > 1 ? first + " and " + (waits.length - 1) + " more" : first
+  }
+
   // A trophy's name for one line, a hidden one kept secret like its row.
   function shownName(api) {
     var a = byApi[api]
@@ -858,6 +973,13 @@ Item {
     // A newer maker writes better guides (guides.MAKER): say so, as the
     // owner judged an older MGSV guide thin without knowing.
     return made + (guide.outdated ? " · older maker" : "")
+  }
+
+  // A metal as text: as it is on a dark card, darkened on a light one.
+  function metalText(tier, fallback) {
+    var metal = metalColors[tier]
+    if (!metal) return fallback
+    return lightTheme ? Qt.darker(metal, 1.9) : metal
   }
 
   function forceKeys() {
@@ -1004,6 +1126,32 @@ Item {
   // painted in the theme accent).
   // A ★ that pins a trophy to the Profile showcase: lit while pinned,
   // dim on offer, and "full" when six are already pinned.
+  // The Tree's keyboard focus ring. Each part the arrows can reach holds
+  // one (`key` names it, `activated` does what its click does); it lists
+  // itself in root.treeTargets so treeMove() finds it by where it is.
+  component TreeFocus: Rectangle {
+    id: ring
+    property string key: ""
+    // On the part's edge by default: one as wide as the guide column had
+    // its ring's sides cut off by the pane. Parts inside a card's padding
+    // (chain nodes, chips) set an inset to draw it just outside.
+    property real inset: 0
+    signal activated()
+    anchors.fill: parent
+    anchors.margins: -inset
+    radius: Commons.Style.cornerRadius + inset
+    color: "transparent"
+    border.width: 2
+    border.color: Commons.Color.accent
+    visible: root.treeKeyShown && key !== "" && root.treeKey === key
+    z: 10
+    Component.onCompleted: root.treeTargets.push(ring)
+    Component.onDestruction: {
+      var at = root.treeTargets.indexOf(ring)
+      if (at >= 0) root.treeTargets.splice(at, 1)
+    }
+  }
+
   component PinStar: Rectangle {
     id: pin
     property bool on: false
@@ -1418,6 +1566,7 @@ Item {
       accent: false
       text: pinBtn.pinnedHere ? "Back to automatic" : "I'm here"
       onClicked: root.pinStep(pinBtn.pinnedHere ? -1 : pinBtn.index)
+      TreeFocus { key: "pin"; radius: pinAction.radius; onActivated: pinAction.clicked() }
     }
   }
 
@@ -1650,6 +1799,11 @@ Item {
     }
     HoverHandler { id: actHover; enabled: actRow.pickable; cursorShape: Qt.PointingHandCursor }
     TapHandler { enabled: actRow.pickable; onTapped: root.pickInTree(actRow.action.achievement, actRow.part) }
+    TreeFocus {
+      key: actRow.pickable ? "act:" + actRow.action.achievement : ""
+      inset: Commons.Style.space(4)
+      onActivated: root.pickInTree(actRow.action.achievement, actRow.part)
+    }
     Text {
       textFormat: Text.PlainText
       id: actMark
@@ -1699,7 +1853,7 @@ Item {
     property bool stacked: false
     property bool first: false
     readonly property var ach: root.byApi[api] || ({})
-    readonly property bool secret: root.isSecret(api) && !tileHover.hovered
+    readonly property bool secret: root.isSecret(api) && !tileHover.hovered && !tileFocus.visible
     readonly property var counter: root.counterOf(api)
     readonly property bool missable: root.isMissable(api)
     readonly property bool picked: root.treePick === api && root.treePickIn === "now"
@@ -1715,6 +1869,7 @@ Item {
     Accessible.name: (secret ? "Hidden achievement" : ach.name || "") + ", " + root.placeOf(api)
     HoverHandler { id: tileHover; cursorShape: Qt.PointingHandCursor }
     TapHandler { onTapped: root.pickInTree(tile.api, "now") }
+    TreeFocus { id: tileFocus; key: "now:" + tile.api; onActivated: root.pickInTree(tile.api, "now") }
     ArtIcon {
       id: tileArt
       x: tile.pad
@@ -1732,7 +1887,7 @@ Item {
       y: tile.pad
       visible: tile.ach.percent !== null && tile.ach.percent !== undefined
       text: visible ? tile.ach.percent.toFixed(1) + "%" : ""
-      color: root.metalColors[tile.ach.tier] || root.foreground
+      color: root.metalText(tile.ach.tier, root.foreground)
       opacity: 0.75
       font.family: Commons.Style.font.family
       font.pixelSize: Commons.Style.font.caption
@@ -2012,25 +2167,69 @@ Item {
   // A chain as a small skill tree: the goal on top, what it needs below,
   // joined by lines that light in the accent once the lower one is done.
   // A node whose needs are done while it is open is READY and glows.
+  // Each row is as tall as its longest label (a row of done trophies has
+  // no "needs" line), so a short chain leaves no empty band; a chain too
+  // wide for the card scrolls sideways instead of spilling out of it.
   component ChainCard: Rectangle {
     id: chain
     property var tree: ({ api: "", kids: [] })
     property real maxWidth: 400
+    property real gap: Commons.Style.space(8)
     readonly property var layout: root.chainLayout(tree)
     readonly property var apis: layout.nodes.map(function(n) { return n.api })
     readonly property int got: apis.filter(function(a) { return root.guideDone(a) }).length
     readonly property real pad: Commons.Style.space(12)
-    readonly property real slot: Math.max(Commons.Style.space(64), Math.min(Commons.Style.space(96), (maxWidth - pad * 2) / Math.max(1, layout.cols)))
+    readonly property real minSlot: Commons.Style.space(64)
+    // A two-column chain fills half the row beside another; anything
+    // wider takes the whole row, so cards line up instead of leaving
+    // ragged space at the right.
+    readonly property real half: (maxWidth - gap) / 2
+    // Half a narrow column cut the goal's name short ("Glassbl...").
+    readonly property bool wide: layout.cols * Commons.Style.space(96) + pad * 2 > half || half < Commons.Style.space(210)
+    readonly property real slot: Math.max(minSlot, Math.min(Commons.Style.space(128), (width - pad * 2 - ringRoom * 2) / Math.max(1, layout.cols)))
     readonly property real nodeSize: Commons.Style.space(36)
-    readonly property real labelH: Commons.Style.space(6) + captionMetrics.height * 3 + Commons.Style.space(4)
-    readonly property real rowH: nodeSize + labelH + Commons.Style.space(18)
+    readonly property real rowGap: Commons.Style.space(18)
+    // Room round the graph inside its clip for a keyboard ring.
+    readonly property real ringRoom: Commons.Style.space(6)
+    // Per row: its top and its tallest label, set by relayout() from the
+    // labels as drawn.
+    property var rowTops: []
+    property var rowLabels: []
+    property real graphHeight: nodeSize
     readonly property bool goalDone: root.guideDone(tree.api)
-    width: Math.min(maxWidth, Math.max(Commons.Style.space(210), chainGraph.width + pad * 2))
-    height: chainHead.height + chainGraph.height + pad * 2 + Commons.Style.space(14)
+    width: wide ? maxWidth : half
+    height: chainHead.height + graphHeight + pad * 2 + Commons.Style.space(14) + ringRoom + (chainScroll.interactive ? Commons.Style.space(6) : 0)
     radius: Commons.Style.cornerRadius
     color: Qt.alpha(root.foreground, 0.035)
     border.width: 1
     border.color: goalDone ? Qt.alpha(root.metalColors[(root.byApi[tree.api] || {}).tier] || root.metalColors.bronze, 0.5) : Qt.alpha(root.foreground, 0.1)
+
+    function rowTop(depth) {
+      return rowTops[depth] !== undefined ? rowTops[depth] : depth * (nodeSize + rowGap)
+    }
+
+    function rowBottom(depth) {
+      return rowTop(depth) + nodeSize + (rowLabels[depth] || 0)
+    }
+
+    function relayout() {
+      var labels = []
+      for (var i = 0; i < chainNodes.count; i++) {
+        var node = chainNodes.itemAt(i)
+        if (!node) continue
+        var d = node.modelData.depth
+        labels[d] = Math.max(labels[d] || 0, node.labelHeight)
+      }
+      var tops = [], y = 0
+      for (var r = 0; r < layout.rows; r++) {
+        tops.push(y)
+        y += nodeSize + (labels[r] || 0) + rowGap
+      }
+      rowLabels = labels
+      rowTops = tops
+      graphHeight = Math.max(nodeSize, y - rowGap)
+    }
+
     Column {
       id: chainHead
       x: chain.pad
@@ -2065,123 +2264,199 @@ Item {
         fraction: chain.apis.length ? chain.got / chain.apis.length : 0
       }
     }
-    Item {
-      id: chainGraph
-      x: Math.round((chain.width - width) / 2)
-      y: chainHead.y + chainHead.height + Commons.Style.space(14)
-      width: chain.slot * chain.layout.cols
-      height: chain.rowH * chain.layout.rows - Commons.Style.space(18)
-      Canvas {
-        id: chainLines
-        anchors.fill: parent
-        // Repaint when anything is unlocked or ticked.
-        property int state: chain.got
-        onStateChanged: requestPaint()
-        onWidthChanged: requestPaint()
-        onPaint: {
-          var c = getContext("2d")
-          c.reset()
-          c.lineWidth = 2
-          c.lineJoin = "round"
-          var nodes = chain.layout.nodes
-          // Dim lines first, so a lit one is never drawn under one.
-          ;[false, true].forEach(function(lit) {
-            c.strokeStyle = lit ? Commons.Color.accent : Qt.alpha(root.foreground, 0.2)
-            nodes.forEach(function(n) {
-              if (n.parent < 0 || root.guideDone(n.api) !== lit) return
-              var p = nodes[n.parent]
-              var x1 = (n.x + 0.5) * chain.slot, y1 = n.depth * chain.rowH - Commons.Style.space(2)
-              var x2 = (p.x + 0.5) * chain.slot, y2 = p.depth * chain.rowH + chain.nodeSize + chain.labelH
-              var mid = (y1 + y2) / 2
-              c.beginPath()
-              c.moveTo(x1, y1)
-              c.lineTo(x1, mid)
-              c.lineTo(x2, mid)
-              c.lineTo(x2, y2)
-              c.stroke()
+    Flickable {
+      id: chainScroll
+      x: chain.pad
+      y: chainHead.y + chainHead.height + Commons.Style.space(14) - chain.ringRoom
+      width: chain.width - chain.pad * 2
+      height: chain.graphHeight + chain.ringRoom * 2 + (interactive ? Commons.Style.space(6) : 0)
+      contentWidth: chainGraph.width + chain.ringRoom * 2
+      contentHeight: height
+      clip: true
+      interactive: contentWidth > width + 1
+      flickableDirection: Flickable.HorizontalFlick
+      boundsBehavior: Flickable.StopAtBounds
+      // The goal sits over the middle of the chain: start there.
+      Component.onCompleted: Qt.callLater(function() { chainScroll.contentX = Math.max(0, (chainScroll.contentWidth - chainScroll.width) / 2) })
+      Item {
+        id: chainGraph
+        x: Math.max(chain.ringRoom, Math.round((chainScroll.width - width) / 2))
+        y: chain.ringRoom
+        width: chain.slot * chain.layout.cols
+        height: chain.graphHeight
+        Canvas {
+          id: chainLines
+          anchors.fill: parent
+          // Repaint when anything is unlocked or ticked, or a row moves.
+          property int state: chain.got
+          onStateChanged: requestPaint()
+          onWidthChanged: requestPaint()
+          onHeightChanged: requestPaint()
+          Connections {
+            target: chain
+            function onRowTopsChanged() { chainLines.requestPaint() }
+          }
+          onPaint: {
+            var c = getContext("2d")
+            c.reset()
+            c.lineWidth = 2
+            c.lineJoin = "round"
+            var nodes = chain.layout.nodes
+            // Dim lines first, so a lit one is never drawn under one.
+            ;[false, true].forEach(function(lit) {
+              c.strokeStyle = lit ? Commons.Color.accent : Qt.alpha(root.foreground, 0.2)
+              nodes.forEach(function(n) {
+                if (n.parent < 0 || root.guideDone(n.api) !== lit) return
+                var p = nodes[n.parent]
+                var x1 = (n.x + 0.5) * chain.slot, y1 = chain.rowTop(n.depth) - Commons.Style.space(2)
+                var x2 = (p.x + 0.5) * chain.slot, y2 = chain.rowBottom(p.depth) + Commons.Style.space(2)
+                var mid = Math.round((y1 + y2) / 2)
+                c.beginPath()
+                c.moveTo(x1, y1)
+                c.lineTo(x1, mid)
+                c.lineTo(x2, mid)
+                c.lineTo(x2, y2)
+                c.stroke()
+              })
             })
-          })
-        }
-      }
-      Repeater {
-        model: chain.layout.nodes
-        delegate: Item {
-          id: cnode
-          required property var modelData
-          required property int index
-          readonly property string api: modelData.api
-          readonly property bool done: root.guideDone(api)
-          readonly property var waits: done ? [] : root.lockedBy(api)
-          readonly property bool ready: !done && waits.length === 0
-          readonly property bool picked: root.treePick === api && root.treePickIn === "chains"
-          x: modelData.x * chain.slot
-          y: modelData.depth * chain.rowH
-          width: chain.slot
-          height: chain.nodeSize + chain.labelH
-          opacity: 0
-          SequentialAnimation on opacity {
-            PauseAnimation { duration: 60 + cnode.index * 50 }
-            NumberAnimation { to: 1; duration: 220; easing.type: Easing.OutCubic }
-          }
-          Accessible.role: Accessible.Button
-          Accessible.name: root.shownName(api) + (done ? ", done" : ready ? ", ready" : ", locked")
-          Rectangle {
-            anchors.fill: parent
-            anchors.margins: -Commons.Style.space(3)
-            radius: Commons.Style.cornerRadius
-            color: cnodeHover.hovered ? Commons.Style.hoverFill : "transparent"
-          }
-          HoverHandler { id: cnodeHover; cursorShape: Qt.PointingHandCursor }
-          TapHandler { onTapped: root.pickInTree(cnode.api, "chains") }
-          ArtIcon {
-            id: cnodeArt
-            anchors.horizontalCenter: parent.horizontalCenter
-            api: cnode.api
-            size: chain.nodeSize
-            ready: cnode.ready
-            picked: cnode.picked
-            tick: true
-          }
-          MeterBar {
-            readonly property var counter: root.counterOf(cnode.api)
-            visible: counter !== null && !cnode.done
-            x: cnodeArt.x
-            y: chain.nodeSize + Commons.Style.space(3)
-            width: chain.nodeSize
-            fraction: counter ? counter.fraction : 0
-          }
-          Column {
-            y: chain.nodeSize + Commons.Style.space(8)
-            width: parent.width
-            Text {
-              textFormat: Text.PlainText
-              width: parent.width - Commons.Style.space(4)
-              anchors.horizontalCenter: parent.horizontalCenter
-              horizontalAlignment: Text.AlignHCenter
-              text: root.shownName(cnode.api)
-              color: root.foreground
-              opacity: cnode.done ? 0.6 : cnode.ready ? 1 : 0.5
-              font.family: Commons.Style.font.family
-              font.pixelSize: Commons.Style.font.caption
-              font.bold: cnode.ready
-              wrapMode: Text.Wrap
-              maximumLineCount: 2
-              elide: Text.ElideRight
-            }
-            Caption {
-              width: parent.width - Commons.Style.space(4)
-              anchors.horizontalCenter: parent.horizontalCenter
-              horizontalAlignment: Text.AlignHCenter
-              visible: !cnode.done
-              text: cnode.ready ? "READY" : "needs " + cnode.waits.map(function(r) { return root.shownName(r) }).join(", ")
-              color: cnode.ready ? Commons.Color.accent : root.foreground
-              opacity: cnode.ready ? 1 : 0.45
-              font.bold: cnode.ready
-              font.letterSpacing: cnode.ready ? 1 : 0
-            }
           }
         }
+        Repeater {
+          id: chainNodes
+          model: chain.layout.nodes
+          onItemAdded: Qt.callLater(chain.relayout)
+          delegate: Item {
+            id: cnode
+            required property var modelData
+            required property int index
+            readonly property string api: modelData.api
+            readonly property bool done: root.guideDone(api)
+            readonly property var waits: done ? [] : root.lockedBy(api)
+            readonly property bool ready: !done && waits.length === 0
+            readonly property bool picked: root.treePick === api && root.treePickIn === "chains"
+            readonly property real labelHeight: cnodeLabel.y - chain.nodeSize + cnodeLabel.implicitHeight
+            onLabelHeightChanged: Qt.callLater(chain.relayout)
+            x: modelData.x * chain.slot
+            y: chain.rowTop(modelData.depth)
+            width: chain.slot
+            height: chain.nodeSize + labelHeight
+            opacity: 0
+            SequentialAnimation on opacity {
+              PauseAnimation { duration: 60 + cnode.index * 50 }
+              NumberAnimation { to: 1; duration: 220; easing.type: Easing.OutCubic }
+            }
+            Accessible.role: Accessible.Button
+            Accessible.name: root.shownName(api) + (done ? ", done" : ready ? ", ready" : ", locked")
+            Rectangle {
+              anchors.fill: parent
+              anchors.margins: -Commons.Style.space(3)
+              radius: Commons.Style.cornerRadius
+              color: cnodeHover.hovered ? Commons.Style.hoverFill : "transparent"
+            }
+            HoverHandler { id: cnodeHover; cursorShape: Qt.PointingHandCursor }
+            TapHandler { onTapped: root.pickInTree(cnode.api, "chains") }
+            ArtIcon {
+              id: cnodeArt
+              anchors.horizontalCenter: parent.horizontalCenter
+              api: cnode.api
+              size: chain.nodeSize
+              ready: cnode.ready
+              picked: cnode.picked
+              tick: true
+              // Round the art, not the label: a ring round both was a big
+              // box over the lines.
+              TreeFocus { key: "chain:" + chain.tree.api + ":" + cnode.index; inset: Commons.Style.space(4); onActivated: root.pickInTree(cnode.api, "chains") }
+            }
+            MeterBar {
+              readonly property var counter: root.counterOf(cnode.api)
+              visible: counter !== null && !cnode.done
+              x: cnodeArt.x
+              y: chain.nodeSize + Commons.Style.space(3)
+              width: chain.nodeSize
+              fraction: counter ? counter.fraction : 0
+            }
+            // The goal has its row to itself: its label takes up to three
+            // slots, so a name like "Everburning" no longer breaks inside
+            // the word.
+            Column {
+              id: cnodeLabel
+              readonly property real span: cnode.modelData.depth === 0
+                                           ? Math.min(chain.slot * 3, Math.max(chainGraph.width, chainScroll.width)) : chain.slot
+              readonly property real lo: -chainGraph.x - cnode.x
+              readonly property real hi: Math.max(chainGraph.width, chainScroll.width) - chainGraph.x - cnode.x - span
+              x: Math.max(lo, Math.min(hi, (cnode.width - span) / 2))
+              y: chain.nodeSize + Commons.Style.space(8)
+              width: span
+              Text {
+                textFormat: Text.PlainText
+                width: parent.width - Commons.Style.space(4)
+                anchors.horizontalCenter: parent.horizontalCenter
+                horizontalAlignment: Text.AlignHCenter
+                text: root.shownName(cnode.api)
+                color: root.foreground
+                opacity: cnode.done ? 0.6 : cnode.ready ? 1 : 0.5
+                font.family: Commons.Style.font.family
+                font.pixelSize: Commons.Style.font.caption
+                font.bold: cnode.ready
+                wrapMode: Text.Wrap
+                maximumLineCount: 2
+                elide: Text.ElideRight
+              }
+              // The lines already show every need; the label names the
+              // first in full (it was cut to "needs Lighthou...") and
+              // counts the rest.
+              Caption {
+                width: parent.width - Commons.Style.space(4)
+                anchors.horizontalCenter: parent.horizontalCenter
+                horizontalAlignment: Text.AlignHCenter
+                visible: !cnode.done
+                text: cnode.ready ? "READY" : root.needsLine(cnode.waits)
+                color: cnode.ready ? Commons.Color.accent : root.foreground
+                opacity: cnode.ready ? 1 : 0.45
+                font.bold: cnode.ready
+                font.letterSpacing: cnode.ready ? 1 : 0
+                wrapMode: Text.Wrap
+                maximumLineCount: 3
+              }
+            }
+          }
+        }
       }
+    }
+    // A chain wider than the card: fades at the edge with more to see.
+    Rectangle {
+      visible: chainScroll.interactive && chainScroll.contentX > 1
+      x: chainScroll.x
+      y: chainScroll.y
+      width: Commons.Style.space(24)
+      height: chain.graphHeight + chain.ringRoom * 2
+      gradient: Gradient {
+        orientation: Gradient.Horizontal
+        GradientStop { position: 0; color: Qt.tint(root.background, Qt.alpha(root.foreground, 0.035)) }
+        GradientStop { position: 1; color: "transparent" }
+      }
+    }
+    Rectangle {
+      visible: chainScroll.interactive && chainScroll.contentX < chainScroll.contentWidth - chainScroll.width - 1
+      x: chainScroll.x + chainScroll.width - width
+      y: chainScroll.y
+      width: Commons.Style.space(24)
+      height: chain.graphHeight + chain.ringRoom * 2
+      gradient: Gradient {
+        orientation: Gradient.Horizontal
+        GradientStop { position: 0; color: "transparent" }
+        GradientStop { position: 1; color: Qt.tint(root.background, Qt.alpha(root.foreground, 0.035)) }
+      }
+    }
+    // Where the chain is scrolled to, under it.
+    Rectangle {
+      visible: chainScroll.interactive
+      x: chainScroll.x + chainScroll.contentX / chainScroll.contentWidth * chainScroll.width
+      y: chainScroll.y + chainScroll.height - height
+      width: chainScroll.width * chainScroll.width / chainScroll.contentWidth
+      height: Commons.Style.space(3)
+      radius: height / 2
+      color: Qt.alpha(root.foreground, 0.25)
     }
   }
 
@@ -2218,6 +2493,7 @@ Item {
       size: Commons.Style.space(40)
       picked: gt.picked
       tick: true
+      TreeFocus { key: "alone:" + gt.api; inset: Commons.Style.space(4); onActivated: root.pickInTree(gt.api, "alone") }
     }
     // An open missable, flagged on its corner.
     Rectangle {
@@ -2326,7 +2602,7 @@ Item {
           textFormat: Text.PlainText
           anchors.verticalCenter: parent.verticalCenter
           text: grow.ach.percent !== null && grow.ach.percent !== undefined ? grow.ach.percent.toFixed(1) + "%" : "–"
-          color: root.metalColors[grow.ach.tier] || root.foreground
+          color: root.metalText(grow.ach.tier, root.foreground)
           opacity: grow.ach.unlocked ? 1 : 0.7
           font.family: Commons.Style.font.family
           font.pixelSize: Commons.Style.font.caption
@@ -2446,11 +2722,22 @@ Item {
       Keys.onPressed: function(event) {
         if (event.key === Qt.Key_Escape) {
           if (root.search) root.search = ""
-          else root.closeRequested()
+          else if (root.treeKeys && root.treePick) {
+            root.treePick = ""
+            root.treePickIn = ""
+          } else root.closeRequested()
         } else if (event.key === Qt.Key_Tab) {
           root.cycleFilter(1)
         } else if (event.key === Qt.Key_Backtab) {
           root.cycleFilter(-1)
+        } else if (root.treeKeys && (event.key === Qt.Key_Right || event.key === Qt.Key_Left
+                                     || event.key === Qt.Key_Down || event.key === Qt.Key_Up)) {
+          root.treeMove(event.key === Qt.Key_Right ? 1 : event.key === Qt.Key_Left ? -1 : 0,
+                        event.key === Qt.Key_Down ? 1 : event.key === Qt.Key_Up ? -1 : 0)
+        } else if (root.treeKeys && !(event.modifiers & Qt.ShiftModifier)
+                   && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || (event.key === Qt.Key_Space && !root.search))
+                   && root.treeActivate()) {
+          // Done: the focused part acted as on a click.
         } else if (event.key === Qt.Key_Right) {
           root.cycleSort(1)
         } else if (event.key === Qt.Key_Left) {
@@ -2575,7 +2862,7 @@ Item {
               textFormat: Text.PlainText
               anchors.verticalCenter: parent.verticalCenter
               text: root.game ? "Platinum · " + root.day(root.game.platinum) : ""
-              color: root.metalColors.platinum
+              color: root.metalText("platinum", root.foreground)
               font.family: Commons.Style.font.family
               font.pixelSize: Commons.Style.font.bodySmall
               font.bold: true
@@ -2649,7 +2936,7 @@ Item {
                 textFormat: Text.PlainText
                 anchors.verticalCenter: parent.verticalCenter
                 text: root.tierCount(parent.modelData)
-                color: root.metalColors[parent.modelData]
+                color: root.metalText(parent.modelData, root.foreground)
                 font.family: Commons.Style.font.family
                 font.pixelSize: Commons.Style.font.bodySmall
                 font.bold: true
@@ -3007,7 +3294,7 @@ Item {
               anchors.verticalCenter: parent.verticalCenter
               text: row.ach.percent !== null ? row.ach.percent.toFixed(1) + "%" : "–"
               // In the metal it earns, dimmed while still locked.
-              color: row.ach.percent !== null ? root.metalColors[row.ach.tier] || root.foreground : root.foreground
+              color: row.ach.percent !== null ? root.metalText(row.ach.tier, root.foreground) : root.foreground
               opacity: row.ach.unlocked ? 1 : 0.7
               font.family: Commons.Style.font.family
               font.pixelSize: Commons.Style.font.bodySmall
@@ -3095,6 +3382,10 @@ Item {
         id: guideColumn
         width: guidePane.width
         spacing: Commons.Style.space(12)
+
+        // A click hides the keyboard ring; the next arrow shows it again
+        // where it was. Passive: the parts' own taps still get the click.
+        PointHandler { onActiveChanged: if (active) root.treeKeyShown = false }
 
         // Other games' makes: one line, only when they hold Make back.
         Caption {
@@ -3782,6 +4073,7 @@ Item {
             font.bold: true
             HoverHandler { id: doNowMore; cursorShape: Qt.PointingHandCursor }
             TapHandler { onTapped: root.doNowAll = !root.doNowAll }
+            TreeFocus { key: "now-more"; onActivated: root.doNowAll = !root.doNowAll }
           }
           Loader {
             width: parent.width
@@ -3899,12 +4191,7 @@ Item {
                     color: tnodeHover.hovered ? Commons.Style.hoverFill : "transparent"
                   }
                   HoverHandler { id: tnodeHover; cursorShape: Qt.PointingHandCursor }
-                  TapHandler {
-                    onTapped: {
-                      if (!story.stepped) root.pickInTree(tnode.modelData.api, "story")
-                      else root.trackPick = tnode.index === root.trackHere ? -1 : tnode.index
-                    }
-                  }
+                  TapHandler { onTapped: root.pickTrackNode(tnode.index, tnode.modelData.api) }
                   // Kept inside the track at its ends.
                   Row {
                     visible: tnode.here
@@ -3924,6 +4211,12 @@ Item {
                     behind: tnode.behind
                     chosen: tnode.chosen
                     lost: root.lostAt(tnode.index).length
+                    TreeFocus {
+                      key: "story:" + tnode.index
+                      inset: Commons.Style.space(4)
+                      radius: width / 2
+                      onActivated: root.pickTrackNode(tnode.index, tnode.modelData.api)
+                    }
                   }
                   Column {
                     y: track.lineY + story.dotSize / 2 + Commons.Style.space(6)
@@ -3973,190 +4266,226 @@ Item {
                 readonly property bool done: total > 0 ? got === total : (root.trackHere < 0 || index < root.trackHere)
                 readonly property bool chosen: story.stepped ? index === root.trackShown
                                                              : root.treePick === modelData.api && root.treePickIn === "story"
+                // The step shown opens under its own node.
+                readonly property bool open: story.stepped && chosen
+                readonly property real rowH: Math.max(story.dotSize, unodeText.height) + Commons.Style.space(12)
+                readonly property real lineX: Commons.Style.space(6) + story.dotSize / 2 - 1
                 width: parent.width
-                height: Math.max(story.dotSize, unodeText.height) + Commons.Style.space(12)
+                height: rowH + (open && unodePanel.item ? unodePanel.height + Commons.Style.space(10) : 0)
                 opacity: 0
                 SequentialAnimation on opacity {
                   PauseAnimation { duration: 80 + Math.min(unode.index, 12) * 45 }
                   NumberAnimation { to: 1; duration: 220; easing.type: Easing.OutCubic }
                 }
-                Rectangle {
-                  anchors.fill: parent
-                  radius: Commons.Style.cornerRadius
-                  color: unodeHover.hovered ? Commons.Style.hoverFill : unode.chosen && !unode.here ? Qt.alpha(Commons.Color.accent, 0.06) : "transparent"
-                }
-                HoverHandler { id: unodeHover; cursorShape: Qt.PointingHandCursor }
-                TapHandler {
-                  onTapped: {
-                    if (!story.stepped) root.pickInTree(unode.modelData.api, "story")
-                    else root.trackPick = unode.index === root.trackHere ? -1 : unode.index
-                  }
-                }
                 // The line, in halves above and below the dot, lit up to
-                // where the player is.
+                // where the player is; the lower half runs on past an open
+                // step's panel to the next node.
                 Rectangle {
                   visible: unode.index > 0
-                  x: Commons.Style.space(6) + story.dotSize / 2 - 1
+                  x: unode.lineX
                   width: 2
-                  height: parent.height / 2
+                  height: unode.rowH / 2
                   color: unode.index <= story.fillTo ? Commons.Color.accent : Qt.alpha(root.foreground, 0.14)
                 }
                 Rectangle {
                   visible: unode.index < root.trackNodes.length - 1
-                  x: Commons.Style.space(6) + story.dotSize / 2 - 1
-                  y: parent.height / 2
+                  x: unode.lineX
+                  y: unode.rowH / 2
                   width: 2
-                  height: parent.height / 2
+                  height: unode.height - y
                   color: unode.index < story.fillTo ? Commons.Color.accent : Qt.alpha(root.foreground, 0.14)
                 }
-                TrackDot {
-                  x: Commons.Style.space(6)
-                  anchors.verticalCenter: parent.verticalCenter
-                  size: story.dotSize
-                  number: unode.index + 1
-                  done: unode.done
-                  here: unode.here
-                  behind: !unode.done && root.trackHere >= 0 && unode.index < root.trackHere
-                  chosen: unode.chosen
-                  lost: root.lostAt(unode.index).length
+                Item {
+                  id: unodeRow
+                  width: parent.width
+                  height: unode.rowH
+                  Accessible.role: Accessible.Button
+                  Accessible.name: unodeTitle.text + ", " + unode.got + " of " + unode.total + (unode.here ? ", you are here" : "")
+                                   + (unode.here && root.stepPinned ? ", pinned by you" : "")
+                  Rectangle {
+                    anchors.fill: parent
+                    radius: Commons.Style.cornerRadius
+                    color: unodeHover.hovered ? Commons.Style.hoverFill : unode.chosen && !unode.here ? Qt.alpha(Commons.Color.accent, 0.06) : "transparent"
+                  }
+                  HoverHandler { id: unodeHover; cursorShape: Qt.PointingHandCursor }
+                  TapHandler { onTapped: unodeFocus.activated() }
+                  TreeFocus {
+                    id: unodeFocus
+                    key: "story:" + unode.index
+                    onActivated: root.pickTrackNode(unode.index, unode.modelData.api)
+                  }
+                  TrackDot {
+                    x: Commons.Style.space(6)
+                    anchors.verticalCenter: parent.verticalCenter
+                    size: story.dotSize
+                    number: unode.index + 1
+                    done: unode.done
+                    here: unode.here
+                    behind: !unode.done && root.trackHere >= 0 && unode.index < root.trackHere
+                    chosen: unode.chosen
+                    lost: root.lostAt(unode.index).length
+                  }
+                  Column {
+                    id: unodeText
+                    x: Commons.Style.space(6) + story.dotSize + Commons.Style.space(10)
+                    width: parent.width - x - Commons.Style.space(8)
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: Commons.Style.space(2)
+                    Text {
+                      textFormat: Text.PlainText
+                      id: unodeTitle
+                      width: parent.width
+                      text: story.stepped ? root.walkSteps[unode.index].title : root.shownName(unode.modelData.api)
+                      color: unode.here ? Commons.Color.accent : root.foreground
+                      opacity: unode.here || unode.chosen ? 1 : unode.done ? 0.5 : 0.75
+                      font.family: Commons.Style.font.family
+                      font.pixelSize: Commons.Style.font.bodySmall
+                      font.bold: unode.here || unode.chosen
+                      wrapMode: Text.Wrap
+                    }
+                    Row {
+                      spacing: Commons.Style.space(8)
+                      Caption { visible: story.stepped; text: unode.got + " of " + unode.total; elide: Text.ElideNone }
+                      Tag { id: uhereTag; visible: unode.here; text: "YOU ARE HERE"; solid: true }
+                      PinMark { visible: unode.here && root.stepPinned; size: uhereTag.height; anchors.verticalCenter: parent.verticalCenter }
+                    }
+                  }
                 }
-                Column {
-                  id: unodeText
-                  x: Commons.Style.space(6) + story.dotSize + Commons.Style.space(10)
-                  width: parent.width - x - Commons.Style.space(8)
-                  anchors.verticalCenter: parent.verticalCenter
-                  spacing: Commons.Style.space(2)
-                  Text {
-                    textFormat: Text.PlainText
-                    width: parent.width
-                    text: story.stepped ? root.walkSteps[unode.index].title : root.shownName(unode.modelData.api)
-                    color: unode.here ? Commons.Color.accent : root.foreground
-                    opacity: unode.here || unode.chosen ? 1 : unode.done ? 0.5 : 0.75
-                    font.family: Commons.Style.font.family
-                    font.pixelSize: Commons.Style.font.bodySmall
-                    font.bold: unode.here || unode.chosen
-                    wrapMode: Text.Wrap
-                  }
-                  Row {
-                    spacing: Commons.Style.space(8)
-                    Caption { visible: story.stepped; text: unode.got + " of " + unode.total; elide: Text.ElideNone }
-                    Tag { id: uhereTag; visible: unode.here; text: "YOU ARE HERE"; solid: true }
-                    PinMark { visible: unode.here && root.stepPinned; size: uhereTag.height; anchors.verticalCenter: parent.verticalCenter }
-                  }
+                Loader {
+                  id: unodePanel
+                  x: unodeText.x
+                  y: unode.rowH + Commons.Style.space(2)
+                  width: parent.width - x
+                  active: unode.open
+                  sourceComponent: stepPanelComponent
                 }
               }
             }
           }
           // The step shown: its actions as a checklist, then its trophies
           // no action names.
-          Rectangle {
-            id: stepPanel
-            // `|| null`: a guide made again can have fewer steps than the
-            // one a step was picked in.
-            readonly property var step: story.stepped && root.trackShown >= 0 ? root.walkSteps[root.trackShown] || null : null
-            readonly property var loose: step ? step.achievements.filter(function(api) {
-              return !(step.actions || []).some(function(a) { return a.achievement === api })
-            }) : []
-            readonly property var lost: step ? root.lostAt(root.trackShown) : []
-            width: parent.width
-            visible: step !== null
-            height: visible ? stepBody.height + Commons.Style.space(24) : 0
-            radius: Commons.Style.cornerRadius
-            color: Qt.alpha(root.foreground, 0.035)
-            border.width: 1
-            border.color: root.trackShown === root.trackHere ? Qt.alpha(Commons.Color.accent, 0.4) : Qt.alpha(root.foreground, 0.1)
-            Column {
-              id: stepBody
-              x: Commons.Style.space(12)
-              y: Commons.Style.space(12)
-              width: parent.width - Commons.Style.space(24)
-              spacing: Commons.Style.space(6)
-              Item {
-                width: parent.width
-                height: stepTitle.height
-                Text {
-                  textFormat: Text.PlainText
-                  id: stepTitle
-                  width: parent.width - stepCount.implicitWidth - Commons.Style.space(10)
-                  text: stepPanel.step ? (root.trackShown + 1) + ".  " + stepPanel.step.title : ""
-                  color: root.trackShown === root.trackHere ? Commons.Color.accent : root.foreground
-                  font.family: Commons.Style.font.family
-                  font.pixelSize: Commons.Style.font.bodySmall
-                  font.bold: true
-                  wrapMode: Text.Wrap
+          // One component for both tracks: below the track across, and on
+          // the narrow card inline under its node, so a step opened near the
+          // top shows its actions there and not below every other step.
+          Component {
+            id: stepPanelComponent
+            Rectangle {
+              id: stepPanel
+              // `|| null`: a guide made again can have fewer steps than the
+              // one a step was picked in.
+              readonly property var step: story.stepped && root.trackShown >= 0 ? root.walkSteps[root.trackShown] || null : null
+              readonly property var loose: step ? step.achievements.filter(function(api) {
+                return !(step.actions || []).some(function(a) { return a.achievement === api })
+              }) : []
+              readonly property var lost: step ? root.lostAt(root.trackShown) : []
+              width: parent.width
+              visible: step !== null
+              height: visible ? stepBody.height + Commons.Style.space(24) : 0
+              radius: Commons.Style.cornerRadius
+              color: Qt.alpha(root.foreground, 0.035)
+              border.width: 1
+              border.color: root.trackShown === root.trackHere ? Qt.alpha(Commons.Color.accent, 0.4) : Qt.alpha(root.foreground, 0.1)
+              Column {
+                id: stepBody
+                x: Commons.Style.space(12)
+                y: Commons.Style.space(12)
+                width: parent.width - Commons.Style.space(24)
+                spacing: Commons.Style.space(6)
+                Item {
+                  width: parent.width
+                  height: stepTitle.height
+                  Text {
+                    textFormat: Text.PlainText
+                    id: stepTitle
+                    width: parent.width - stepCount.implicitWidth - Commons.Style.space(10)
+                    text: stepPanel.step ? (root.trackShown + 1) + ".  " + stepPanel.step.title : ""
+                    color: root.trackShown === root.trackHere ? Commons.Color.accent : root.foreground
+                    font.family: Commons.Style.font.family
+                    font.pixelSize: Commons.Style.font.bodySmall
+                    font.bold: true
+                    wrapMode: Text.Wrap
+                  }
+                  Caption {
+                    id: stepCount
+                    anchors.right: parent.right
+                    visible: stepPanel.step && stepPanel.step.achievements.length > 0
+                    text: stepPanel.step ? root.stepDone(stepPanel.step) + " / " + stepPanel.step.achievements.length : ""
+                    elide: Text.ElideNone
+                  }
+                }
+                Prose {
+                  width: parent.width
+                  visible: text !== ""
+                  text: stepPanel.step ? root.safeMarkdown(stepPanel.step.text) : ""
                 }
                 Caption {
-                  id: stepCount
-                  anchors.right: parent.right
-                  visible: stepPanel.step && stepPanel.step.achievements.length > 0
-                  text: stepPanel.step ? root.stepDone(stepPanel.step) + " / " + stepPanel.step.achievements.length : ""
+                  width: parent.width
+                  visible: stepPanel.lost.length > 0
+                  wrapMode: Text.Wrap
                   elide: Text.ElideNone
+                  text: "⚠ Left behind here: " + stepPanel.lost.map(function(a) { return root.shownName(a) }).join(", ")
+                  color: Commons.Color.urgent
+                  opacity: 1
                 }
-              }
-              Prose {
-                width: parent.width
-                visible: text !== ""
-                text: stepPanel.step ? root.safeMarkdown(stepPanel.step.text) : ""
-              }
-              Caption {
-                width: parent.width
-                visible: stepPanel.lost.length > 0
-                wrapMode: Text.Wrap
-                elide: Text.ElideNone
-                text: "⚠ Left behind here: " + stepPanel.lost.map(function(a) { return root.shownName(a) }).join(", ")
-                color: Commons.Color.urgent
-                opacity: 1
-              }
-              Repeater {
-                model: stepPanel.step ? stepPanel.step.actions || [] : []
-                delegate: ActionLine {
-                  required property var modelData
-                  width: stepBody.width
-                  action: modelData
-                  picking: true
-                  part: "story"
-                }
-              }
-              Flow {
-                width: parent.width
-                visible: stepPanel.loose.length > 0
-                spacing: Commons.Style.space(6)
                 Repeater {
-                  model: stepPanel.loose
-                  delegate: Rectangle {
-                    id: looseChip
-                    required property string modelData
-                    width: looseRow.width + Commons.Style.space(12)
-                    height: looseRow.height + Commons.Style.space(8)
-                    radius: height / 2
-                    color: looseHover.hovered ? Commons.Style.hoverFill : Qt.alpha(root.foreground, 0.04)
-                    border.width: 1
-                    border.color: root.treePick === modelData && root.treePickIn === "story" ? Commons.Color.accent : Qt.alpha(root.foreground, 0.1)
-                    HoverHandler { id: looseHover; cursorShape: Qt.PointingHandCursor }
-                    TapHandler { onTapped: root.pickInTree(looseChip.modelData, "story") }
-                    Row {
-                      id: looseRow
-                      anchors.centerIn: parent
-                      spacing: Commons.Style.space(6)
-                      ArtIcon { api: looseChip.modelData; size: Commons.Style.space(20); anchors.verticalCenter: parent.verticalCenter }
-                      Caption {
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: (root.guideDone(looseChip.modelData) ? "✓ " : "") + root.shownName(looseChip.modelData)
-                        elide: Text.ElideNone
-                        opacity: root.guideDone(looseChip.modelData) ? 0.5 : 0.85
+                  model: stepPanel.step ? stepPanel.step.actions || [] : []
+                  delegate: ActionLine {
+                    required property var modelData
+                    width: stepBody.width
+                    action: modelData
+                    picking: true
+                    part: "story"
+                  }
+                }
+                Flow {
+                  width: parent.width
+                  visible: stepPanel.loose.length > 0
+                  spacing: Commons.Style.space(6)
+                  Repeater {
+                    model: stepPanel.loose
+                    delegate: Rectangle {
+                      id: looseChip
+                      required property string modelData
+                      width: looseRow.width + Commons.Style.space(12)
+                      height: looseRow.height + Commons.Style.space(8)
+                      radius: height / 2
+                      color: looseHover.hovered ? Commons.Style.hoverFill : Qt.alpha(root.foreground, 0.04)
+                      border.width: 1
+                      border.color: root.treePick === modelData && root.treePickIn === "story" ? Commons.Color.accent : Qt.alpha(root.foreground, 0.1)
+                      HoverHandler { id: looseHover; cursorShape: Qt.PointingHandCursor }
+                      TapHandler { onTapped: root.pickInTree(looseChip.modelData, "story") }
+                      TreeFocus { key: "loose:" + looseChip.modelData; inset: Commons.Style.space(3); radius: looseChip.radius + inset; onActivated: root.pickInTree(looseChip.modelData, "story") }
+                      Row {
+                        id: looseRow
+                        anchors.centerIn: parent
+                        spacing: Commons.Style.space(6)
+                        ArtIcon { api: looseChip.modelData; size: Commons.Style.space(20); anchors.verticalCenter: parent.verticalCenter }
+                        Caption {
+                          anchors.verticalCenter: parent.verticalCenter
+                          text: (root.guideDone(looseChip.modelData) ? "✓ " : "") + root.shownName(looseChip.modelData)
+                          elide: Text.ElideNone
+                          opacity: root.guideDone(looseChip.modelData) ? 0.5 : 0.85
+                        }
                       }
                     }
                   }
                 }
+                Caption {
+                  visible: stepPanel.step && stepPanel.step.unverified
+                  text: "(unverified: no source backs this step)"
+                  font.italic: true
+                  opacity: 0.45
+                }
+                StepPinButton { index: root.trackShown }
               }
-              Caption {
-                visible: stepPanel.step && stepPanel.step.unverified
-                text: "(unverified: no source backs this step)"
-                font.italic: true
-                opacity: 0.45
-              }
-              StepPinButton { index: root.trackShown }
             }
+          }
+          Loader {
+            width: parent.width
+            active: !story.upright
+            // The panel's own `step`: its `visible` follows this Loader's.
+            visible: active && item !== null && item.step !== null
+            sourceComponent: stepPanelComponent
           }
           Loader {
             width: parent.width
@@ -4186,6 +4515,7 @@ Item {
                 required property var modelData
                 tree: modelData
                 maxWidth: chainFlow.width
+                gap: chainFlow.spacing
               }
             }
           }
@@ -4226,6 +4556,7 @@ Item {
                 color: phaseHover.hovered ? Commons.Style.hoverFill : "transparent"
                 HoverHandler { id: phaseHover; cursorShape: Qt.PointingHandCursor }
                 TapHandler { onTapped: root.togglePhase(phaseGroup.modelData.phase) }
+                TreeFocus { key: "phase:" + phaseGroup.modelData.phase; onActivated: root.togglePhase(phaseGroup.modelData.phase) }
                 Accessible.role: Accessible.Button
                 Accessible.name: (root.phaseNames[phaseGroup.modelData.phase] || "") + (phaseGroup.folded ? ", folded" : "")
                 Row {
@@ -4354,10 +4685,21 @@ Item {
         Item {
           width: parent.width
           height: Math.max(allTitle.implicitHeight, allReveal.visible ? allReveal.height : 0)
+          // On a narrow card the long title ran under Reveal all: it
+          // shortens to fit the room the chip and count leave.
           SectionLabel {
             id: allTitle
+            readonly property string full: root.hasGuide ? "ALL TROPHIES · IN THE GUIDE'S ORDER" : root.making && root.jobHere ? "THE GUIDE WILL COVER" : "ALL TROPHIES"
+            readonly property real room: parent.width - doneCount.implicitWidth - (allReveal.visible ? allReveal.width + Commons.Style.space(12) : 0) - Commons.Style.space(12)
             anchors.verticalCenter: parent.verticalCenter
-            text: root.hasGuide ? "ALL TROPHIES · IN THE GUIDE'S ORDER" : root.making && root.jobHere ? "THE GUIDE WILL COVER" : "ALL TROPHIES"
+            width: Math.min(implicitWidth, room)
+            text: allTitleMetrics.advanceWidth <= room ? full : "ALL TROPHIES"
+            elide: Text.ElideRight
+            TextMetrics {
+              id: allTitleMetrics
+              font: allTitle.font
+              text: allTitle.full
+            }
           }
           Chip {
             id: allReveal
@@ -4498,12 +4840,12 @@ Item {
       Row {
         anchors.horizontalCenter: parent.horizontalCenter
         spacing: Commons.Style.space(14)
-        Key { cap: "↑↓"; action: "move" }
-        Key { cap: "Enter"; action: "reveal" }
+        Key { cap: root.treeKeys ? "↑↓←→" : "↑↓"; action: "move" }
+        Key { cap: "Enter"; action: root.treeKeys ? "open" : "reveal" }
         Key { cap: "⇧Enter"; action: "reveal all" }
         Key { cap: "Tab"; action: "filter" }
-        Key { cap: "←→"; action: "sort" }
-        Key { cap: "Esc"; action: "close" }
+        Key { visible: !root.treeKeys; cap: "←→"; action: "sort" }
+        Key { cap: "Esc"; action: root.search ? "clear search" : root.treeKeys && root.treePick ? "close details" : "close" }
       }
       Caption {
         anchors.horizontalCenter: parent.horizontalCenter
