@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Guides: **missable** now means lost for that save. Classify marks one
+  missable only when no chapter select, mission replay or free roam
+  brings it back, and asks again when its own note says one does; the
+  tip and the walkthrough step still warn you to get it on the way.
+  Guides made before say "older maker" (maker 7); **Make again** sorts
+  their missables.
 ## 0.8.1 - 2026-11-14
 
 - `test difficulty` and Settings > Toasts > Difficulty > Try show the

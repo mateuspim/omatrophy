@@ -273,6 +273,30 @@ class Checks(unittest.TestCase):
         self.assertIn("'Z'", errors[0])
         self.assertEqual(guide_maker.check_item({'name': 'A', 'requires': 'B'}, {'A', 'B'})[0]['requires'], [])
 
+    def test_missable_is_only_for_one_the_save_cannot_get_again(self):
+        # Regression: MGSV side ops, replayable from the mission list, came
+        # back missable (owner, 2026-11-11).
+        item, errors = guide_maker.check_item({'name': 'A', 'phase': 'missable', 'missable': True,
+                                               'missable_note': 'Before the mission ends',
+                                               'tips': 'Replay the mission later from the list.'}, {'A'})
+        self.assertTrue(item['missable'])
+        self.assertEqual(len(errors), 1)
+        self.assertIn("'Replay the mission'", errors[0])
+        self.assertIn('keep the warning in tips', errors[0])
+        for words in ('There is no chapter select.', 'Free roam ends after the finale.', 'Lost when chapter 5 ends.'):
+            self.assertEqual(guide_maker.check_item({'name': 'A', 'phase': 'missable', 'missable': True, 'missable_note': words},
+                                                    {'A'})[1], [], words)
+        # A warning in tips of one that isn't missable is what we want.
+        self.assertEqual(guide_maker.check_item({'name': 'A', 'phase': 'quick', 'missable': False,
+                                                 'tips': 'Easiest now; chapter select brings it back.'}, {'A'})[1], [])
+
+    def test_classify_prompt_says_missable_is_lost_for_the_save(self):
+        text = guide_maker.prompt('classify', game='G', excerpts='', achievements='- A', all_names='- A', phases='x')
+        self.assertIn('no chapter select, mission replay or', text)
+        self.assertIn('keep the warning in `tips`', text)
+        walk = guide_maker.prompt('walkthrough', game='G', progress='0 of 1', excerpts='', table='- A: story')
+        self.assertIn('back only through a replay', walk)
+
     def test_requires_cycles_break_at_the_closing_edge(self):
         text = ('<items>[{"name": "Pro", "phase": "challenge", "difficulty": 4, "requires": ["Vet"]},'
                 ' {"name": "Vet", "phase": "challenge", "difficulty": 3, "requires": ["Pro", "Nor"]}]</items>')

@@ -424,6 +424,29 @@ def check_cites(raw):
     return out
 
 
+# Ways a save gets a passed achievement back. Classify marked MGSV's side
+# ops (replayable from the mission list) missable, which filled the
+# tracker's missables with ones that never expire (owner, 2026-11-11):
+# missable now means lost for that save.
+REDO = re.compile(r'\b(?:chapter|mission|level|episode|stage)\s+(?:select(?:ion)?|replay)\b'
+                  r'|\breplay(?:ing)?\s+(?:the\s+|any\s+|that\s+|a\s+)?(?:chapter|mission|level|episode|stage)s?\b'
+                  r'|\bfree[\s-]?roam\b', re.I)
+NOT_REDO = re.compile(r"\b(?:no|not|without|never|cannot|can't|isn't|there's\s+no|lacks?)\b[^.;]{0,30}$", re.I)
+# "Free roam ends after the finale" is the point of no return, not a way back.
+REDO_ENDS = re.compile(r"^[^.;]{0,20}?\b(?:ends?|closes?|is\s+(?:lost|locked|gone|over|disabled)|won't|doesn't|does\s+not"
+                       r"|can't|cannot|isn't|never)\b", re.I)
+
+
+def redo_said(text):
+    """The words in `text` that say a replay brings a passed achievement
+    back ("chapter select", "free roam"), or '' when none do. "There is
+    no chapter select" doesn't count."""
+    for found in REDO.finditer(text or ''):
+        if not NOT_REDO.search(text[:found.start()]) and not REDO_ENDS.match(text[found.end():]):
+            return found.group(0)
+    return ''
+
+
 def check_item(raw, names):
     """(item, errors) for one classified achievement; bad fields are
     dropped, not guessed."""
@@ -454,6 +477,11 @@ def check_item(raw, names):
         errors.append(f'{name}: minutes must be [low, high]')
     item['missable'] = raw.get('missable') is True
     item['missable_note'] = raw.get('missable_note').strip() if isinstance(raw.get('missable_note'), str) else ''
+    redo = redo_said(item['missable_note'] + ' ' + (raw.get('tips') if isinstance(raw.get('tips'), str) else ''))
+    if item['missable'] and redo:
+        errors.append(f'{name}: missable, but your own words say {redo!r} brings it back; missable is only for one '
+                      'the same save can never get again: set missable false, give it the phase of what it asks, '
+                      'and keep the warning in tips')
     counter = raw.get('counter')
     if isinstance(counter, dict) and isinstance(counter.get('target'), (int, float)) and counter['target'] >= 2:
         item['counter'] = {'target': int(counter['target']), 'label': str(counter.get('label') or '')}

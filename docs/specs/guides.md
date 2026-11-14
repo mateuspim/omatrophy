@@ -69,7 +69,7 @@ OmaTrophy doesn't know survive a rewrite.
 ```json
 {
   "format": 2,
-  "maker": 6,
+  "maker": 7,
   "generated": 1793059700,
   "agent": {"name": "claude", "model": "", "stages": {"classify": 4, "route": 1}},
   "order": ["Name", "..."],
@@ -118,8 +118,15 @@ OmaTrophy doesn't know survive a rewrite.
   time, classify estimates one (`"time_estimate": true` in its answer,
   not stored) and `time` is always in `unverified`, even when another
   quote verifies the item.
-- `missable_note` says where the point of no return is; it's empty when
-  that's unknown.
+- `missable` (and the `missable` phase) means lost for that save: since
+  maker 7, one that chapter select, a mission replay or free roam brings
+  back isn't missable, and its `tips` carry the warning. A missable item
+  whose own `missable_note` or `tips` name such a way back ("chapter
+  select", "replay the mission", "free roam", not "there is no chapter
+  select" or "free roam ends") is an error that asks again.
+  `missable_note` says where the point of no return is; it's empty when
+  that's unknown. A walkthrough step's `missables` still warn about
+  ones only a replay brings back.
 - `counter` is set only for a target of 2 or more; `null` otherwise.
 - `combine_with`: achievements best done in the same run, a choice.
   `requires` (maker 4, [ADR 20](../adr/0020-requires-and-the-guide-tree.md)):

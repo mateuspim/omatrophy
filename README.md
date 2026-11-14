@@ -182,6 +182,10 @@ return is, a tip and what it combines with. A hidden achievement keeps its
 name and tip secret until you hover it, or **Reveal all** (next to Up
 next and the trophy list, or Shift+Enter) shows every one, in every game,
 until you hide them again.
+Missable means lost for that save: one that chapter select, a mission
+replay or free roam brings back isn't, though its tip and its
+walkthrough step still warn you to get it on the way (guides made
+before 0.10.0 flag more; **Make again** sorts them).
 Anything no source backs says
 "(unverified)". With a guide, the Now tab's **Up next** follows its route.
 

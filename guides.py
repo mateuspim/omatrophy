@@ -25,7 +25,9 @@ TICK = re.compile(r'^- \[(?P<mark>[ xX])\] \*\*(?P<name>.+?)\*\*(?P<rest>.*)$')
 # `requires` per item and `actions` per walkthrough step (ADR 20). 5: a
 # `marker` per step, the chapter clear the tracker places the player by.
 # 6: `stacks` per difficulty achievement, whether a harder run counts too.
-MAKER = 6
+# 7: `missable` only for one the same save can't get again (no chapter
+# select, replay or free roam).
+MAKER = 7
 
 
 def outdated(plan):
