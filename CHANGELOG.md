@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.14.0 - 2026-11-14
 
 - **Save image** of a platinum: from the tracker (beside Completionist)
   or a platinum shelf tile (hover, top-right), OmaTrophy draws the
