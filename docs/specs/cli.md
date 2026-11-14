@@ -119,10 +119,13 @@ the next read names them locally. The command itself exits at once.
 
 ## games
 
-`[{store, app, game, header, unlocked, total, platinum, played, hidden}]`,
+`[{store, app, game, header, unlocked, total, platinum, played, hidden, difficulty}]`,
 one per game with achievements, in no set order: the panel sorts them
 (recent, closest to platinum, name). `played` is `0` when the store doesn't
-say; `hidden` is `true` for games set aside with `hide`.
+say; `hidden` is `true` for games set aside with `hide`. `difficulty` lists
+the settings the game's locked achievements need (`["Hard", "Nightmare"]`),
+each once in the game's order, as `game`'s `difficulty` names them; `[]`
+when none does.
 
 ## game
 

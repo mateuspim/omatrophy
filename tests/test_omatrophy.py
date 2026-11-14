@@ -590,6 +590,13 @@ class NowTab(unittest.TestCase):
         self.assertEqual((d['percent'], d['tier'], d['hidden'], d['icon_locked']), (4.0, 'gold', True, 'g.jpg'))
         self.assertEqual(omatrophy.detail(ach('b'), {})['tier'], 'bronze')
 
+    def test_open_difficulties_lists_each_setting_still_to_do_once(self):
+        achs = [dict(ach('a'), desc='Finish on Hard.'), dict(ach('b'), desc='Finish on Nightmare.'),
+                dict(ach('c'), desc='Beat the boss on Hard.'), dict(ach('d', unlocked=True), desc='Finish on Easy.'),
+                ach('e')]
+        self.assertEqual(omatrophy.open_difficulties(achs), ['Hard', 'Nightmare'])
+        self.assertEqual(omatrophy.open_difficulties([ach('e')]), [])
+
     def test_tracker_detail_names_the_difficulty_an_achievement_needs(self):
         hard = dict(ach('a'), desc='Finish the game on Nightmare difficulty.')
         self.assertEqual(omatrophy.detail(hard, {})['difficulty'], 'Nightmare')

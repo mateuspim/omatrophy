@@ -86,6 +86,10 @@ Column {
   property string rarestRange: "ever"
   // Typed into the Games tab's filter field; matches game names.
   property string gameFilter: ""
+  // The Games tab shows only games with a difficulty achievement still
+  // to do, to pick the setting before starting one.
+  property bool difficultyOnly: false
+  readonly property int difficultyGames: games ? games.filter(function(g) { return (g.difficulty || []).length > 0 }).length : 0
   // "store:app" keys from config.json's `hidden`, kept live so a toggle
   // shows at once; hidden games leave Closest and dim elsewhere.
   property var hiddenKeys: ({})
@@ -101,6 +105,7 @@ Column {
   readonly property var shownGames: sortedGames.slice(gamesPageIndex * gamesPage, (gamesPageIndex + 1) * gamesPage)
   onSortChanged: gamesPageIndex = 0
   onGameFilterChanged: gamesPageIndex = 0
+  onDifficultyOnlyChanged: gamesPageIndex = 0
   onGamesPageCountChanged: gamesPageIndex = Math.min(gamesPageIndex, gamesPageCount - 1)
   // True while the filter field has the keyboard; Panel.qml then lets keys
   // through to it instead of its own shortcuts.
@@ -484,6 +489,7 @@ Column {
 
   function showGame(g) {
     if (sort === "closest" && isHidden(g)) return false
+    if (difficultyOnly && !(g.difficulty || []).length) return false
     return !gameFilter || g.game.toLowerCase().indexOf(gameFilter.toLowerCase()) >= 0
   }
 
@@ -3623,6 +3629,17 @@ Column {
               : root.sortedGames.length === root.games.length ? root.games.length + " GAMES"
               : root.sortedGames.length + " OF " + root.games.length + " GAMES"
       }
+      // A toggle of one chip; it shows once some game has a difficulty
+      // achievement still to do.
+      Chips {
+        anchors.right: sortGroup.left
+        anchors.rightMargin: Commons.Style.space(10)
+        anchors.verticalCenter: parent.verticalCenter
+        visible: root.difficultyGames > 0 || root.difficultyOnly
+        options: [{ value: "difficulty", label: "Difficulty " + root.difficultyGames }]
+        value: root.difficultyOnly ? "difficulty" : ""
+        onPicked: root.difficultyOnly = !root.difficultyOnly
+      }
       Chips {
         id: sortGroup
         anchors.right: parent.right
@@ -3818,7 +3835,20 @@ Column {
               opacity: 0.5 * gameRow.dim
               text: gameRow.modelData.unlocked + " / " + gameRow.modelData.total
             }
+            // The settings its locked achievements need, so a new save
+            // starts on the right one.
             Caption {
+              anchors.left: gameMeta.right
+              anchors.leftMargin: Commons.Style.space(8)
+              anchors.right: gamePlayed.left
+              anchors.rightMargin: Commons.Style.space(8)
+              visible: (gameRow.modelData.difficulty || []).length > 0
+              text: "Difficulty: " + (gameRow.modelData.difficulty || []).join(", ")
+              color: Commons.Color.accent
+              opacity: 0.85 * gameRow.dim
+            }
+            Caption {
+              id: gamePlayed
               anchors.right: parent.right
               opacity: 0.5 * gameRow.dim
               text: gameRow.platinum ? root.day(gameRow.modelData.platinum) : root.ago(gameRow.modelData.played)

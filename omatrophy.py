@@ -716,8 +716,16 @@ def games():
         headers = list(pool.map(lambda item: item[0].art(item[1])['header'], lib))
     return [dict(progress_row(s, g, achs), game=name, header=header,
                  platinum=platinum_time(achs), played=played.get((s.id, g), 0),
-                 hidden=game_key(s.id, g) in hidden)
+                 hidden=game_key(s.id, g) in hidden, difficulty=open_difficulties(achs))
             for (s, g, achs), name, header in zip(lib, names, headers)]
+
+
+def open_difficulties(achs):
+    """The settings a game's locked achievements need, each once, in the
+    game's order: what to pick before the next save. Done ones are left out,
+    as they no longer decide anything."""
+    found = (difficulty.setting(a['name'], a['desc']) for a in achs if not a['unlocked'])
+    return list(dict.fromkeys(d for d in found if d))
 
 
 # Fields of a panel or tracker answer that hold an image URL.

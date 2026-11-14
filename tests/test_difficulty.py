@@ -53,6 +53,7 @@ class SettingTest(unittest.TestCase):
             ('Increase the Difficulty in Settings', None),
             ('Clear Episode One in Invisible Mode.', None),
             ('Clear one Gauntlet in Raid Mode.', None),
+            ('Reach the Platinum rank or higher in Standard', None),
             ('Finish the game in Invisible Enemy mode.', None),
             ('', None),
         ])

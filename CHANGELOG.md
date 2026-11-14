@@ -11,6 +11,10 @@
   which one to start a new save on. It's read from each achievement's
   text and works without a guide. `game` gives each achievement a
   `difficulty` field. Needs no restart.
+- Games tab: a **Difficulty** toggle keeps the games with a locked
+  achievement that needs a difficulty setting, and their rows name the
+  settings. `games` gives each game a `difficulty` list. Needs no
+  restart.
 
 ## 0.7.1 - 2026-11-14
 

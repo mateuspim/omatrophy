@@ -18,8 +18,9 @@ SETTINGS = (r'very\s+hard|extra\s+hard|super\s+hard|easy|casual|normal|medium|st
 LEAD = r'\b(?i:on|in|at|using)\s+(?i:at\s+least\s+)?(?i:the\s+)?'
 # A bare setting word only counts where the sentence ends or goes on about
 # the run ("on Hard or higher", "on Hard without dying"), so "in normal
-# combat" and "on hard ground" stay out.
-ON_SETTING = re.compile(rf'{LEAD}({SETTINGS})'
+# combat" and "on hard ground" stay out. "in" doesn't lead one: "the
+# Platinum rank in Standard" is a ranked format.
+ON_SETTING = re.compile(rf'\b(?:on|at|using)\s+(?:at\s+least\s+)?(?:the\s+)?({SETTINGS})'
                         r'(?=\s*(?:$|[.,;:!?()]|(?:or|and|without|with|in|on|while|before)\b))', re.I)
 # "on Death March difficulty": any name, as the word "difficulty" says what
 # it is; up to four capitalised words, so "on the same difficulty" doesn't

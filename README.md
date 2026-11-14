@@ -96,7 +96,11 @@ whose empty slots tease the games you're closest to finishing ("2 left"). Before
 achievements, the tab says where they come from and points to the Steam
 profile switch. The **Games** tab lists every
 game with its count, sorted by last played, closest to platinum or name.
-Type (or press `/`) to filter by name; Enter opens the first match. Hover a
+Type (or press `/`) to filter by name; Enter opens the first match.
+**Difficulty** keeps only the games with a locked achievement that needs a
+difficulty setting, and each of those rows names the settings ("Difficulty:
+Hard, Nightmare") so you can pick one before you start (see the tracker's
+Difficulty filter below). Hover a
 game and click **Hide** to set aside one you won't finish: it leaves
 Closest and dims in the other sorts until you click **Show**.
 
