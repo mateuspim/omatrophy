@@ -583,11 +583,13 @@ Item {
         MultiEffect { anchors.fill: parent; source: framePaint; maskEnabled: true; maskSource: frameShape }
       }
 
+      // 80 px: 5 px per cell of the omarchy art's 16-cell grid, so its
+      // unsmoothed pixels stay even (76 px mixed 4 and 5 px cells).
       Trophy {
         id: trophy
         anchors.centerIn: parent
-        width: 76
-        height: 76
+        width: 80
+        height: 80
         metal: "platinum"
         set: root.iconSet
         accent: root.accent
