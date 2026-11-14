@@ -590,6 +590,11 @@ class NowTab(unittest.TestCase):
         self.assertEqual((d['percent'], d['tier'], d['hidden'], d['icon_locked']), (4.0, 'gold', True, 'g.jpg'))
         self.assertEqual(omatrophy.detail(ach('b'), {})['tier'], 'bronze')
 
+    def test_tracker_detail_names_the_difficulty_an_achievement_needs(self):
+        hard = dict(ach('a'), desc='Finish the game on Nightmare difficulty.')
+        self.assertEqual(omatrophy.detail(hard, {})['difficulty'], 'Nightmare')
+        self.assertIsNone(omatrophy.detail(ach('b'), {})['difficulty'])
+
     def test_store_rows_count_games_and_keep_found_stores_with_none(self):
         class Steamish:
             id, name = 'steam', 'Steam'

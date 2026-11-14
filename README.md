@@ -124,14 +124,23 @@ panel on the first screen in Quickshell's screen list.
 Click any game for the **tracker**, a card over the screen with every
 achievement: rarity, the trophy it would earn, and the date you got it.
 Locked counter achievements show how far along you are ("52 / 80") when
-the game tracks the count. Its keys:
+the game tracks the count.
+
+**Difficulty** (shown only when the game has any) lists the achievements
+that need a difficulty setting ("Finish the game on Nightmare"), each
+tagged with the one it names, so you can check before starting a new save.
+OmaTrophy reads this from each achievement's own text, so it can miss
+one the text doesn't spell out. "On any difficulty" doesn't count, and a
+hidden achievement keeps its tag hidden too.
+
+Its keys:
 
 | Key | Does |
 | --- | --- |
 | Up, Down, Page Up/Down, Home, End | Move the highlight |
 | Enter (or Space, when not searching) | Reveal a hidden achievement |
 | Shift+Enter | Reveal all hidden achievements, or hide them again (remembered) |
-| Tab, Shift+Tab | All, Locked, Unlocked, Rare, Guide |
+| Tab, Shift+Tab | All, Locked, Unlocked, Rare, Difficulty, Guide |
 | Left, Right | Sort: recent, rarest, A–Z, the game's own order (remembered) |
 | Any letter | Search; Backspace edits |
 | Escape | Clear the search, then close |

@@ -122,7 +122,7 @@
   {
    "api": "A8",
    "name": "Starfall",
-   "desc": "Finish on Nightmare",
+   "desc": "Finish on Nightmare", "difficulty": "Nightmare",
    "icon": "dev/samples/art/icon-starfall.svg",
    "icon_locked": "dev/samples/art/icon-starfall-locked.svg",
    "hidden": false,

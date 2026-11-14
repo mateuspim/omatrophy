@@ -5,6 +5,12 @@
 - No more "Using a Component as the root of a QML document is
   deprecated" warning each time a view is built from its text
   (`FreshObject.qml`). Needs `omarchy restart shell`.
+- Tracker: a **Difficulty** filter, shown only when a game has
+  achievements that need a difficulty setting ("Finish the game on
+  Nightmare"), lists them, each tagged with the setting, so you know
+  which one to start a new save on. It's read from each achievement's
+  text and works without a guide. `game` gives each achievement a
+  `difficulty` field. Needs no restart.
 
 ## 0.7.1 - 2026-11-14
 

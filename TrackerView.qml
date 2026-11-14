@@ -260,6 +260,7 @@ Item {
     var index = {}
     if (game) game.achievements.forEach(function(a) { index[a.api] = a })
     byApi = index
+    if (filter === "difficulty" && !count("difficulty")) filter = "all"
     rowModel.clear()
     shownApis = []
     cascading = true
@@ -314,6 +315,7 @@ Item {
     if (filter === "locked" && a.unlocked) return false
     if (filter === "unlocked" && !a.unlocked) return false
     if (filter === "rare" && !(a.percent !== null && a.percent <= rarePercent)) return false
+    if (filter === "difficulty" && !a.difficulty) return false
     if (!appliedSearch) return true
     var q = appliedSearch.toLowerCase()
     var desc = a.hidden && !a.unlocked ? "" : a.desc
@@ -459,7 +461,8 @@ Item {
     for (var i = 0; i < game.achievements.length; i++) {
       var a = game.achievements[i]
       if (kind === "all" || (kind === "locked" && !a.unlocked) || (kind === "unlocked" && a.unlocked)
-          || (kind === "rare" && a.percent !== null && a.percent <= rarePercent)) n++
+          || (kind === "rare" && a.percent !== null && a.percent <= rarePercent)
+          || (kind === "difficulty" && a.difficulty)) n++
     }
     return n
   }
@@ -475,7 +478,8 @@ Item {
   }
 
   function cycleFilter(step) {
-    var all = ["all", "locked", "unlocked", "rare", "guide"]
+    // Difficulty only shows on a game that has such achievements.
+    var all = ["all", "locked", "unlocked", "rare"].concat(count("difficulty") ? ["difficulty"] : [], ["guide"])
     filter = all[(all.indexOf(filter) + step + all.length) % all.length]
   }
 
@@ -2704,10 +2708,14 @@ Item {
             { value: "locked", label: "Locked", kind: "locked" },
             { value: "unlocked", label: "Unlocked", kind: "unlocked" },
             { value: "rare", label: "Rare", kind: "rare" },
+            { value: "difficulty", label: "Difficulty", kind: "difficulty" },
             { value: "guide", label: "Guide", kind: "guide" }
           ]
           delegate: Chip {
             required property var modelData
+            // Achievements that need a setting, so a new save starts on
+            // the right one; hidden on games without any.
+            visible: modelData.kind !== "difficulty" || root.count("difficulty") > 0
             text: root.label(modelData.label, modelData.kind)
             chosen: root.filter === modelData.value
             onClicked: root.filter = modelData.value
@@ -2932,6 +2940,15 @@ Item {
             maximumLineCount: 2
             text: row.secret ? "Hover or press Enter to reveal" : row.ach.desc
             visible: text !== ""
+          }
+          // The setting it needs, read from its text; a secret row keeps
+          // even that to itself.
+          Caption {
+            width: parent.width
+            visible: !!row.ach.difficulty && !row.secret
+            text: "Difficulty: " + (row.ach.difficulty || "")
+            color: Commons.Color.accent
+            opacity: 0.9
           }
         }
 

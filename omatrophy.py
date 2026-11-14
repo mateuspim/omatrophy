@@ -55,6 +55,7 @@ turns new unlocks into events. Steam and GOG (through Heroic) so far.
 import hashlib, json, os, signal, sys, threading, time, urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 
+import difficulty
 import stores
 from stores.base import CACHE, STATE, cached, read_json, trusted_url, write_json
 
@@ -805,7 +806,7 @@ def detail(a, pcts):
     return {'api': a['api'], 'name': a['name'], 'desc': a['desc'], 'icon': a['icon'],
             'icon_locked': a.get('icon_locked', ''), 'hidden': bool(a.get('hidden')),
             'unlocked': a['unlocked'], 'time': a['time'], 'percent': pct, 'tier': tier(pct),
-            'progress': a.get('progress')}
+            'progress': a.get('progress'), 'difficulty': difficulty.setting(a['name'], a['desc'])}
 
 
 def pick_game(found):

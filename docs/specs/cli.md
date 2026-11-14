@@ -132,7 +132,7 @@ say; `hidden` is `true` for games set aside with `hide`.
  "achievements": [{"api": "...", "name": "...", "desc": "...", "icon": "...",
                    "icon_locked": "...", "hidden": false, "unlocked": true,
                    "time": 1793059700, "percent": 82.4, "tier": "bronze",
-                   "progress": null}]}
+                   "progress": null, "difficulty": null}]}
 ```
 
 Achievements come in the store's order; the tracker sorts them. `percent` is
@@ -143,6 +143,10 @@ tracks the count (Steam: the schema's progress stat, once the game has
 written it; an unwritten stat is unknown, not 0), else `null`; `value`
 is already clamped to `0..max`, and `max` is at least 2 (a one-step
 "counter" is a plain flag, so it gets `null`).
+`difficulty` is the setting the achievement's name or description says it
+needs (`"Nightmare"`, `"Death March"`; `"Highest"` for "the hardest
+difficulty", `"Every"` for "on all difficulties"), else `null`; "on any
+difficulty" is `null` (`difficulty.py`).
 
 ## Overlay
 
