@@ -73,8 +73,9 @@ beating the game on Veteran". The owner asked classify to push harder
 `requires`, and the maker reads, for each item left without one, the
 excerpts it was given, its quotes and its tip for a sentence that
 names the item (its name or the setting it needs) and another
-achievement (its name or setting) around "is unlocked after", "unlocks"
-or "to unlock ... you must". One found is an error that asks again;
+achievement (its name or setting) around "is unlocked after", "is
+locked until", "unlocks", "to unlock ... you must" or "you must ...
+before you can play". One found is an error that asks again;
 the answer after it stands, as the model may know no achievement
 stands for that prerequisite. It reads sentences, not meaning, so it
 finds only these shapes; a miss costs no more than before.

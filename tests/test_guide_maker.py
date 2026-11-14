@@ -292,7 +292,9 @@ class Checks(unittest.TestCase):
         self.assertEqual(len(errors), 1)
         self.assertIn("'Replay the mission'", errors[0])
         self.assertIn('keep the warning in tips', errors[0])
-        for words in ('There is no chapter select.', 'Free roam ends after the finale.', 'Lost when chapter 5 ends.'):
+        for words in ('There is no chapter select.', 'Free roam ends after the finale.', 'Lost when chapter 5 ends.',
+                      'Chapter select is not available.', 'Chapter select is unavailable here.',
+                      'Chapter select resets your progress.'):
             self.assertEqual(guide_maker.check_item({'name': 'A', 'phase': 'missable', 'missable': True, 'missable_note': words},
                                                     {'A'})[1], [], words)
         # A warning in tips of one that isn't missable is what we want.
@@ -319,6 +321,19 @@ class Checks(unittest.TestCase):
             # The other way round: Veteran needs nothing.
             self.assertEqual(guide_maker.prerequisite_said([said], *words['Veteran Soldier']), ('', ''))
         for said in ('Play Professional with a partner. Veteran is easier.', 'Professional unlocks a costume.'):
+            self.assertEqual(guide_maker.prerequisite_said([said], *words['War Hero']), ('', ''), said)
+
+    def test_prerequisite_said_more_shapes_and_no_false_ones(self):
+        achs = [{'name': 'War Hero', 'desc': 'Complete all chapters on Professional'},
+                {'name': 'Hero', 'desc': 'Complete all chapters on Veteran'}]
+        words = guide_maker.prerequisite_words(achs)
+        for said in ('You need to beat Veteran before you can play on Professional.',
+                     'Professional is locked until you finish Veteran.'):
+            self.assertEqual(guide_maker.prerequisite_said([said], *words['War Hero']), (said, 'Veteran'), said)
+        # "by default" is no gate, and "Hero" inside the item's own "War
+        # Hero" is not another achievement.
+        for said in ('Professional is unlocked by default, unlike Veteran.',
+                     'War Hero is unlocked after any clear.'):
             self.assertEqual(guide_maker.prerequisite_said([said], *words['War Hero']), ('', ''), said)
 
     def test_a_quoted_prerequisite_left_out_of_requires_asks_again(self):

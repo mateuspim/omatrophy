@@ -21,6 +21,7 @@
   goes to 30, coverage to 20, fields to 10. The table shows them as
   `acts`, `needs` and `marker`. Scores from earlier benches, the
   README's results table included, used the old weights.
+
 ## 0.8.1 - 2026-11-14
 
 - `test difficulty` and Settings > Toasts > Difficulty > Try show the

@@ -433,8 +433,8 @@ REDO = re.compile(r'\b(?:chapter|mission|level|episode|stage)\s+(?:select(?:ion)
                   r'|\bfree[\s-]?roam\b', re.I)
 NOT_REDO = re.compile(r"\b(?:no|not|without|never|cannot|can't|isn't|there's\s+no|lacks?)\b[^.;]{0,30}$", re.I)
 # "Free roam ends after the finale" is the point of no return, not a way back.
-REDO_ENDS = re.compile(r"^[^.;]{0,20}?\b(?:ends?|closes?|is\s+(?:lost|locked|gone|over|disabled)|won't|doesn't|does\s+not"
-                       r"|can't|cannot|isn't|never)\b", re.I)
+REDO_ENDS = re.compile(r"^[^.;]{0,20}?\b(?:ends?|closes?|resets?|is\s+(?:lost|locked|gone|over|disabled)|won't|doesn't"
+                       r"|does\s+not|can't|cannot|isn't|aren't|(?:is|are)\s+not|unavailable|no\s+longer|never)\b", re.I)
 
 
 def redo_said(text):
@@ -549,13 +549,17 @@ def add_requires(graph, name, wanted):
 
 # A sentence saying one thing opens only after another. RE5's guide left
 # War Hero's `requires` empty under the quote "Professional difficulty is
-# unlocked after beating the game on Veteran" (owner, 2026-11-11). Three
-# shapes: "<it> is unlocked after <other>", "<other> unlocks <it>", "to
-# unlock <it>, you must <other>".
+# unlocked after beating the game on Veteran" (owner, 2026-11-11). Shapes:
+# "<it> is unlocked after / locked until <other>", "<other> unlocks <it>",
+# "to unlock <it>, you must <other>", "you must <other> before you can
+# play <it>".
 GATED_AFTER = re.compile(r"\b(?:unlock(?:s|ed)?|available|accessible|open(?:s|ed)?)\s+(?:only\s+)?"
-                         r"(?:after|once|upon|by|when)\b|\bonly\s+after\b"
+                         r"(?:after|once|upon|by(?!\s+default)|when)\b|\bonly\s+after\b|\blocked\s+until\b"
                          r"|\brequires?\s+(?:you\s+to\s+)?(?:first\s+)?(?:beat|complet|finish|clear|having)\w*", re.I)
 OPENS = re.compile(r"\b(?:unlock(?:s|ed)?|opens?\s+up)\b(?!\s+(?:only\s+)?(?:after|once|upon|by|when)\b)", re.I)
+# "You must beat Veteran before you can play Professional": the
+# prerequisite first, then the gate.
+BEFORE = re.compile(r"\bbefore\s+(?:you\s+can\s+)?(?:play|select|try|start|attempt|unlock)\w*\b", re.I)
 TO_OPEN = re.compile(r"\b(?:to\s+unlock|before\s+(?:you\s+can\s+)?(?:play|select|try|start|attempt)\w*)\b", re.I)
 MUST = re.compile(r"\b(?:must|need\s+to|needs\s+to|have\s+to|has\s+to|first)\b", re.I)
 SENTENCE = re.compile(r'(?<=[.!?])\s+|\n+')
@@ -585,6 +589,26 @@ def prerequisite_words(achs):
     return out
 
 
+def prerequisite_in(s, other, mine, theirs):
+    """The match of another achievement's word that sentence `s` says
+    this one (`mine`) opens only after, or None; `other` is `s` with
+    this one's words blanked."""
+    gate = GATED_AFTER.search(s)
+    if gate and mine.search(s, 0, gate.start()) and theirs.search(other, gate.end()):
+        return theirs.search(other, gate.end())
+    gate = OPENS.search(s)
+    if gate and mine.search(s, gate.end()) and theirs.search(other, 0, gate.start()):
+        return theirs.search(other, 0, gate.start())
+    gate = BEFORE.search(s)
+    must = MUST.search(s, 0, gate.start()) if gate and mine.search(s, gate.end()) else None
+    if must and theirs.search(other, must.end(), gate.start()):
+        return theirs.search(other, must.end(), gate.start())
+    gate = TO_OPEN.search(s)
+    named = mine.search(s, gate.end()) if gate else None
+    must = MUST.search(s, named.end()) if named else None
+    return theirs.search(other, must.end()) if must else None
+
+
 def prerequisite_said(texts, own, others):
     """(sentence, prerequisite) for the first sentence of `texts` that says
     the achievement (`own` words) opens only after another (`others`), or
@@ -596,17 +620,12 @@ def prerequisite_said(texts, own, others):
         for s in SENTENCE.split(text or ''):
             if not mine.search(s):
                 continue
-            gate = GATED_AFTER.search(s)
-            if gate and mine.search(s, 0, gate.start()) and theirs.search(s, gate.end()):
-                return s.strip(), theirs.search(s, gate.end()).group(0)
-            gate = OPENS.search(s)
-            if gate and mine.search(s, gate.end()) and theirs.search(s, 0, gate.start()):
-                return s.strip(), theirs.search(s, 0, gate.start()).group(0)
-            gate = TO_OPEN.search(s)
-            named = mine.search(s, gate.end()) if gate else None
-            must = MUST.search(s, named.end()) if named else None
-            if must and theirs.search(s, must.end()):
-                return s.strip(), theirs.search(s, must.end()).group(0)
+            # Blank the item's own words, so another's name inside them
+            # ("Hero" in "War Hero") isn't read as the prerequisite.
+            other = mine.sub(lambda m: ' ' * len(m.group(0)), s)
+            found = prerequisite_in(s, other, mine, theirs)
+            if found:
+                return s.strip(), s[found.start():found.end()]
     return '', ''
 
 

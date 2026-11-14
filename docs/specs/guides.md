@@ -123,7 +123,7 @@ OmaTrophy doesn't know survive a rewrite.
   back isn't missable, and its `tips` carry the warning. A missable item
   whose own `missable_note` or `tips` name such a way back ("chapter
   select", "replay the mission", "free roam", not "there is no chapter
-  select" or "free roam ends") is an error that asks again.
+  select", "chapter select is not available" or "free roam ends") is an error that asks again.
   `missable_note` says where the point of no return is; it's empty when
   that's unknown. A walkthrough step's `missables` still warn about
   ones only a replay brings back.
@@ -221,7 +221,9 @@ it.
    after another achievement: the sentence names the item (its name, or
    the difficulty setting it needs, `difficulty.py`) and another one's
    name or setting, as "<it> is unlocked/available after <other>",
-   "<other> unlocks <it>" or "to unlock <it>, you must ... <other>"
+   "<other> unlocks <it>", "to unlock <it>, you must ... <other>", "you
+   must ... <other> before you can play <it>" or "<it> is locked until
+   <other>" ("unlocked by default" is no gate)
    ("Professional difficulty is unlocked after beating the game on
    Veteran" for a Professional clear). An answer that still leaves it
    out is kept.
@@ -318,7 +320,7 @@ The score (0-100) uses only what OmaTrophy checks:
 
 The play order of the steps isn't checked, so it isn't scored, and nor
 is the number of `requires`, markers or places: more isn't better. The
-weights changed in 0.10.0 (actions, prerequisites and markers were
+weights changed in 0.9.0 (actions, prerequisites and markers were
 counted, unscored: `verified` 35, `coverage` 25, `complete` 15, `route`
 10, `walkthrough` 10, `sections` 5), so scores before it don't compare
 one to one; `results.json` keeps the `weights` it used. Benches before
