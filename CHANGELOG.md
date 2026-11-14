@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.1 - 2026-11-14
+
+- `test difficulty` and Settings > Toasts > Difficulty > Try show the
+  reminder again: the watcher dropped difficulty events from the test
+  inbox. Reminders at a game's launch were not affected.
+
 ## 0.8.0 - 2026-11-14
 
 - No more "Using a Component as the root of a QML document is
