@@ -7,7 +7,7 @@ import os, re, unittest
 HERE = os.path.join(os.path.dirname(__file__), '..')
 VIEWS = ('TrackerView.qml', 'StylePicker.qml', 'TrophyToast.qml', 'PlatinumCard.qml', 'DifficultyCard.qml',
          'MissableCard.qml', 'RecapCard.qml',
-         'MilestoneCard.qml')
+         'MilestoneCard.qml', 'PlatinumShare.qml')
 
 
 def text(name):

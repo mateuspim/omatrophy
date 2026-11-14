@@ -48,6 +48,9 @@ Usage:
   omatrophy.py steam-load [all]       have Steam cache the stats of played games not tried yet (ADR 13);
                                       `all` tries every played game without stats again
   omatrophy.py steam-load stop|status stop a running load; or its progress, as JSON
+  omatrophy.py share <store> <game> [--out file.png] [--notify]
+                                      save a finished game's platinum card as an image
+                                      (~/Pictures/omatrophy/<game>-platinum.png); prints where
   omatrophy.py hide <store> <game>    keep a game you won't finish out of "closest to platinum"
   omatrophy.py unhide <store> <game>  bring it back
   omatrophy.py favorite <store> <game>|clear
@@ -1276,6 +1279,67 @@ def detail(a, pcts):
             'progress': a.get('progress'), 'difficulty': difficulty.setting(a['name'], a['desc'])}
 
 
+def share_event(store, game, achs, icon_set='omarchy'):
+    """What the saved platinum image draws (share.py): the platinum event,
+    the day it landed, the store's name and the trophy art set, with art
+    swapped for its local copy. None while the game isn't at 100%."""
+    when = platinum_time(achs)
+    if not when:
+        return None
+    ev = dict(platinum_event(store, game, achs), platinum=when, store_name=store.name,
+              icon_set=icon_set if icon_set in SETTINGS['icons'] else 'omarchy')
+    return local_images(ev, [])
+
+
+def share_args(args):
+    """(store id, game, out, notify) from `share <store> <game> [--out f] [--notify]`; None when malformed."""
+    rest, out, notify = [], '', False
+    i = 0
+    while i < len(args):
+        if args[i] == '--notify':
+            notify, i = True, i + 1
+        elif args[i] == '--out' and i + 1 < len(args) and args[i + 1]:
+            out, i = args[i + 1], i + 2
+        elif args[i].startswith('--'):
+            return None
+        else:
+            rest, i = rest + [args[i]], i + 1
+    if len(rest) != 2 or not rest[1] or ':' in rest[1]:
+        return None
+    return rest[0], rest[1], out, notify
+
+
+def share_platinum(args):
+    """`share <store> <game>`: save the platinum card as a PNG and print its path."""
+    import share
+    parsed = share_args(args)
+    found = found_stores()
+    if not parsed or parsed[0] not in [s.id for s in found]:
+        raise SystemExit(f'usage: omatrophy.py share {"|".join(s.id for s in found) or "steam"} <game id> '
+                         '[--out file.png] [--notify]')
+    store_id, game, out, notify = parsed
+    store = next(s for s in found if s.id == store_id)
+    achs = store.achievements(game)
+    if not achs:
+        raise SystemExit(f'{store.name} has no achievements cached for {game}; launch it once in {store.name}')
+    icon_set = read_json(config_path(), {}).get('icons', 'omarchy')
+    ev = share_event(store, game, achs, icon_set)
+    if not ev:
+        done = sum(a['unlocked'] for a in achs)
+        raise SystemExit(f'{store.game_name(game)} is at {done} / {len(achs)}; '
+                         'only a finished game (a platinum) gets an image')
+    out = os.path.abspath(os.path.expanduser(out)) if out else share.default_path(ev['game'])
+    try:
+        share.render(ev, out)
+    except (RuntimeError, OSError) as e:
+        if notify:
+            share.notify(f'No image of {ev["game"]}', str(e))
+        raise SystemExit(f'omatrophy: share: {e}')
+    if notify:
+        share.notify(f'Platinum saved: {ev["game"]}', out, image=out)
+    print(out)
+
+
 def pick_game(found):
     """(store, game) running now, else played last among games with achievements."""
     for s in found:
@@ -2047,6 +2111,8 @@ def main(argv):
         set_completionist(argv[3], argv[4], argv[2] == 'add')
     elif cmd == 'showcase' and len(argv) in (5, 6) and argv[2] in ('add', 'remove'):
         set_showcase(argv[3], argv[4], argv[5] if len(argv) == 6 else '', argv[2] == 'add')
+    elif cmd == 'share':
+        share_platinum(argv[2:])
     elif cmd in ('hide', 'unhide') and len(argv) == 4:
         set_hidden(argv[2], argv[3], cmd == 'hide')
     else:

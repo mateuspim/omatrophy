@@ -48,6 +48,15 @@ class ThemeFlag(unittest.TestCase):
         self.assertIn('drop --live', done.stderr)
 
 
+    def test_share_takes_sample_data_only(self):
+        # share draws through share.py from the sample platinum; refuse
+        # before any Quickshell starts.
+        for flags in (['--live'], ['--font', '16']):
+            with self.subTest(flags=flags):
+                done = render(*flags, 'share')
+                self.assertEqual(done.returncode, 2)
+                self.assertIn('sample platinum only', done.stderr)
+
 class TreeFocus(unittest.TestCase):
     def test_every_focus_has_a_key_and_an_action(self):
         with open(os.path.join(HERE, 'TrackerView.qml'), encoding='utf-8') as f:

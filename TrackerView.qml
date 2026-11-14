@@ -466,6 +466,21 @@ Item {
     saver.exec(["python3", helperPath, "completionist", add ? "add" : "remove", String(game.store), String(game.app)])
   }
 
+  // Saves this finished game's platinum card as an image (share.py); the
+  // button reports back, and a notification follows in case the overlay
+  // has closed by then.
+  property string imageState: ""
+  property string imageNote: ""
+  property string imageFor: ""
+  function saveImage() {
+    if (!game || !live || imageSaver.running) return
+    imageFor = showcaseKey("")
+    imageState = "saving"
+    imageNote = ""
+    imageSaver.command = ["python3", helperPath, "share", String(game.store), String(game.app), "--notify"]
+    imageSaver.running = true
+  }
+
   // Move the highlighted row; the first key press lands on the first row.
   function moveTo(index) {
     if (list.count === 0) return
@@ -1301,6 +1316,13 @@ Item {
         root.handRecovering = false
       }
     }
+  }
+
+  Process {
+    id: imageSaver
+    stdout: StdioCollector { onStreamFinished: if (text.trim()) root.imageNote = text.trim() }
+    stderr: StdioCollector { onStreamFinished: if (text.trim()) root.imageNote = text.trim().replace(/^omatrophy: share: /, "") }
+    onExited: function(code) { root.imageState = code === 0 ? "saved" : "failed" }
   }
 
   Process {
@@ -3323,6 +3345,42 @@ Item {
                 text: completionistButton.on ? "On your Profile's completionist tile · click to take it off"
                       : completionistButton.full ? "The completionist tile is full (4) · unpin one first"
                       : "Show this platinum on your Profile's completionist tile"
+              }
+            }
+            // Saves the platinum card as a PNG in Pictures/omatrophy.
+            Rectangle {
+              id: imageButton
+              readonly property string saveState: root.game !== null && root.imageFor === root.showcaseKey("") ? root.imageState : ""
+              anchors.verticalCenter: parent.verticalCenter
+              width: imageText.implicitWidth + Commons.Style.space(14)
+              height: imageText.implicitHeight + Commons.Style.space(6)
+              radius: height / 2
+              color: imageHit.containsMouse ? Commons.Style.hoverFill : Qt.alpha(root.background, 0.5)
+              border.width: 1
+              border.color: imageButton.saveState === "failed" ? Commons.Color.urgent : Qt.alpha(root.foreground, 0.25)
+              Accessible.role: Accessible.Button
+              Accessible.name: "Save the platinum card as an image"
+              Text {
+                textFormat: Text.PlainText
+                id: imageText
+                anchors.centerIn: parent
+                text: imageButton.saveState === "saving" ? "Saving…" : imageButton.saveState === "saved" ? "✓ Saved"
+                      : imageButton.saveState === "failed" ? "Not saved" : "⤓ Save image"
+                color: imageButton.saveState === "saved" ? Commons.Color.accent : root.foreground
+                font.family: Commons.Style.font.family
+                font.pixelSize: Commons.Style.font.caption
+              }
+              MouseArea {
+                id: imageHit
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: imageButton.saveState === "saving" ? Qt.BusyCursor : Qt.PointingHandCursor
+                onClicked: root.saveImage()
+              }
+              PanelToolTip {
+                visible: imageHit.containsMouse
+                text: imageButton.saveState === "saved" || imageButton.saveState === "failed" ? root.imageNote
+                      : "Save the platinum card as a PNG in Pictures/omatrophy"
               }
             }
           }
