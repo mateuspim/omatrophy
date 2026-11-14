@@ -3138,11 +3138,12 @@ Item {
           root.cycleFilter(1)
         } else if (event.key === Qt.Key_Backtab) {
           root.cycleFilter(-1)
-        } else if (root.treeKeys && (event.key === Qt.Key_Right || event.key === Qt.Key_Left
-                                     || event.key === Qt.Key_Down || event.key === Qt.Key_Up)) {
+        } else if (root.treeKeys && !(event.modifiers & Qt.ControlModifier)
+                   && (event.key === Qt.Key_Right || event.key === Qt.Key_Left
+                       || event.key === Qt.Key_Down || event.key === Qt.Key_Up)) {
           root.treeMove(event.key === Qt.Key_Right ? 1 : event.key === Qt.Key_Left ? -1 : 0,
                         event.key === Qt.Key_Down ? 1 : event.key === Qt.Key_Up ? -1 : 0)
-        } else if (root.treeKeys && !(event.modifiers & Qt.ShiftModifier)
+        } else if (root.treeKeys && !(event.modifiers & (Qt.ShiftModifier | Qt.ControlModifier))
                    && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || (event.key === Qt.Key_Space && !root.search))
                    && root.treeActivate()) {
           // Done: the focused part acted as on a click.
