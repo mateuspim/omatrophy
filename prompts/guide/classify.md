@@ -45,8 +45,12 @@ For each achievement to classify, give:
   can be, because the game locks it until then: a harder difficulty that
   opens only after an easier one is beaten, a mode or chapter that opens
   after the story. Only when an excerpt says so, with a cite; else `[]`.
-  Never the chapters played on the way, and never a "same run" partner:
-  those go in `combine_with`.
+  When an excerpt says this one's difficulty, mode or chapter opens only
+  after another ("Professional is unlocked after beating the game on
+  Veteran"), the achievement for that prerequisite (the Veteran clear)
+  must be in `requires`, with that quote in `cites`; every achievement
+  on the locked setting needs it. Never the chapters played on the way,
+  and never a "same run" partner: those go in `combine_with`.
 - `stacks`: only for an achievement that needs a difficulty setting
   ("finish the game on Normal"): `true` when an excerpt says a run on a
   harder setting also unlocks it (beating Hard gives the Normal and Easy

@@ -26,7 +26,8 @@ TICK = re.compile(r'^- \[(?P<mark>[ xX])\] \*\*(?P<name>.+?)\*\*(?P<rest>.*)$')
 # `marker` per step, the chapter clear the tracker places the player by.
 # 6: `stacks` per difficulty achievement, whether a harder run counts too.
 # 7: `missable` only for one the same save can't get again (no chapter
-# select, replay or free roam).
+# select, replay or free roam), and a prerequisite a source states always
+# in `requires`.
 MAKER = 7
 
 

@@ -131,7 +131,8 @@ OmaTrophy doesn't know survive a rewrite.
 - `combine_with`: achievements best done in the same run, a choice.
   `requires` (maker 4, [ADR 20](../adr/0020-requires-and-the-guide-tree.md)):
   achievements that must be unlocked first because the game locks this
-  one until then, only when a source says so. Both hold names known to
+  one until then, only when a source says so; a quoted prerequisite
+  must land there (maker 7, checked in classify). Both hold names known to
   the game, never the item itself; `requires` has no cycles (the maker
   drops the edge that closes one). Older plans have no `requires`.
 - `stacks` (maker 6): for an achievement that needs a difficulty setting,
@@ -215,7 +216,15 @@ it.
    `<items>[...]</items>`. A `requires` naming an unknown achievement, or
    closing a cycle with this batch, earlier ones or the earlier guide's
    unlocked items, is an error that asks again; the closing edge is
-   dropped.
+   dropped. So is an item with no `requires` (maker 7) when a sentence of
+   the excerpts it was given, its quotes or its tip says it opens only
+   after another achievement: the sentence names the item (its name, or
+   the difficulty setting it needs, `difficulty.py`) and another one's
+   name or setting, as "<it> is unlocked/available after <other>",
+   "<other> unlocks <it>" or "to unlock <it>, you must ... <other>"
+   ("Professional difficulty is unlocked after beating the game on
+   Veteran" for a Professional clear). An answer that still leaves it
+   out is kept.
 4. **Route** (model, no tools). The compact table of every item (no
    excerpts), the player's progress, DLC. Answers
    `<route>{order, sections}</route>`. Plain prose for the player: no

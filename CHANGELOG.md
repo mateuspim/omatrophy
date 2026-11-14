@@ -8,6 +8,12 @@
   tip and the walkthrough step still warn you to get it on the way.
   Guides made before say "older maker" (maker 7); **Make again** sorts
   their missables.
+- Guides: a prerequisite a source states lands in `requires`, so the
+  Tree's chains show it ("Professional difficulty is unlocked after
+  beating the game on Veteran" makes every Professional achievement
+  need the Veteran clear). Classify asks again when an excerpt, quote
+  or tip says an achievement opens only after another and its
+  `requires` is empty.
 ## 0.8.1 - 2026-11-14
 
 - `test difficulty` and Settings > Toasts > Difficulty > Try show the

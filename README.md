@@ -228,7 +228,9 @@ place, then the move, ticked once the trophy it gives unlocks.
 - **Chains**: each trophy that needs others first as a small tree, the
   goal on top. A line lights once the trophy under it unlocks; a locked
   one is greyed with a padlock and "needs ..."; **READY** (its needs
-  done, itself open) glows.
+  done, itself open) glows. A source saying a setting opens only after
+  another ("Professional is unlocked after Veteran") always makes a
+  chain in a guide made since 0.10.0.
 - **On their own**: the rest as a grid by phase (click a phase to fold
   it), with a bar for counters.
 

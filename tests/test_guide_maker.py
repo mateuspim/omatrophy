@@ -99,6 +99,15 @@ class Job(unittest.TestCase):
         with open(os.path.join(self.agent_dir, 'calls')) as f:
             return len(f.read())
 
+    def test_classify_asks_again_for_a_prerequisite_its_excerpts_state(self):
+        write(self.guides, 'sources/starfall-odyssey-1/notes.txt',
+              'Star Counter mode is unlocked after you finish Last Lantern. Count the stars at night.')
+        write(self.agent_dir, 'items.retry', ITEMS.replace('"phase": "grind",', '"phase": "grind", "requires": ["Last Lantern"],'))
+        self.assertEqual(guide_maker.make(self.job())['state'], 'done')
+        plan = json.loads(read(os.path.join(self.guides, 'starfall-odyssey-1.plan.json')))
+        self.assertEqual(plan['items']['Star Counter']['requires'], ['Last Lantern'])
+        self.assertEqual(plan['items']['Last Lantern']['requires'], [])
+
     def test_fetch_replaces_agent_summaries_and_skips_listings(self):
         fetched = []
         job = guide_maker.Job('steam', '1', 'G', [dict(a) for a in ACHS], FakeAgent(self.agent_dir), web=False,
@@ -296,6 +305,44 @@ class Checks(unittest.TestCase):
         self.assertIn('keep the warning in `tips`', text)
         walk = guide_maker.prompt('walkthrough', game='G', progress='0 of 1', excerpts='', table='- A: story')
         self.assertIn('back only through a replay', walk)
+
+    def test_prerequisite_said_finds_the_three_shapes(self):
+        achs = [{'name': 'War Hero', 'desc': 'Complete all chapters on Professional'},
+                {'name': 'Veteran Soldier', 'desc': 'Complete all chapters on Veteran'},
+                {'name': 'Ace', 'desc': 'Clear chapter 1-1'}]
+        words = guide_maker.prerequisite_words(achs)
+        self.assertEqual(words['War Hero'], ({'War Hero', 'Professional'}, {'Veteran Soldier', 'Veteran'}))
+        for said in ('Professional difficulty is unlocked after beating the game on Veteran.',
+                     'Beating the game on Veteran unlocks Professional.',
+                     'To unlock Professional mode, you must first complete the game on Veteran.'):
+            self.assertEqual(guide_maker.prerequisite_said([said], *words['War Hero']), (said, 'Veteran'))
+            # The other way round: Veteran needs nothing.
+            self.assertEqual(guide_maker.prerequisite_said([said], *words['Veteran Soldier']), ('', ''))
+        for said in ('Play Professional with a partner. Veteran is easier.', 'Professional unlocks a costume.'):
+            self.assertEqual(guide_maker.prerequisite_said([said], *words['War Hero']), ('', ''), said)
+
+    def test_a_quoted_prerequisite_left_out_of_requires_asks_again(self):
+        # Regression: RE5's War Hero kept `requires` empty under this quote
+        # (owner, 2026-11-11).
+        quote = 'Professional difficulty is unlocked after beating the game on Veteran.'
+        every = ['War Hero', 'Veteran Soldier']
+        words = guide_maker.prerequisite_words([{'name': 'War Hero', 'desc': 'Complete all chapters on Professional'},
+                                                {'name': 'Veteran Soldier', 'desc': 'Complete all chapters on Veteran'}])
+        prereqs = {n: words[n] + ([quote],) for n in every}
+        empty = '<items>[{"name": "War Hero", "phase": "challenge", "requires": []}]</items>'
+        items, errors = guide_maker.check_items(empty, ['War Hero'], every, {}, prereqs)
+        self.assertEqual(len(errors), 1)
+        self.assertIn('opens only after Veteran', errors[0])
+        filled = '<items>[{"name": "War Hero", "phase": "challenge", "requires": ["Veteran Soldier"]}]</items>'
+        self.assertEqual(guide_maker.check_items(filled, ['War Hero'], every, {}, prereqs)[1], [])
+        # Its own quote counts as much as the excerpts it was shown.
+        cited = ('<items>[{"name": "War Hero", "phase": "challenge", "cites": [{"source": "S1.1", "quote": "%s"}]}]'
+                 '</items>' % quote)
+        self.assertEqual(len(guide_maker.check_items(cited, ['War Hero'], every, {}, {'War Hero': words['War Hero'] + ([],)})[1]), 1)
+
+    def test_classify_prompt_puts_a_quoted_prerequisite_in_requires(self):
+        text = guide_maker.prompt('classify', game='G', excerpts='', achievements='- A', all_names='- A', phases='x')
+        self.assertIn('must be in `requires`', text)
 
     def test_requires_cycles_break_at_the_closing_edge(self):
         text = ('<items>[{"name": "Pro", "phase": "challenge", "difficulty": 4, "requires": ["Vet"]},'

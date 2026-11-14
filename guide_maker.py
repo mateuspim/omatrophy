@@ -12,7 +12,7 @@ or failed job leaves the old guide as it was.
 """
 import html, html.parser, json, os, re, signal, subprocess, sys, tempfile, time, urllib.error, urllib.parse, urllib.request
 
-import guide_agents, guides
+import difficulty, guide_agents, guides
 from stores.base import read_json, write_json
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -547,10 +547,92 @@ def add_requires(graph, name, wanted):
     return kept, errors
 
 
-def check_items(text, batch, every, known=None):
+# A sentence saying one thing opens only after another. RE5's guide left
+# War Hero's `requires` empty under the quote "Professional difficulty is
+# unlocked after beating the game on Veteran" (owner, 2026-11-11). Three
+# shapes: "<it> is unlocked after <other>", "<other> unlocks <it>", "to
+# unlock <it>, you must <other>".
+GATED_AFTER = re.compile(r"\b(?:unlock(?:s|ed)?|available|accessible|open(?:s|ed)?)\s+(?:only\s+)?"
+                         r"(?:after|once|upon|by|when)\b|\bonly\s+after\b"
+                         r"|\brequires?\s+(?:you\s+to\s+)?(?:first\s+)?(?:beat|complet|finish|clear|having)\w*", re.I)
+OPENS = re.compile(r"\b(?:unlock(?:s|ed)?|opens?\s+up)\b(?!\s+(?:only\s+)?(?:after|once|upon|by|when)\b)", re.I)
+TO_OPEN = re.compile(r"\b(?:to\s+unlock|before\s+(?:you\s+can\s+)?(?:play|select|try|start|attempt)\w*)\b", re.I)
+MUST = re.compile(r"\b(?:must|need\s+to|needs\s+to|have\s+to|has\s+to|first)\b", re.I)
+SENTENCE = re.compile(r'(?<=[.!?])\s+|\n+')
+
+
+def words_pattern(words):
+    """One case-blind regex for any of `words` as whole words, longest
+    first, or None when there are none."""
+    words = sorted({w for w in words if w}, key=len, reverse=True)
+    return re.compile(r'(?<![\w])(?:' + '|'.join(re.escape(w) for w in words) + r')(?![\w])', re.I) if words else None
+
+
+def prerequisite_words(achs):
+    """{name: (own, others)} for each achievement: `own` its name and the
+    difficulty setting it needs, `others` the other achievements' names
+    and settings, the words a prerequisite is named by."""
+    setting_of = {}
+    for a in achs:
+        found = difficulty.setting(a['name'], a.get('desc', ''))
+        # "All" and "Hardest" name no setting a source would write.
+        setting_of[a['name']] = found.rstrip('+') if found and found not in ('All', 'Hardest') else ''
+    out = {}
+    for a in achs:
+        own = {a['name'], setting_of[a['name']]} - {''}
+        others = {b['name'] for b in achs if len(b['name']) >= 4} | set(setting_of.values())
+        out[a['name']] = (own, {w for w in others - {''} if w.lower() not in {o.lower() for o in own}})
+    return out
+
+
+def prerequisite_said(texts, own, others):
+    """(sentence, prerequisite) for the first sentence of `texts` that says
+    the achievement (`own` words) opens only after another (`others`), or
+    ('', '') when none does."""
+    mine, theirs = words_pattern(own), words_pattern(others)
+    if not mine or not theirs:
+        return '', ''
+    for text in texts:
+        for s in SENTENCE.split(text or ''):
+            if not mine.search(s):
+                continue
+            gate = GATED_AFTER.search(s)
+            if gate and mine.search(s, 0, gate.start()) and theirs.search(s, gate.end()):
+                return s.strip(), theirs.search(s, gate.end()).group(0)
+            gate = OPENS.search(s)
+            if gate and mine.search(s, gate.end()) and theirs.search(s, 0, gate.start()):
+                return s.strip(), theirs.search(s, 0, gate.start()).group(0)
+            gate = TO_OPEN.search(s)
+            named = mine.search(s, gate.end()) if gate else None
+            must = MUST.search(s, named.end()) if named else None
+            if must and theirs.search(s, must.end()):
+                return s.strip(), theirs.search(s, must.end()).group(0)
+    return '', ''
+
+
+def unquoted_prerequisites(items, prereqs):
+    """Errors for each item with no `requires` whose excerpts, quotes or
+    tip say it opens only after another achievement. `prereqs` is {name:
+    (own, others, texts)}, `texts` the excerpts classify gave for it."""
+    errors = []
+    for name, item in items.items():
+        if item.get('requires') or name not in prereqs:
+            continue
+        own, others, texts = prereqs[name]
+        said, other = prerequisite_said(list(texts) + [c['quote'] for c in item.get('cites') or []]
+                                        + [item.get('tips') or ''], own, others)
+        if said:
+            errors.append(f'{name}: a source says it opens only after {other} ("{said[:160]}"); put the achievement '
+                          'that stands for it in requires, with that quote in cites')
+    return errors
+
+
+def check_items(text, batch, every, known=None, prereqs=None):
     """(items by name, errors) from a classify answer for `batch` (names).
     `known` is {name: requires} of items classified before; a `requires`
-    closing a cycle with them is dropped and asked again."""
+    closing a cycle with them is dropped and asked again. `prereqs`
+    ({name: (own, others, texts)}) finds a prerequisite a source states
+    that `requires` left out, which asks again too."""
     try:
         raw = tagged(text, 'items')
     except ValueError as e:
@@ -564,6 +646,7 @@ def check_items(text, batch, every, known=None):
         if item and item['name'] in batch:
             items[item['name']] = item
     errors += prune_requires(items, known or {})
+    errors += unquoted_prerequisites(items, prereqs or {})
     missing = [n for n in batch if n not in items]
     if missing:
         errors.append('no entry for: ' + ', '.join(missing))
@@ -1104,22 +1187,26 @@ class Job:
         unlocked ones' prerequisites from the earlier guide, so a cycle
         through them is caught too."""
         every = [a['name'] for a in self.achs]
+        words = prerequisite_words(self.achs)
         items, problems = {}, []
         known = dict(known or {})
         for i in range(0, len(open_achs), BATCH_SIZE):
             batch = open_achs[i:i + BATCH_SIZE]
             self.step('classify', f'classify: {i + len(batch)}/{len(open_achs)} achievements')
-            picked, size = [], 0
+            picked, size, prereqs = [], 0, {}
             for a in batch:
-                for p in excerpts_for(a, pieces, hints.get(a['name'], ())):
+                mine = excerpts_for(a, pieces, hints.get(a['name'], ()))
+                for p in mine:
                     if p not in picked and size + len(p['text']) <= BATCH_CHARS:
                         picked.append(p)
                         size += len(p['text'])
+                # Only the excerpts the model was shown can be held against it.
+                prereqs[a['name']] = words[a['name']] + ([p['text'] for p in mine if p in picked],)
             text = prompt('classify', game=self.game, excerpts=excerpt_block(picked),
                           achievements='\n'.join(ach_line(a) for a in batch),
                           all_names='\n'.join(f'- {n}' for n in every), phases=', '.join(guides.PHASES))
             found, errors = self.ask('classify', text,
-                                     lambda t, b=[a['name'] for a in batch]: check_items(t, b, every, known),
+                                     lambda t, b=[a['name'] for a in batch], q=prereqs: check_items(t, b, every, known, q),
                                      lambda a, b: dict(a, **b))
             items.update(found or {})
             known.update((n, i['requires']) for n, i in (found or {}).items())
