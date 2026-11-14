@@ -100,10 +100,14 @@ EMIT_LOCK = threading.Lock()
 
 
 def emit(ev):
+    emit_line(json.dumps(ev))
+
+
+def emit_line(line):
     # The launch watcher emits from its own thread: one write per line,
     # under a lock, so two events never interleave mid-line.
     with EMIT_LOCK:
-        sys.stdout.write(json.dumps(ev) + '\n')
+        sys.stdout.write(line + '\n')
         sys.stdout.flush()
 
 
@@ -259,17 +263,21 @@ def drain_inbox(offset):
         for line in f:
             event = inbox_event(line)
             if event:
-                print(event, flush=True)
+                emit_line(event)
         return f.tell()
 
 
+# What `test` can queue: every card the shell shows (`difficulty` was
+# missing at first, so `test difficulty` and Settings' Try showed nothing).
+INBOX_TYPES = ('unlock', 'platinum', 'difficulty')
 # A real event line is a few hundred bytes; the shell parses every line.
 MAX_INBOX_LINE = 64 * 1024
 
 
 def inbox_event(line):
-    """The line itself when it is one toast event (`unlock` or `platinum`),
-    else None: the inbox is a file any of the user's processes can append to."""
+    """The line itself when it is one card event (`unlock`, `platinum` or
+    `difficulty`), else None: the inbox is a file any of the user's
+    processes can append to."""
     line = line.strip()
     if not line or len(line) > MAX_INBOX_LINE:
         return None
@@ -277,7 +285,7 @@ def inbox_event(line):
         event = json.loads(line)
     except ValueError:
         return None
-    if not isinstance(event, dict) or event.get('type') not in ('unlock', 'platinum'):
+    if not isinstance(event, dict) or event.get('type') not in INBOX_TYPES:
         return None
     return line
 

@@ -1258,6 +1258,11 @@ class Inbox(unittest.TestCase):
     def test_only_toast_events_pass(self):
         self.assertEqual(omatrophy.inbox_event('{"type": "unlock", "tier": "gold"}\n'),
                          '{"type": "unlock", "tier": "gold"}')
+        # Every kind `test` can queue gets through: a difficulty one was
+        # dropped here, so `test difficulty` showed nothing.
+        for kind in omatrophy.TEST_KINDS:
+            ev = omatrophy.sample_event(kind, LaunchReminder.Fake(LaunchReminder.ACHS), '7', LaunchReminder.ACHS)
+            self.assertIsNotNone(omatrophy.inbox_event(json.dumps(ev)), kind)
         for bad in ('not json', '[1]', '{"type": "ready"}', '{"type": "unlock", "x": "' + 'a' * 70000 + '"}', '  '):
             self.assertIsNone(omatrophy.inbox_event(bad), bad[:30])
 
@@ -1629,6 +1634,8 @@ class LaunchReminder(unittest.TestCase):
             return 'G'
         def art(self, game):
             return {'header': 'h.jpg', 'hero': ''}
+        def percent(self, game, api):
+            return None
 
     ACHS = [dict(ach('a'), desc='Finish on Nightmare.'), dict(ach('b'), desc='Finish on Normal or higher.'),
             dict(ach('c', hidden=True), desc='Finish on Insane.'), ach('d')]
