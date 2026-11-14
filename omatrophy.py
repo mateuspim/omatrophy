@@ -496,7 +496,13 @@ def sample_event(kind, store, game, achs):
     return ev
 
 
+TEST_KINDS = ('unlock', 'bronze', 'silver', 'gold', 'rare', 'platinum', 'difficulty')
+
+
 def test(kind):
+    # A typo used to queue a plain unlock, which looked like it worked.
+    if kind not in TEST_KINDS:
+        raise SystemExit(f'omatrophy: test: no "{kind}" event; try one of {", ".join(TEST_KINDS)}')
     ev = sample_event(kind, *sample_game())
     os.makedirs(STATE, exist_ok=True)
     with open(INBOX, 'a') as f:

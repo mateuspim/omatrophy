@@ -1687,3 +1687,11 @@ class LaunchReminder(unittest.TestCase):
         lines = [json.loads(line) for line in out.getvalue().splitlines()]
         self.assertEqual([(e['type'], e['app']) for e in lines], [('difficulty', '7')])
 
+
+class TestCommand(unittest.TestCase):
+    def test_an_unknown_kind_is_refused_before_anything_is_queued(self):
+        with mock.patch.object(omatrophy, 'sample_game', side_effect=AssertionError('read a game')):
+            with self.assertRaises(SystemExit) as caught:
+                omatrophy.test('diffictulty')
+        self.assertIn('difficulty', str(caught.exception))
+
