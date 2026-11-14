@@ -1,0 +1,8 @@
+{
+  "unlock": { "file": "TrophyToast.qml", "chime": true },
+  "platinum": { "file": "PlatinumCard.qml" },
+  "difficulty": { "file": "DifficultyCard.qml", "rank": 2, "keep": true },
+  "missable": { "file": "MissableCard.qml", "rank": 1, "keep": true },
+  "recap": { "file": "RecapCard.qml", "keep": true },
+  "milestone": { "file": "MilestoneCard.qml" }
+}

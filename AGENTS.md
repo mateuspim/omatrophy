@@ -26,11 +26,14 @@ says how the parts fit, `docs/adr/` why, `docs/specs/` what the contracts are
   `import qs.Commons as Commons` and `Commons.Color.x`; never a bare `Color.`
   (`tests/` enforces it).
 - `TrophyToast.qml`, `PlatinumCard.qml`, `DifficultyCard.qml`,
-  `StylePicker.qml` and `TrackerView.qml` are built from their current text by `FreshObject.qml`
+  `MissableCard.qml`, `RecapCard.qml`, `MilestoneCard.qml`, `StylePicker.qml` and `TrackerView.qml` are built from their current text by `FreshObject.qml`
   so edits show without a shell restart (ADR 10; Omarchy's Quickshell caches
   plugin files, so a `?v=` URL no longer works). They must not use other QML types from this folder; the `Trophy`
   component is repeated on purpose. `Service.qml`, `Panel.qml`, `Tracker.qml`,
   `FreshObject.qml` and `manifest.json` need `omarchy restart shell`.
+  A new card is a QML file plus a row in `cards.json` (file, chime, rank,
+  keep), which `Service.qml` and the test inbox both read; no
+  `Service.qml` edit. Add it to `tests/test_qml.py`'s `VIEWS` too.
 - Popup text uses `Commons.Color.popups.text`, never the bar's foreground:
   the bar's colour is meant for the bar's background.
 - Stores read the launcher's local data and need no account keys (ADR 1,
@@ -75,7 +78,11 @@ says how the parts fit, `docs/adr/` why, `docs/specs/` what the contracts are
   config.
 - Trying the CLI by hand: run it through `dev/sandbox.sh <command>` (or
   `dev/sandbox.sh bash -c '<a && b>'` for several steps), which points the XDG
-  folders at a throwaway folder and removes only that folder. Never `export
+  folders at a throwaway folder and removes only that folder. Config, state
+  and the test inbox are `~`-relative, so a command that writes (`set`,
+  `test`, `hide`, `guide here`, ...) needs `dev/sandbox.sh --home`: without
+  it, `set` writes the owner's real config and `test` queues a card for the
+  live shell. Never `export
   XDG_*`/`HOME` in one shell call and clean up in another: each call is a
   fresh shell, and on the owner's machine `XDG_DATA_HOME` is the real
   `~/.local/share` (a `rm -rf "$XDG_DATA_HOME"` once wiped it). Never

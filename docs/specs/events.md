@@ -4,7 +4,11 @@
 `Service.qml` reads them; `omatrophy.py test` queues the same shapes through
 the inbox (`~/.local/state/omatrophy/inbox.jsonl`), and `demo` prints them
 directly. Unknown `type`s are ignored by the shell, so new types are safe to
-add; changing a field is a breaking change.
+add; changing a field is a breaking change. `cards.json` lists the types
+the shell has a card for: each type's QML file, whether it plays the tier's
+chime (`chime`), whether it goes ahead of queued cards of a lower `rank`,
+and whether a full queue (20) may drop it (`keep`). The test inbox lets
+through these types only.
 
 ## `ready`
 
@@ -68,3 +72,76 @@ drops it, and plays no chime.
 | `header` | string | Banner URL, or `""`. |
 | `stacks` | bool or null | The guide's word, as `guide` gives it: `true` when a harder run also counts for the easier settings, `false` when a setting needs its own run, `null` with no guide or no word. |
 | `stacks_verified` | bool | A quote backs `stacks`. |
+
+## `missable`
+
+A game started (as for `difficulty`) whose guide's current step (`guide`'s
+`step`: the pinned one, else the guess) has achievements still open that
+can be missed there: the step's `missables` and the items marked
+`missable` it places, the ones the tracker's Do now puts first. Tried at
+each check for two minutes, each launch reminder on its own. Once per
+step: the watcher keeps `{"store:app": {"step": "<step>:<title>",
+"shown": [apis]}}` in `~/.local/state/omatrophy/missable-reminded.json`
+and sends it again only on a new step (number or title), or when a
+missable it never named on this step appears (the card then lists every
+open one). A missable unlocked since sends nothing new. Not sent with `missable-reminder` off, for a
+game without a guide, or for a game already running when the watcher
+started. The shell shows it right after any `difficulty` card, before
+queued toasts, never drops it, and plays no chime.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `type` | `"missable"` | |
+| `store`, `app`, `game` | string | As above. |
+| `header` | string | Banner URL, or `""`. |
+| `step`, `steps` | number | The step, 1-based, and how many the walkthrough has. |
+| `title` | string | The step's title. |
+| `missables` | object[] | `{api, name, hidden, note}` per open missable, the step's `missables` first. `name` is `"Hidden achievement"` and `hidden` `true` for a hidden achievement unless `reveal-hidden` is on; `note` is the guide's `missable_note` (when it is lost), or `""`. |
+
+## `recap`
+
+The game a store was running at the last check stopped (nothing runs
+now, or another game does), and its session unlocked something: an
+unlock with a time at or after the session's start that didn't come from
+a backfill (`remote`). The session starts a check (5 s) before its
+launch was seen, or, for a game already running when the watcher
+started, at the watcher's start. A store that fails to say what runs
+keeps its last answer, so one bad read neither ends a session nor sends
+its recap. Not sent with `session-recap` off or after a session with no
+unlock. The shell queues it after the launch reminders, in arrival order
+with toasts, never drops it from a full queue (it ends a session once),
+and plays no chime.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `type` | `"recap"` | |
+| `store`, `app`, `game` | string | As above. |
+| `header` | string | Banner URL, or `""`. |
+| `minutes` | number | How long the session ran, rounded, at least 1. |
+| `count` | number | Unlocks in the session. |
+| `unlocked`, `total` | number | Unlocked now, and the game's total. |
+| `rarest` | object or null | The session's rarest unlock, `{name, percent, tier, icon}` (`tier` and `icon` as in `unlock`), or null when the store gives none of them a rarity. |
+| `platinum` | bool | The session took the game to 100%. |
+
+## `milestone`
+
+A locked counter achievement (`game`'s `progress`, `{value, max}`; Steam
+only today) passed 50, 75 or 90% of its goal since the watcher's last read
+of the game. One line per achievement, for the highest milestone it
+passed, upward only. The baseline is the watcher's first read and lives in
+memory: a game just appeared sends none, and a restart never repeats one.
+A counter that game's last read lacked (its stat never set) counts from 0.
+A hidden achievement is skipped unless `reveal-hidden` is on; none is sent
+with `milestones` off. The watcher reads a game when its file changes;
+whether Steam writes `UserGameStats` the moment a stat changes, or only
+with its next write of the game's stats (an unlock, the game quitting),
+is unverified (its files do change with no unlock). The shell queues it
+like a toast (a full queue may drop it) and plays no chime.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `type` | `"milestone"` | |
+| `store`, `app`, `game` | string | As above. |
+| `name`, `desc`, `icon` | string | As in `unlock`. |
+| `value`, `max` | number | The count now and its goal. |
+| `threshold` | number | `50`, `75` or `90`. |

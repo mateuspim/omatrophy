@@ -3,7 +3,8 @@
 
 Usage:
   omatrophy.py watch                  print one JSON event per new unlock (the shell service runs this)
-  omatrophy.py test [kind]            queue a fake event for a running watcher: bronze, silver, gold, platinum, difficulty
+  omatrophy.py test [kind]            queue a fake event for a running watcher: bronze, silver, gold, platinum, difficulty,
+                                      missable, recap, milestone
   omatrophy.py status                 progress of every game with achievements, as JSON
   omatrophy.py cabinet                trophy totals and the games nearest platinum, as JSON
   omatrophy.py now                    what is playing, recent games, platinums and totals, as JSON (the bar panel)
@@ -162,6 +163,116 @@ def launch_reminder(store, game, cfg):
     return ev
 
 
+def guide_or_empty(store_id, game, achs):
+    """The game's guide as `guide` gives it; {} with none, or a broken one."""
+    import guides
+    try:
+        return guides.guide_answer(store_id, game, achs)
+    except Exception:
+        return {}
+
+
+def step_missables(answer, achs):
+    """(step index, open missable apis) of the guide's current step: the
+    step's `missables` and the items marked `missable` it places, as the
+    tracker's Do now puts first (guides.frontier). (-1, []) with no step."""
+    steps = answer.get('walkthrough') or []
+    at = answer.get('step', -1)
+    if not isinstance(at, int) or isinstance(at, bool) or not 0 <= at < len(steps):
+        return -1, []
+    items = answer.get('items') or {}
+    step = steps[at]
+    wanted = list(step.get('missables') or []) + \
+        [api for api in step.get('achievements') or [] if (items.get(api) or {}).get('missable')]
+    done = {a['api'] for a in achs if a['unlocked']} | set(answer.get('ticks') or [])
+    known = {a['api'] for a in achs}
+    return at, [api for api in dict.fromkeys(wanted) if api in known and api not in done]
+
+
+def missable_event(store, game, achs, reveal=False):
+    """The reminder the shell shows when a game whose guide's current step
+    has missables still open starts: the step and what can be missed in
+    it, each with the guide's note on when. None when nothing is open.
+    A hidden achievement's name stays secret, as the tracker keeps it,
+    unless `reveal`; its note says when, not what, so it stays."""
+    answer = guide_or_empty(store.id, game, achs)
+    at, open_apis = step_missables(answer, achs)
+    if not open_apis:
+        return None
+    items = answer.get('items') or {}
+    by_api = {a['api']: a for a in achs}
+    rows = []
+    for api in open_apis:
+        a = by_api[api]
+        secret = bool(a.get('hidden')) and not reveal
+        rows.append({'api': api, 'name': 'Hidden achievement' if secret else a['name'], 'hidden': secret,
+                     'note': (items.get(api) or {}).get('missable_note') or ''})
+    step = answer['walkthrough'][at]
+    return {'type': 'missable', 'store': store.id, 'app': game, 'game': store.game_name(game),
+            'header': store.art(game)['header'], 'step': at + 1, 'steps': len(answer['walkthrough']),
+            'title': step['title'], 'missables': rows}
+
+
+def missable_step(ev):
+    """The step a missable reminder is about, by number and title, so a
+    guide made again with other steps counts as a new one."""
+    return f"{ev['step']}:{ev['title']}"
+
+
+def missable_news(ev, record):
+    """What to keep after showing `ev`, or None when it says nothing new
+    against `record` ({step, shown} from the last reminder): the owner
+    wants it again on a new step, or when a missable it never named
+    appears. One of them got only makes the card shorter, so it stays
+    quiet then."""
+    step = missable_step(ev)
+    apis = [r['api'] for r in ev['missables']]
+    record = record if isinstance(record, dict) else {}
+    shown = record.get('shown') if isinstance(record.get('shown'), list) else []
+    if record.get('step') != step:
+        return {'step': step, 'shown': sorted(apis)}
+    if set(apis) <= set(shown):
+        return None
+    return {'step': step, 'shown': sorted(set(shown) | set(apis))}
+
+
+def missable_reminded_path():
+    return f'{STATE}/missable-reminded.json'
+
+
+def missable_reminder(store, game, cfg):
+    """The missable reminder for a game that just started: once per step,
+    and again on that step only when a missable it never named appears.
+    None when switched off, with nothing to say, or nothing new."""
+    if cfg.get('missable-reminder') is False:
+        return None
+    achs, _ = unlocked_set(store, game)
+    ev = missable_event(store, game, achs, cfg.get('reveal-hidden') is True)
+    if not ev:
+        return None
+    key = game_key(store.id, game)
+    shown = read_json(missable_reminded_path(), {})
+    shown = shown if isinstance(shown, dict) else {}
+    record = missable_news(ev, shown.get(key))
+    if record is None:
+        return None
+    write_json(missable_reminded_path(), dict(shown, **{key: record}))
+    return ev
+
+
+# The reminders a launch can bring, in the order the shell shows them
+# (cards.json ranks them the same way). Each is tried on its own until it
+# has spoken or the retry ends: the missable one needs no difficulty
+# achievement, and a game reminded of difficulty long ago still moves on
+# through its guide's steps.
+LAUNCH_KINDS = ('difficulty', 'missable')
+
+
+def launch_reminder_for(kind):
+    # Looked up per call, so tests can patch one reminder.
+    return {'difficulty': launch_reminder, 'missable': missable_reminder}[kind]
+
+
 def new_launch(previous, run):
     """The game id that just started, given the one running before (or
     None) and `running()` now; None when nothing new started."""
@@ -176,45 +287,114 @@ LAUNCH_POLL = 5
 LAUNCH_RETRY = 120
 
 
-def running_game_id(store):
+def running_game_id(store, unknown=None):
     """The store's running game id, or None; a store that fails to say
-    counts as running nothing rather than ending the launch watch."""
+    counts as running `unknown` rather than ending the launch watch: the
+    game it ran before, so one bad read neither ends a session (and sends
+    its recap early) nor starts a new one."""
     try:
         return (store.running() or {}).get('game')
     except Exception as e:
         print(f'omatrophy: {store.id}: reading the running game failed: {e}', file=sys.stderr, flush=True)
+        return unknown
+
+
+def session_unlocks(achs, start):
+    """The unlocks of a session that began at `start`: unlocked at or after
+    it, with a time, and not remote (a backfill's unlock happened on
+    another machine, ADR 11)."""
+    return [a for a in achs if a['unlocked'] and a['time'] and a['time'] >= start and not a.get('remote')]
+
+
+def recap_event(store, game, achs, start, end):
+    """The card the shell shows when a game stops: what the session
+    earned, its rarest unlock and where the game stands. None when the
+    session unlocked nothing (a recap of nothing is noise)."""
+    got = session_unlocks(achs, start)
+    if not got:
         return None
+    try:
+        pcts = store.percents(game)
+    except Exception:
+        pcts = {}
+    ranked = sorted((a for a in got if pcts.get(a['api']) is not None), key=lambda a: (pcts[a['api']], -a['time']))
+    rarest = None
+    if ranked:
+        a = ranked[0]
+        pct = pcts[a['api']]
+        rarest = {'name': a['name'], 'percent': pct, 'tier': tier(pct), 'icon': icon(store, game, a['icon'])}
+    done = sum(a['unlocked'] for a in achs)
+    return {'type': 'recap', 'store': store.id, 'app': game, 'game': store.game_name(game),
+            'header': store.art(game)['header'], 'minutes': max(1, int((end - start) / 60 + 0.5)),
+            'count': len(got), 'unlocked': done, 'total': len(achs), 'rarest': rarest,
+            # Reached 100% in this session, not merely played a finished game.
+            'platinum': done == len(achs) and platinum_time(achs) >= start}
+
+
+def session_recap(store, game, start, end, cfg):
+    """The recap of a game that just stopped; None when switched off or
+    when the session unlocked nothing."""
+    if cfg.get('session-recap') is False:
+        return None
+    achs, _ = unlocked_set(store, game)
+    return recap_event(store, game, achs, start, end)
 
 
 def watch_launches(found, sleep=time.sleep, clock=time.time):
-    """Shows the difficulty reminder when a game starts. A game already
-    running when the watcher starts (a shell restart mid-game) is no
-    launch. A launch is tried every poll while the game runs, for
-    LAUNCH_RETRY seconds, until it has something to say. In a thread of its
-    own: reading achievements and names can take a while and must never
-    hold up an unlock."""
+    """Shows the launch reminders (LAUNCH_KINDS) when a game starts, and
+    the session recap when it stops. A game already running when the
+    watcher starts (a shell restart mid-game) is no launch; its session
+    counts from the watcher's start. Each reminder is tried every poll
+    while the game runs, for LAUNCH_RETRY seconds, until it has something
+    to say. In a thread of its own: reading achievements, guides and names
+    can take a while and must never hold up an unlock."""
     playing = {s.id: running_game_id(s) for s in found}
-    pending = {}  # store id: (game, give up at)
+    started = clock()
+    sessions = {s.id: started for s in found}  # store id: when its running game's session began
+    pending = {}  # store id: (game, give up at, kinds not yet spoken)
     while True:
         sleep(LAUNCH_POLL)
         for s in found:
-            game = running_game_id(s)
+            game = running_game_id(s, unknown=playing[s.id])
+            if playing[s.id] and playing[s.id] != game:
+                stopped(s, playing[s.id], sessions[s.id], clock())
             if new_launch(playing[s.id], {'game': game} if game else None):
-                pending[s.id] = (game, clock() + LAUNCH_RETRY)
+                pending[s.id] = (game, clock() + LAUNCH_RETRY, list(LAUNCH_KINDS))
+                # It started at most a poll ago; an unlock in its first
+                # seconds still belongs to it.
+                sessions[s.id] = clock() - LAUNCH_POLL
             playing[s.id] = game
-            wanted, until = pending.get(s.id, (None, 0))
+            wanted, until, kinds = pending.get(s.id, (None, 0, []))
             if not wanted or wanted != game or clock() > until:
                 pending.pop(s.id, None)
                 continue
-            try:
-                ev = launch_reminder(s, game, read_json(config_path(), {}))
-            except Exception as e:
-                print(f'omatrophy: launch reminder failed: {e}', file=sys.stderr, flush=True)
+            cfg = read_json(config_path(), {})
+            cfg = cfg if isinstance(cfg, dict) else {}
+            for kind in list(kinds):
+                try:
+                    ev = launch_reminder_for(kind)(s, game, cfg)
+                except Exception as e:
+                    print(f'omatrophy: {kind} reminder failed: {e}', file=sys.stderr, flush=True)
+                    kinds.remove(kind)
+                    continue
+                if ev:
+                    kinds.remove(kind)
+                    emit(ev)
+            if not kinds:
                 pending.pop(s.id, None)
-                continue
-            if ev:
-                pending.pop(s.id, None)
-                emit(ev)
+
+
+def stopped(store, game, start, end):
+    """Say the recap of a game that stopped, if it has one; a failure only
+    costs the recap."""
+    cfg = read_json(config_path(), {})
+    try:
+        ev = session_recap(store, game, start, end, cfg if isinstance(cfg, dict) else {})
+    except Exception as e:
+        print(f'omatrophy: session recap failed: {e}', file=sys.stderr, flush=True)
+        return
+    if ev:
+        emit(ev)
 
 
 def unlocked_set(store, game):
@@ -226,8 +406,73 @@ def unlocked_set(store, game):
     return achs, {a['api'] for a in achs if a['unlocked']}
 
 
-def check_game(store, game, seen):
-    """Emit what is newly unlocked in one game, and the platinum when it completes it."""
+# A locked counter achievement ("52 / 80") passing one of these shares of
+# its goal gets a small toast: how far a grind has come, while it's still
+# a grind.
+MILESTONES = (50, 75, 90)
+
+
+def counters_of(achs):
+    """{api: (value, max)} of every locked counter achievement."""
+    out = {}
+    for a in achs:
+        p = a.get('progress')
+        if a['unlocked'] or not isinstance(p, dict):
+            continue
+        value, top = p.get('value'), p.get('max')
+        if isinstance(value, (int, float)) and isinstance(top, (int, float)) and top > 0:
+            out[a['api']] = (value, top)
+    return out
+
+
+def reached(count, threshold):
+    """True when (value, max) is at or past `threshold` percent; in whole
+    numbers, so 40 / 80 is exactly 50%."""
+    return count is not None and 100 * count[0] >= threshold * count[1]
+
+
+def crossed_milestone(before, now):
+    """The highest milestone `now` reached that `before` hadn't, or None:
+    upward only, so a counter reset by the game never fires."""
+    new = [t for t in MILESTONES if reached(now, t) and not reached(before, t)]
+    return max(new) if new and before is not None else None
+
+
+def milestone_events(store, game, achs, before):
+    """Toasts for the counters that crossed a milestone since `before`
+    ({api: (value, max)} from the last read; None with no baseline, so a
+    game just appeared sends none). A hidden achievement is skipped, as
+    the tracker keeps it secret, unless reveal-hidden."""
+    if before is None:
+        return []
+    now = counters_of(achs)
+    # A counter the last read lacked had no stat yet (Steam leaves a stat
+    # it never set out of its cache, so the store gives no progress): it
+    # started from 0, and its first value can cross a milestone.
+    crossed = {api: crossed_milestone(before.get(api, (0, count[1])), count) for api, count in now.items()}
+    crossed = {api: t for api, t in crossed.items() if t}
+    if not crossed:
+        return []
+    cfg = read_json(config_path(), {})
+    cfg = cfg if isinstance(cfg, dict) else {}
+    if cfg.get('milestones') is False:
+        return []
+    reveal = cfg.get('reveal-hidden') is True
+    out = []
+    for a in achs:
+        if a['api'] not in crossed or (a.get('hidden') and not reveal):
+            continue
+        value, top = now[a['api']]
+        out.append({'type': 'milestone', 'store': store.id, 'app': game, 'game': store.game_name(game),
+                    'name': a['name'], 'desc': a['desc'], 'icon': icon(store, game, a['icon']),
+                    'value': value, 'max': top, 'threshold': crossed[a['api']]})
+    return out
+
+
+def check_game(store, game, seen, counters=None):
+    """Emit what is newly unlocked in one game, and the platinum when it
+    completes it; with `counters` (the last read's counter values per
+    game), the counters that crossed a milestone too."""
     key = (store.id, game)
     # A game with no baseline only just appeared (first played, or cached
     # by Load from Steam): all its unlocks look new.
@@ -246,6 +491,12 @@ def check_game(store, game, seen):
         emit(unlock_event(store, game, a, achs))
     if fresh and achs and len(now) == len(achs):
         emit(platinum_event(store, game, achs))
+    # A read that found nothing (a file mid-write) keeps the old values,
+    # or the next good read would have no baseline to compare with.
+    if counters is not None and achs:
+        for ev in milestone_events(store, game, achs, counters.get(key)):
+            emit(ev)
+        counters[key] = counters_of(achs)
 
 
 def drain_inbox(offset):
@@ -267,16 +518,23 @@ def drain_inbox(offset):
         return f.tell()
 
 
+def card_types():
+    """The event types the shell has a card for, from cards.json, the one
+    table Service.qml reads too: a new card is a QML file and a row there."""
+    found = read_json(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cards.json'), {})
+    return tuple(found) if isinstance(found, dict) else ()
+
+
 # What `test` can queue: every card the shell shows (`difficulty` was
 # missing at first, so `test difficulty` and Settings' Try showed nothing).
-INBOX_TYPES = ('unlock', 'platinum', 'difficulty')
+INBOX_TYPES = card_types()
 # A real event line is a few hundred bytes; the shell parses every line.
 MAX_INBOX_LINE = 64 * 1024
 
 
 def inbox_event(line):
-    """The line itself when it is one card event (`unlock`, `platinum` or
-    `difficulty`), else None: the inbox is a file any of the user's
+    """The line itself when it is one card event (a type in cards.json),
+    else None: the inbox is a file any of the user's
     processes can append to."""
     line = line.strip()
     if not line or len(line) > MAX_INBOX_LINE:
@@ -477,7 +735,16 @@ def steam_load(everything=False):
 def watch(interval=1.0):
     found = found_stores()
     tokens = {s.id: s.games() for s in found}
-    seen = {(s.id, g): unlocked_set(s, g)[1] for s in found for g in tokens[s.id]}
+    # The first read is the baseline for unlocks and counters alike; it
+    # lives in memory, so a restart never repeats a milestone.
+    seen, counters = {}, {}
+    for s in found:
+        for g in tokens[s.id]:
+            achs, seen[(s.id, g)] = unlocked_set(s, g)
+            # A read that found nothing (a file mid-write) is no baseline:
+            # every counter would look new against it.
+            if achs:
+                counters[(s.id, g)] = counters_of(achs)
     inbox = os.path.getsize(INBOX) if os.path.exists(INBOX) else 0
     emit({'type': 'ready', 'stores': [s.id for s in found], 'games': len(seen)})
     # In the background, after `ready`: name lookups go to the network and
@@ -492,7 +759,7 @@ def watch(interval=1.0):
             cur = s.games()
             for game, token in cur.items():
                 if tokens[s.id].get(game) != token:
-                    check_game(s, game, seen)
+                    check_game(s, game, seen, counters)
             tokens[s.id] = cur
 
 
@@ -519,6 +786,12 @@ def sample_event(kind, store, game, achs):
             'type': 'difficulty', 'store': store.id, 'app': game, 'game': store.game_name(game),
             'settings': ['Nightmare', 'Hard+'], 'count': 3, 'header': store.art(game)['header'],
             'stacks': True, 'stacks_verified': True}
+    if kind == 'missable':
+        return missable_event(store, game, achs) or sample_missable(store, game, achs)
+    if kind == 'recap':
+        return sample_recap(store, game, achs)
+    if kind == 'milestone':
+        return sample_milestone(store, game, achs)
     ach = next((a for a in achs if a['unlocked']), achs[0])
     ev = unlock_event(store, game, ach, achs)
     if kind in ('rare', 'gold'):
@@ -528,7 +801,42 @@ def sample_event(kind, store, game, achs):
     return ev
 
 
-TEST_KINDS = ('unlock', 'bronze', 'silver', 'gold', 'rare', 'platinum', 'difficulty')
+def sample_missable(store, game, achs):
+    """A made-up missable reminder from the game's first locked achievements
+    (any achievements when all are done), for a game without a guide."""
+    picks = ([a for a in achs if not a['unlocked']] or achs)[:2]
+    notes = ['Before you leave the first town', 'Only during the night chapter']
+    return {'type': 'missable', 'store': store.id, 'app': game, 'game': store.game_name(game),
+            'header': store.art(game)['header'], 'step': 3, 'steps': 12, 'title': 'The Sunken Archive',
+            'missables': [{'api': a['api'], 'name': a['name'], 'hidden': False, 'note': note}
+                          for a, note in zip(picks, notes)]}
+
+
+def sample_recap(store, game, achs):
+    """A session recap of a real game: its last few unlocks as the
+    session, with made-up rarity for the rarest and a made-up length."""
+    got = sorted((a for a in achs if a['unlocked']), key=lambda a: -a['time'])[:4] or achs[:1]
+    a = got[-1]
+    return {'type': 'recap', 'store': store.id, 'app': game, 'game': store.game_name(game),
+            'header': store.art(game)['header'], 'minutes': 95, 'count': len(got),
+            'unlocked': sum(x['unlocked'] for x in achs), 'total': len(achs),
+            'rarest': {'name': a['name'], 'percent': 3.4, 'tier': 'gold', 'icon': icon(store, game, a['icon'])},
+            'platinum': False}
+
+
+def sample_milestone(store, game, achs):
+    """A milestone toast from the game's own counter achievement when it
+    has one (made-up numbers otherwise), at 75%."""
+    a = next((a for a in achs if a.get('progress') and not a['unlocked']), None) or \
+        next((a for a in achs if not a['unlocked']), achs[0])
+    top = (a.get('progress') or {}).get('max') or 80
+    return {'type': 'milestone', 'store': store.id, 'app': game, 'game': store.game_name(game),
+            'name': a['name'], 'desc': a['desc'], 'icon': icon(store, game, a['icon']),
+            'value': -(-top * 3 // 4), 'max': top, 'threshold': 75}
+
+
+TEST_KINDS = ('unlock', 'bronze', 'silver', 'gold', 'rare', 'platinum', 'difficulty', 'missable', 'recap',
+              'milestone')
 
 
 def test(kind):
@@ -1302,6 +1610,12 @@ SETTINGS = {'position': ('top-center', 'top-left', 'top-right'),
             'games-difficulty': ('on', 'off'),
             # The difficulty reminder when a game starts; on unless switched off.
             'difficulty-reminder': ('on', 'off'),
+            # The missable reminder when a game starts; on unless switched off.
+            'missable-reminder': ('on', 'off'),
+            # The recap when a game stops; on unless switched off.
+            'session-recap': ('on', 'off'),
+            # Counter milestone toasts; on unless switched off.
+            'milestones': ('on', 'off'),
             'rarest': ('ever', 'month', 'platinum'),
             'settings-section': ('overview', 'toasts', 'now', 'guides', 'stores'),
             'community': ('on', 'off'),
@@ -1313,7 +1627,8 @@ SETTINGS = {'position': ('top-center', 'top-left', 'top-right'),
 NOW_SECTIONS = ('metals', 'recent', 'rarest', 'shelf')
 SETTINGS.update({f'now-{name}': ('on', 'off') for name in NOW_SECTIONS})
 # Settings stored as true/false rather than the word given.
-SWITCHES = {'community', 'guide-web', 'guide-jail', 'reveal-hidden', 'games-difficulty', 'difficulty-reminder'} | {f'now-{name}' for name in NOW_SECTIONS}
+SWITCHES = {'community', 'guide-web', 'guide-jail', 'reveal-hidden', 'games-difficulty', 'difficulty-reminder',
+            'missable-reminder', 'session-recap', 'milestones'} | {f'now-{name}' for name in NOW_SECTIONS}
 
 
 def set_option(key, value):
@@ -1348,6 +1663,9 @@ def set_option(key, value):
                          f'       omatrophy.py set games-sort {"|".join(SETTINGS["games-sort"])}\n'
                          f'       omatrophy.py set games-difficulty on|off\n'
                          f'       omatrophy.py set difficulty-reminder on|off\n'
+                         f'       omatrophy.py set missable-reminder on|off\n'
+                         f'       omatrophy.py set session-recap on|off\n'
+                         f'       omatrophy.py set milestones on|off\n'
                          f'       omatrophy.py set rarest {"|".join(SETTINGS["rarest"])}\n'
                          f'       omatrophy.py set community on|off\n'
                          f'       omatrophy.py set reveal-hidden on|off\n'

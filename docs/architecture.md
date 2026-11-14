@@ -31,10 +31,14 @@ turns those lines into cards on screen.
 | `guide_agents.py` | One adapter per coding agent: its locked headless command, model list and answer parsing; only adapters whose lock was checked run. |
 | `stores/__init__.py` | The list of stores; `available()` keeps the installed ones. |
 | `difficulty.py` | Reads from an achievement's own text the difficulty setting it needs ("on Nightmare", "Normal or higher"), for the `difficulty` fields of `game` and `games`. Pure, no store or network. |
-| `omatrophy.py` | Watch loop, launch watch (the difficulty reminder), diffing, tiers, event shapes, test inbox, settings, the panel's and tracker's JSON (`now`, `games`, `game`), CLI. |
+| `omatrophy.py` | Watch loop (unlocks and counter milestones), launch watch (the difficulty and missable reminders, the session recap when a game stops), diffing, tiers, event shapes, test inbox, settings, the panel's and tracker's JSON (`now`, `games`, `game`), CLI. |
 | `Service.qml` | Runs the watcher, parses lines, queues events, plays the chime, shows one card at a time in an Overlay-layer window on the focused monitor. |
 | `TrophyToast.qml` | One unlock: icon, trophy in the tier's metal, rarity, progress. |
 | `DifficultyCard.qml` | The difficulty reminder at a game's launch: the settings its achievements left need, and whether the guide says they stack. |
+| `MissableCard.qml` | The missable reminder at a game's launch: the guide's current step and what can be missed in it. |
+| `RecapCard.qml` | The session recap when a game stops: its length, trophies, rarest unlock and the game's progress. |
+| `MilestoneCard.qml` | A small toast when a counter achievement passes 50, 75 or 90% of its goal. |
+| `cards.json` | The one table of cards: each event type's QML file, chime, rank in the queue and whether a full queue may drop it. `Service.qml` reads it live; `omatrophy.py` lets only its types through the test inbox. |
 | `PlatinumCard.qml` | 100% of a game: badge, ring, trophy, then a wide card over the hero art. |
 | `Panel.qml` | Bar button; opens a `KeyboardPanel` that loads `StylePicker.qml`, and turns its `track` signal into a summon of the tracker. |
 | `StylePicker.qml` | Three tabs. Now: totals, the running game (or the last three) and the platinum shelf, from `omatrophy.py now`. Games: every game, sortable, from `omatrophy.py games` on first open. Settings: trophy style, previews, position and sound, through `omatrophy.py set`. |
@@ -50,8 +54,11 @@ turns those lines into cards on screen.
 2. Once a second it forwards new lines from the test inbox and asks each
    store for its tokens. For each game whose token changed it rereads the
    achievements, diffs the unlocked set and prints an `unlock` line per new,
-   recent unlock (ADR 4), then a `platinum` line if that completed the game.
-3. `Service.qml` queues `unlock` and `platinum` lines, plays a chime, and
+   recent unlock (ADR 4), then a `platinum` line if that completed the game,
+   and a `milestone` line per counter that passed 50, 75 or 90% since the
+   last read.
+3. `Service.qml` queues the lines `cards.json` has a card for (the launch
+   reminders ahead of toasts), plays a chime for unlocks, and
    builds the matching card from its current text (ADR 10) into a click-through
    window on the Overlay layer (ADR 2). The card reports `finished`; the next
    event shows.

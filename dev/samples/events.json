@@ -68,5 +68,65 @@
   "header": "dev/samples/art/starfall-odyssey-header.svg",
   "stacks": true,
   "stacks_verified": true
+ },
+ "missable": {
+  "type": "missable",
+  "store": "steam",
+  "app": "1",
+  "game": "Starfall Odyssey",
+  "header": "dev/samples/art/starfall-odyssey-header.svg",
+  "step": 4,
+  "steps": 12,
+  "title": "The Drowned Observatory",
+  "missables": [
+   {
+    "api": "LENS",
+    "name": "Eye of the Deep",
+    "hidden": false,
+    "note": "Before the lift up to the dome: it seals behind you"
+   },
+   {
+    "api": "LOG7",
+    "name": "Keeper's Last Log",
+    "hidden": false,
+    "note": "In the flooded archive, only until the water rises"
+   },
+   {
+    "api": "SECRET",
+    "name": "Hidden achievement",
+    "hidden": true,
+    "note": "Talk to the keeper before the eclipse"
+   }
+  ]
+ },
+ "recap": {
+  "type": "recap",
+  "store": "steam",
+  "app": "1",
+  "game": "Starfall Odyssey",
+  "header": "dev/samples/art/starfall-odyssey-header.svg",
+  "minutes": 95,
+  "count": 4,
+  "unlocked": 31,
+  "total": 52,
+  "rarest": {
+   "name": "Long Way Home",
+   "percent": 3.4,
+   "tier": "gold",
+   "icon": "dev/samples/art/icon-long-way-home.svg"
+  },
+  "platinum": false
+ },
+ "milestone": {
+  "type": "milestone",
+  "store": "steam",
+  "app": "1",
+  "game": "Starfall Odyssey",
+  "name": "Long Way Home",
+  "desc": "Cross the Veil 80 times",
+  "icon": "dev/samples/art/icon-long-way-home.svg",
+  "value": 60,
+  "max": 80,
+  "threshold": 75
  }
 }

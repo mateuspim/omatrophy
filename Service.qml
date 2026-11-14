@@ -5,8 +5,8 @@ import Quickshell.Io
 import Quickshell.Wayland
 import qs.Commons as Commons
 
-// Runs omatrophy.py, which prints one JSON line per new Steam unlock (and a
-// difficulty reminder when a game starts), and shows each as a card on the
+// Runs omatrophy.py, which prints one JSON line per new Steam unlock (and
+// reminders when a game starts), and shows each as a card (cards.json) on the
 // focused monitor. The window sits on the
 // Overlay layer like Omarchy's own notifications, so it lands above
 // fullscreen games, and its mask is empty, so it never takes a click or focus.
@@ -36,18 +36,62 @@ Scope {
 
   readonly property var tiers: ["bronze", "silver", "gold", "platinum"]
 
+  // Every card the shell shows, from cards.json (omatrophy.py reads the
+  // same table for what the test inbox lets through): type -> { file, the
+  // QML built for it; chime, play the tier's chime as it shows; rank, go
+  // ahead of queued cards of a lower rank (a launch reminder is about the
+  // save being made now); keep, never dropped from a full queue }. Read
+  // from its current text, so a new card needs a QML file and a row there,
+  // no restart. Until it reads, the toast and the platinum card work.
+  property var cards: ({ unlock: { file: "TrophyToast.qml", chime: true }, platinum: { file: "PlatinumCard.qml" } })
+
+  FileView {
+    path: decodeURIComponent(String(Qt.resolvedUrl("cards.json")).replace(/^(qs|file):\/\//, ""))
+    // It still loads after the component completes (checked offscreen), but
+    // long before the watcher's first card: the watcher reads every store
+    // before it prints `ready`, and a launch reminder waits a poll on top.
+    blockLoading: true
+    watchChanges: true
+    printErrors: false
+    onFileChanged: reload()
+    onLoaded: {
+      try {
+        var table = JSON.parse(text())
+        if (table && typeof table === "object" && !Array.isArray(table)) root.cards = table
+      } catch (e) { console.warn("omatrophy: cards.json does not parse:", e) }
+    }
+  }
+
+  function cardOf(ev) {
+    var card = ev && Object.prototype.hasOwnProperty.call(cards, ev.type) ? cards[ev.type] : null
+    return card && typeof card.file === "string" ? card : null
+  }
+
+  function rankOf(ev) {
+    var card = cardOf(ev)
+    return card && typeof card.rank === "number" ? card.rank : 0
+  }
+
   function enqueue(ev) {
-    if (["unlock", "platinum", "difficulty"].indexOf(ev.type) < 0) return
+    var card = cardOf(ev)
+    if (!card) return
     // `tier` names the chime file; anything else falls back to bronze.
     if (tiers.indexOf(ev.tier) < 0) ev.tier = "bronze"
     // A burst (a backfilled library, a flood in the inbox) shows the first
-    // few cards, not a queue that runs for an hour.
-    // A difficulty reminder is never dropped and goes first: it is shown
-    // once per game (the watcher records it as sent) and is about the save
-    // being made right now.
-    if (ev.type === "difficulty") queue = [ev].concat(queue)
-    else if (queue.length >= 20) return
-    else queue = queue.concat([ev])
+    // few cards, not a queue that runs for an hour. A card kept (a launch
+    // reminder: shown once, the watcher records it as sent) is never
+    // dropped.
+    if (!card.keep && queue.length >= 20) return
+    // A ranked card goes ahead of every queued card of a lower rank and
+    // after those of its own: the difficulty reminder first, then the
+    // missable one, then toasts in the order they came.
+    var rank = rankOf(ev)
+    var at = queue.length
+    if (rank > 0) {
+      at = 0
+      while (at < queue.length && rankOf(queue[at]) >= rank) at++
+    }
+    queue = queue.slice(0, at).concat([ev], queue.slice(at))
     if (!current) next()
   }
 
@@ -56,8 +100,9 @@ Scope {
     current = queue[0]
     queue = queue.slice(1)
     // The platinum card asks for its chime when the trophy lands; a
-    // difficulty reminder is no unlock, so it comes silent.
-    if (current.type === "unlock") chime.play(current.tier || "bronze")
+    // reminder is no unlock, so it comes silent.
+    var card = cardOf(current)
+    if (card && card.chime) chime.play(current.tier || "bronze")
   }
 
   // The focused monitor when the card starts; it stays there while shown.
@@ -168,7 +213,8 @@ Scope {
 
         function show() {
           if (!root.current) return
-          var item = load(({ platinum: "PlatinumCard.qml", difficulty: "DifficultyCard.qml" })[root.current.type] || "TrophyToast.qml")
+          var kind = root.cardOf(root.current)
+          var item = kind ? load(kind.file) : null
           // A card that doesn't build would stall the queue; skip to the next.
           if (!item) { Qt.callLater(root.next); return }
           item.edge = root.position

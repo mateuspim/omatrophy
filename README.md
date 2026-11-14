@@ -29,6 +29,20 @@ achievement list.
   10% or fewer, with glitter and a sweep of light for gold.
 - A platinum card at 100%: the trophy spins in over the game's hero art and
   the count rolls up.
+- A recap when you quit a game: how long you played, the trophies the
+  session brought, the rarest of them, and where the game stands now.
+  Only after a session that unlocked something; no chime, and never
+  dropped when many toasts are waiting. Off in
+  Settings > Toasts > Recap, where **Try** shows one (`omatrophy.py set
+  session-recap off`, `omatrophy.py test recap`).
+- Milestones on a grind: a small toast when a locked counter achievement
+  ("52 / 80") passes 50, 75 or 90% of its goal, with its icon and a bar.
+  Steam only (GOG keeps no counters); hidden ones stay quiet unless you
+  reveal hidden ones. Off in Settings > Toasts > Milestones (`omatrophy.py
+  set milestones off`, `omatrophy.py test milestone`). Whether Steam
+  saves a counter to disk the moment it changes, or only when it next
+  writes the game's stats (an unlock, quitting), is unverified, so a
+  milestone may come late.
 - The achievement icon, its description, the share of players, and your
   progress through the game, filling in as you watch.
 - A trophy cabinet in the bar: the game you're playing with this session's
@@ -239,6 +253,17 @@ its tip, what it needs and what it opens show under that part. Up next
 leaves out a trophy until what it needs is done. Guides made before
 0.7.0 have no actions or chains; **Make again** adds them.
 
+When a game starts whose guide puts you on a step with missables still
+open, a card names the step ("Step 4 of 12 · The Drowned Observatory")
+and each trophy you lose by moving on, with the guide's note on when
+("Before the lift up to the dome"). A hidden one says "Hidden
+achievement" unless you reveal hidden ones. It comes once per step: the
+next launch on the same step stays quiet, also after you get one of
+them, and a new step, or a missable it never named, brings it back. It shows right after
+the difficulty reminder, without a chime. Turn it off in Settings >
+Toasts > Missable, where **Try** shows one (`omatrophy.py set
+missable-reminder off`, `omatrophy.py test missable`).
+
 ### The guide over your game
 
 Like Steam's Shift+Tab overlay: a key opens the guide of the game you're
@@ -358,7 +383,9 @@ Format and stages: [docs/specs/guides.md](docs/specs/guides.md).
 The panel's **Settings** tab opens on an **Overview**: one line per
 section saying what it is set to; click one, or pick a section above it.
 **Toasts** holds the trophy style, then position, glass
-and sound as rows of choices, and **Try it** tiles that show a toast of
+and sound as rows of choices, one row each for the difficulty and
+missable reminders, the session recap and milestones (with **Try** to
+show one), and **Try it** tiles that show a toast of
 each tier with your settings. Each choice applies to the next toast.
 **Now tab** picks which sections the Now tab shows. **Guides** picks the
 agent that makes 100% guides and its model, each from a list that unfolds
@@ -383,7 +410,7 @@ omatrophy.py set sound off              # on, off, omatrophy, classic
 omatrophy.py set icons vector           # omarchy, vector, painted
 omatrophy.py set glass clear            # clear, frosted, solid
 omatrophy.py hide steam 20920           # out of "closest to platinum" and the shelf; unhide brings it back
-omatrophy.py test platinum              # bronze, silver, gold, platinum
+omatrophy.py test platinum              # bronze, silver, gold, platinum, difficulty, missable, recap, milestone
 omatrophy.py status                     # progress of every game
 omatrophy.py now                        # the panel's Now tab, as JSON
 omatrophy.py game                       # every achievement of the running game

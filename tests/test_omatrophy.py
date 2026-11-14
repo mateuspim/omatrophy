@@ -1586,7 +1586,9 @@ class Qml(unittest.TestCase):
         # Cards are built from their text (FreshObject.qml, ADR 10) and stay
         # standalone so each reads on its own.
         siblings = {n[:-4] for n, _ in self.qml()}
-        for name in ('TrophyToast.qml', 'PlatinumCard.qml', 'DifficultyCard.qml', 'StylePicker.qml', 'TrackerView.qml'):
+        for name in ('TrophyToast.qml', 'PlatinumCard.qml', 'DifficultyCard.qml', 'MissableCard.qml', 'RecapCard.qml',
+                     'MilestoneCard.qml', 'StylePicker.qml',
+                     'TrackerView.qml'):
             text = dict(self.qml())[name]
             for other in siblings - {name[:-4]}:
                 self.assertNotRegex(text, rf'\b{other}\s*\{{', f'{name} uses {other}')
@@ -1756,6 +1758,292 @@ class LaunchReminder(unittest.TestCase):
         ev = omatrophy.sample_event('difficulty', self.Fake([ach('d')]), '7', [ach('d')])
         self.assertEqual((ev['type'], ev['game']), ('difficulty', 'G'))
         self.assertTrue(ev['settings'])
+
+
+def write_guide(plan, app='7'):
+    """A guide for game `app` in the test's own data folder (XDG_DATA_HOME)."""
+    folder = os.path.join(os.environ['XDG_DATA_HOME'], 'omatrophy', 'guides')
+    os.makedirs(folder, exist_ok=True)
+    with open(os.path.join(folder, f'g-{app}.md'), 'w') as f:
+        f.write('# G\n\n## Achievements\n')
+    with open(os.path.join(folder, f'g-{app}.plan.json'), 'w') as f:
+        json.dump(plan, f)
+
+
+class MissableReminder(unittest.TestCase):
+    # Step 1 is finished (A got); step 2 has B (a missable item), C and a
+    # hidden D named in its `missables`; step 3 has E.
+    ACHS = [ach('a', True, 5), ach('b'), ach('c'), ach('d', hidden=True), ach('e')]
+    PLAN = {'items': {'B': {'name': 'B', 'api': 'b', 'missable': True, 'missable_note': 'Before the bridge'},
+                      'C': {'name': 'C', 'api': 'c'},
+                      'D': {'name': 'D', 'api': 'd', 'missable_note': 'Talk to the keeper'},
+                      'E': {'name': 'E', 'api': 'e', 'missable': True}},
+            'walkthrough': [{'title': 'Prologue', 'achievements': ['A']},
+                            {'title': 'The Archive', 'achievements': ['B', 'C', 'D'], 'missables': ['D']},
+                            {'title': 'The Dome', 'achievements': ['E']}]}
+
+    def setUp(self):
+        d = tempfile.TemporaryDirectory()
+        self.addCleanup(d.cleanup)
+        patch = mock.patch.object(omatrophy, 'missable_reminded_path',
+                                  return_value=os.path.join(d.name, 'missable-reminded.json'))
+        patch.start()
+        self.addCleanup(patch.stop)
+        env = mock.patch.dict(os.environ, {'XDG_DATA_HOME': d.name})
+        env.start()
+        self.addCleanup(env.stop)
+
+    def store(self, achs=None):
+        return LaunchReminder.Fake(self.ACHS if achs is None else achs)
+
+    def test_the_event_names_the_step_and_its_open_missables(self):
+        write_guide(self.PLAN)
+        ev = omatrophy.missable_event(self.store(), '7', self.ACHS)
+        self.assertEqual(ev, {'type': 'missable', 'store': 'steam', 'app': '7', 'game': 'G', 'header': 'h.jpg',
+                              'step': 2, 'steps': 3, 'title': 'The Archive',
+                              'missables': [{'api': 'd', 'name': 'Hidden achievement', 'hidden': True,
+                                             'note': 'Talk to the keeper'},
+                                            {'api': 'b', 'name': 'B', 'hidden': False, 'note': 'Before the bridge'}]})
+        shown = omatrophy.missable_event(self.store(), '7', self.ACHS, reveal=True)['missables']
+        self.assertEqual((shown[0]['name'], shown[0]['hidden']), ('D', False))
+
+    def test_nothing_to_say_without_a_guide_or_an_open_missable(self):
+        self.assertIsNone(omatrophy.missable_event(self.store(), '7', self.ACHS))
+        write_guide(self.PLAN)
+        got = [ach('a', True, 5), ach('b', True, 6), ach('c'), ach('d', True, 7), ach('e')]
+        self.assertIsNone(omatrophy.missable_event(self.store(got), '7', got))
+
+    def test_once_per_step_and_again_only_for_a_missable_not_named(self):
+        write_guide(self.PLAN)
+        self.assertEqual(omatrophy.missable_reminder(self.store(), '7', {})['step'], 2)
+        self.assertIsNone(omatrophy.missable_reminder(self.store(), '7', {}))
+        # B got: the card would only be shorter, so it stays quiet.
+        fewer = [ach('a', True, 5), ach('b', True, 6), ach('c'), ach('d', hidden=True), ach('e')]
+        self.assertIsNone(omatrophy.missable_reminder(self.store(fewer), '7', {}))
+        # A guide made again marks C missable on this step: news, and the
+        # card lists every open one.
+        plan = json.loads(json.dumps(self.PLAN))
+        plan['items']['C']['missable'] = True
+        write_guide(plan)
+        self.assertEqual([r['api'] for r in omatrophy.missable_reminder(self.store(fewer), '7', {})['missables']],
+                         ['d', 'c'])
+        self.assertIsNone(omatrophy.missable_reminder(self.store(fewer), '7', {}))
+        # Step 2 done: step 3's E is a new step.
+        later = [ach('a', True, 5), ach('b', True, 6), ach('c', True, 7), ach('d', True, 8), ach('e')]
+        self.assertEqual(omatrophy.missable_reminder(self.store(later), '7', {})['title'], 'The Dome')
+        # Another game is its own.
+        write_guide(self.PLAN, '8')
+        self.assertIsNotNone(omatrophy.missable_reminder(self.store(), '8', {}))
+
+    def test_news_against_a_broken_record_is_news(self):
+        ev = {'step': 2, 'title': 'T', 'missables': [{'api': 'b'}]}
+        for record in (None, 'old', {'step': '2:T', 'shown': 'b'}):
+            self.assertEqual(omatrophy.missable_news(ev, record), {'step': '2:T', 'shown': ['b']})
+
+    def test_switched_off_stays_quiet_and_unrecorded(self):
+        write_guide(self.PLAN)
+        self.assertIsNone(omatrophy.missable_reminder(self.store(), '7', {'missable-reminder': False}))
+        self.assertIsNotNone(omatrophy.missable_reminder(self.store(), '7', {}))
+
+    def test_a_launch_tries_each_reminder_until_it_speaks(self):
+        # The difficulty reminder speaks at once, the missable one only
+        # once the guide appears two polls later; both come, each once.
+        write_guide(self.PLAN)
+        achs = self.ACHS + [dict(ach('n'), desc='Finish on Nightmare.')]
+        store = LaunchReminder.Fake(achs, runs=[None] + [{'game': '7', 'since': 1}] * 5)
+        calls = []
+        real = omatrophy.missable_reminder
+        def late(s, game, cfg):
+            calls.append(1)
+            return real(s, game, cfg) if len(calls) >= 3 else None
+        with mock.patch.object(omatrophy, 'missable_reminder', late), \
+                mock.patch.object(omatrophy, 'reminded_path',
+                                  return_value=os.path.join(os.environ['XDG_DATA_HOME'], 'reminded.json')):
+            events = LaunchReminder.run_launches(self, store, 5)
+        self.assertEqual([e['type'] for e in events], ['difficulty', 'missable'])
+        self.assertEqual(len(calls), 3)
+
+    def test_the_sample_works_for_a_game_without_a_guide(self):
+        ev = omatrophy.sample_event('missable', self.store(), '7', self.ACHS)
+        self.assertEqual((ev['type'], ev['step']), ('missable', 3))
+        self.assertEqual([r['api'] for r in ev['missables']], ['b', 'c'])
+
+
+class SessionRecap(unittest.TestCase):
+    class Fake(LaunchReminder.Fake):
+        def percents(self, game):
+            return {'a': 40.0, 'b': 3.4, 'c': 2.0}
+
+    # Before the session (t 50): A; in it (t 100 on): B and C, and D came
+    # from a backfill.
+    ACHS = [ach('a', True, 50), ach('b', True, 120), ach('c', True, 130), ach('d', True, 140, remote=True), ach('e')]
+
+    def setUp(self):
+        patch = mock.patch.object(omatrophy, 'icon', lambda store, game, url: url)
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def test_the_recap_counts_the_sessions_own_unlocks(self):
+        ev = omatrophy.recap_event(self.Fake(self.ACHS), '7', self.ACHS, 100, 100 + 95 * 60)
+        self.assertEqual(ev, {'type': 'recap', 'store': 'steam', 'app': '7', 'game': 'G', 'header': 'h.jpg',
+                              'minutes': 95, 'count': 2, 'unlocked': 4, 'total': 5,
+                              'rarest': {'name': 'C', 'percent': 2.0, 'tier': 'gold', 'icon': 'c.jpg'},
+                              'platinum': False})
+
+    def test_a_session_without_unlocks_has_no_recap(self):
+        self.assertIsNone(omatrophy.recap_event(self.Fake(self.ACHS), '7', self.ACHS, 200, 300))
+        self.assertIsNone(omatrophy.session_recap(self.Fake(self.ACHS), '7', 100, 300, {'session-recap': False}))
+
+    def test_rarity_unknown_leaves_no_rarest_and_a_failed_lookup_costs_only_that(self):
+        store = LaunchReminder.Fake(self.ACHS)
+        store.percents = mock.Mock(side_effect=OSError('offline'))
+        self.assertIsNone(omatrophy.recap_event(store, '7', self.ACHS, 100, 200)['rarest'])
+
+    def test_platinum_only_when_the_session_finished_the_game(self):
+        done = [ach('a', True, 50), ach('b', True, 120)]
+        self.assertTrue(omatrophy.recap_event(self.Fake(done), '7', done, 100, 200)['platinum'])
+        old = [ach('a', True, 50), ach('b', True, 60)]
+        self.assertIsNone(omatrophy.recap_event(self.Fake(old), '7', old, 100, 200))
+
+    def run_watch(self, store, polls, clock):
+        with mock.patch.object(omatrophy, 'launch_reminder_for', return_value=lambda *a: None):
+            return LaunchReminder.run_launches(self, store, polls, clock=clock)
+
+    def test_the_watcher_recaps_a_game_when_it_stops(self):
+        # Launched at poll 1 (t 105, so the session starts at 100), quit
+        # at poll 3.
+        store = self.Fake(self.ACHS, runs=[None, {'game': '7', 'since': 1}, {'game': '7', 'since': 1}, None, None])
+        polls = []
+        real = store.running
+        store.running = lambda: polls.append(1) or real()
+        events = self.run_watch(store, 4, clock=lambda: 100 + len(polls) * 5)
+        self.assertEqual([(e['type'], e['count']) for e in events], [('recap', 2)])
+
+    def test_a_game_running_at_start_counts_from_the_watchers_start(self):
+        store = self.Fake(self.ACHS, runs=[{'game': '7', 'since': 1}, None])
+        events = self.run_watch(store, 2, clock=lambda: 125)
+        self.assertEqual([(e['type'], e['count']) for e in events], [('recap', 1)])
+
+    def test_one_failed_read_neither_ends_the_session_nor_recaps_it(self):
+        store = self.Fake(self.ACHS, runs=[None, {'game': '7', 'since': 1}, {'game': '7', 'since': 1}])
+        calls = []
+        real = store.running
+        def running():
+            calls.append(1)
+            if len(calls) == 3:
+                raise OSError('bad file')
+            return real()
+        store.running = running
+        self.assertEqual(self.run_watch(store, 3, clock=lambda: 100), [])
+
+    def test_the_sample_works(self):
+        ev = omatrophy.sample_event('recap', self.Fake(self.ACHS), '7', self.ACHS)
+        self.assertEqual((ev['type'], ev['count'], ev['rarest']['tier']), ('recap', 4, 'gold'))
+
+
+class Milestones(unittest.TestCase):
+    def counter(self, api, value, top=80, **kw):
+        return dict(ach(api, **kw), progress={'value': value, 'max': top})
+
+    def setUp(self):
+        d = tempfile.TemporaryDirectory()
+        self.addCleanup(d.cleanup)
+        self.cfg = os.path.join(d.name, 'config.json')
+        for patch in (mock.patch.object(omatrophy, 'config_path', return_value=self.cfg),
+                      mock.patch.object(omatrophy, 'icon', lambda store, game, url: url)):
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def test_the_highest_milestone_crossed_upward(self):
+        self.assertEqual(omatrophy.crossed_milestone((30, 80), (40, 80)), 50)
+        self.assertEqual(omatrophy.crossed_milestone((30, 80), (75, 80)), 90)
+        self.assertIsNone(omatrophy.crossed_milestone((40, 80), (45, 80)))
+        self.assertIsNone(omatrophy.crossed_milestone((75, 80), (10, 80)))
+        # No earlier value: a baseline, not a crossing.
+        self.assertIsNone(omatrophy.crossed_milestone(None, (75, 80)))
+
+    def test_counters_are_the_locked_ones_with_a_goal(self):
+        achs = [self.counter('a', 3), self.counter('b', 3, unlocked=True), ach('c'), self.counter('d', 0, top=0)]
+        self.assertEqual(omatrophy.counters_of(achs), {'a': (3, 80)})
+
+    def test_an_event_per_crossing_with_hidden_ones_kept_secret(self):
+        achs = [self.counter('a', 60), self.counter('b', 41), self.counter('h', 79, hidden=True), self.counter('n', 10)]
+        before = {'a': (50, 80), 'b': (39, 80), 'h': (1, 80), 'n': (9, 80)}
+        events = omatrophy.milestone_events(LaunchReminder.Fake(achs), '7', achs, before)
+        self.assertEqual(events, [{'type': 'milestone', 'store': 'steam', 'app': '7', 'game': 'G', 'name': 'A',
+                                   'desc': 'Do a', 'icon': 'a.jpg', 'value': 60, 'max': 80, 'threshold': 75},
+                                  {'type': 'milestone', 'store': 'steam', 'app': '7', 'game': 'G', 'name': 'B',
+                                   'desc': 'Do b', 'icon': 'b.jpg', 'value': 41, 'max': 80, 'threshold': 50}])
+        omatrophy.write_json(self.cfg, {'reveal-hidden': True})
+        names = [e['name'] for e in omatrophy.milestone_events(LaunchReminder.Fake(achs), '7', achs, before)]
+        self.assertEqual(names, ['A', 'B', 'H'])
+        omatrophy.write_json(self.cfg, {'milestones': False})
+        self.assertEqual(omatrophy.milestone_events(LaunchReminder.Fake(achs), '7', achs, before), [])
+
+    def test_check_game_compares_with_the_last_read_and_keeps_a_baseline_through_a_bad_one(self):
+        store = LaunchReminder.Fake([self.counter('a', 30)])
+        seen, counters = {('steam', '7'): set()}, {('steam', '7'): {'a': (30, 80)}}
+        out = io.StringIO()
+        with redirect_stdout(out):
+            store.achs = [self.counter('a', 45)]
+            omatrophy.check_game(store, '7', seen, counters)
+            store.achs = []  # mid-write
+            omatrophy.check_game(store, '7', seen, counters)
+            store.achs = [self.counter('a', 61)]
+            omatrophy.check_game(store, '7', seen, counters)
+            # Already past 75: the same count read again sends nothing.
+            omatrophy.check_game(store, '7', seen, counters)
+        self.assertEqual([json.loads(line)['threshold'] for line in out.getvalue().splitlines()], [50, 75])
+
+    def test_a_counter_the_baseline_lacked_counts_from_zero(self):
+        # Its stat was never set, so the last read had no progress for it.
+        store = LaunchReminder.Fake([self.counter('a', 50)])
+        counters = {('steam', '7'): {}}
+        with redirect_stdout(io.StringIO()) as out:
+            omatrophy.check_game(store, '7', {('steam', '7'): set()}, counters)
+        self.assertEqual([json.loads(line)['threshold'] for line in out.getvalue().splitlines()], [50])
+
+    def test_a_game_with_no_baseline_sends_none(self):
+        store = LaunchReminder.Fake([self.counter('a', 70)])
+        counters = {}
+        with redirect_stdout(io.StringIO()) as out:
+            omatrophy.check_game(store, '7', {}, counters)
+        self.assertEqual(out.getvalue(), '')
+        self.assertEqual(counters, {('steam', '7'): {'a': (70, 80)}})
+
+    def test_the_sample_uses_the_games_own_counter(self):
+        achs = [ach('a', True, 5), self.counter('b', 2, top=40)]
+        ev = omatrophy.sample_event('milestone', LaunchReminder.Fake(achs), '7', achs)
+        self.assertEqual((ev['name'], ev['value'], ev['max'], ev['threshold']), ('B', 30, 40, 75))
+
+
+class CardTable(unittest.TestCase):
+    """cards.json is the one table of cards: Service.qml shows these and the
+    test inbox lets these through."""
+
+    root = os.path.join(os.path.dirname(__file__), '..')
+
+    def test_every_card_has_its_file_and_every_test_kind_a_card(self):
+        with open(os.path.join(self.root, 'cards.json')) as f:
+            cards = json.load(f)
+        for kind, card in cards.items():
+            self.assertTrue(os.path.exists(os.path.join(self.root, card['file'])), kind)
+            self.assertIsInstance(card.get('rank', 0), int, kind)
+        self.assertEqual(omatrophy.INBOX_TYPES, tuple(cards))
+        for kind in omatrophy.TEST_KINDS:
+            ev = omatrophy.sample_event(kind, LaunchReminder.Fake(LaunchReminder.ACHS), '7', LaunchReminder.ACHS)
+            self.assertIn(ev['type'], cards, kind)
+
+    def test_the_reminders_are_kept_and_ranked_in_launch_order(self):
+        with open(os.path.join(self.root, 'cards.json')) as f:
+            cards = json.load(f)
+        ranks = [cards[k]['rank'] for k in omatrophy.LAUNCH_KINDS]
+        self.assertEqual(ranks, sorted(ranks, reverse=True))
+        self.assertTrue(all(cards[k].get('keep') for k in omatrophy.LAUNCH_KINDS))
+        # The recap ends a session once: never dropped, but no rank, so it
+        # waits behind the reminders.
+        self.assertTrue(cards['recap'].get('keep'))
+        self.assertEqual(cards['recap'].get('rank', 0), 0)
 
 
 class TestCommand(unittest.TestCase):
