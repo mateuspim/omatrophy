@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased
+
+- **Security review before 1.0.0**
+  ([docs/security-review-1.0.md](docs/security-review-1.0.md)):
+  - The guide maker fetches pages the agent cites only from the public
+    internet: a page that steers the agent can no longer make OmaTrophy
+    reach your router, your LAN or a local service (checked on the
+    address connected to, so DNS tricks and redirects are covered).
+  - Images in guide prose show as plain links instead of loading (Qt
+    fetched them, plain http too); the tracker's old filter missed some
+    forms.
+  - Panel and tracker labels draw text as plain text: an achievement
+    description or guide tip that looks like HTML no longer renders, and
+    an image in it is no longer fetched.
+  - Image URLs off the stores' hosts never reach the shell.
+  - `guide import` copies only plain files (no links, at most 16 MB), and
+    the "I'm here" pins and the Guide key state are written like every
+    other file (a temporary file renamed over).
+  - The guide prompts tell the agent page text is data, never
+    instructions.
+  - CI: read-only token, actions pinned to commits.
+  - The marketplace's static security baseline passes on the repo.
+  The views and the panel's reads apply at once; the running watcher
+  (toast art) picks its part up when the shell next restarts.
+
 ## 0.14.0 - 2026-11-14
 
 - **Save image** of a platinum: from the tracker (beside Completionist)

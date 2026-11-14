@@ -8,6 +8,8 @@
 - [Settings file](specs/settings.md).
 - [Troubleshooting](runbooks/troubleshooting.md).
 - [Security and privileges](../SECURITY.md).
+- [Security review before 1.0.0](security-review-1.0.md): scope, findings,
+  fixes and residual risks.
 
 ## Develop OmaTrophy
 
