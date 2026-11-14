@@ -49,13 +49,15 @@ The game's last achievement just unlocked. Always follows its `unlock` line.
 
 ## `difficulty`
 
-A game just started (no game of that store was running a moment before)
-and has locked achievements that need a difficulty setting. Once per game:
-the watcher keeps the games it reminded of in
-`~/.local/state/omatrophy/reminded.json`. Not sent with
-`difficulty-reminder` off, for a game already running when the watcher
-started, or for a hidden achievement's setting unless `reveal-hidden` is
-on.
+A game other than the one running at the last check (every 5 s) started,
+and has locked achievements that need a difficulty setting. Tried at each
+check for two minutes while the game runs, as a first launch's achievement
+files appear only once the game is up. Once per game: the watcher keeps
+the games it reminded of in `~/.local/state/omatrophy/reminded.json`. Not
+sent with `difficulty-reminder` off or for a game already running when the
+watcher started; a hidden achievement's setting is left out unless
+`reveal-hidden` is on. The shell shows it before any queued toast, never
+drops it, and plays no chime.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
@@ -64,5 +66,5 @@ on.
 | `settings` | string[] | As `games` gives `difficulty`: each setting once, exact ones first, floors marked `+`. |
 | `count` | number | Locked achievements that need one. |
 | `header` | string | Banner URL, or `""`. |
-| `stacks` | bool or null | The guide's word: `true` when a harder run also counts for the easier settings, `false` when a setting needs its own run, `null` with no guide or no word. |
+| `stacks` | bool or null | The guide's word, as `guide` gives it: `true` when a harder run also counts for the easier settings, `false` when a setting needs its own run, `null` with no guide or no word. |
 | `stacks_verified` | bool | A quote backs `stacks`. |

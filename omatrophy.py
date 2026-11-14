@@ -166,26 +166,50 @@ def new_launch(previous, run):
 
 
 LAUNCH_POLL = 5
+# How long after a launch the reminder keeps being tried: on a game's
+# first launch ever Steam writes its achievement files only once the game
+# is up, and the first launch is the one the reminder is for.
+LAUNCH_RETRY = 120
 
 
-def watch_launches(found, sleep=time.sleep):
+def running_game_id(store):
+    """The store's running game id, or None; a store that fails to say
+    counts as running nothing rather than ending the launch watch."""
+    try:
+        return (store.running() or {}).get('game')
+    except Exception as e:
+        print(f'omatrophy: {store.id}: reading the running game failed: {e}', file=sys.stderr, flush=True)
+        return None
+
+
+def watch_launches(found, sleep=time.sleep, clock=time.time):
     """Shows the difficulty reminder when a game starts. A game already
     running when the watcher starts (a shell restart mid-game) is no
-    launch. In a thread of its own: reading achievements and names can
-    take a while and must never hold up an unlock."""
-    playing = {s.id: (s.running() or {}).get('game') for s in found}
+    launch. A launch is tried every poll while the game runs, for
+    LAUNCH_RETRY seconds, until it has something to say. In a thread of its
+    own: reading achievements and names can take a while and must never
+    hold up an unlock."""
+    playing = {s.id: running_game_id(s) for s in found}
+    pending = {}  # store id: (game, give up at)
     while True:
         sleep(LAUNCH_POLL)
         for s in found:
+            game = running_game_id(s)
+            if new_launch(playing[s.id], {'game': game} if game else None):
+                pending[s.id] = (game, clock() + LAUNCH_RETRY)
+            playing[s.id] = game
+            wanted, until = pending.get(s.id, (None, 0))
+            if not wanted or wanted != game or clock() > until:
+                pending.pop(s.id, None)
+                continue
             try:
-                run = s.running()
-                game = new_launch(playing[s.id], run)
-                playing[s.id] = run['game'] if run else None
-                ev = game and launch_reminder(s, game, read_json(config_path(), {}))
+                ev = launch_reminder(s, game, read_json(config_path(), {}))
             except Exception as e:
                 print(f'omatrophy: launch reminder failed: {e}', file=sys.stderr, flush=True)
+                pending.pop(s.id, None)
                 continue
             if ev:
+                pending.pop(s.id, None)
                 emit(ev)
 
 

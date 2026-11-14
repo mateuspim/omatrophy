@@ -147,9 +147,10 @@ a run of its own.
 
 When a game with such achievements left starts, a card names the settings
 they need ("Start on Nightmare") and what the guide says about stacking,
-once per game, so the first save starts on the right one. Turn it off in
-Settings > Toasts > Difficulty (`omatrophy.py set difficulty-reminder off`);
-`omatrophy.py test difficulty` shows one.
+once per game, so the first save starts on the right one. It comes
+without a chime. Turn it off in Settings > Toasts > Difficulty, where
+**Try** shows one (`omatrophy.py set difficulty-reminder off`,
+`omatrophy.py test difficulty`).
 
 Its keys:
 

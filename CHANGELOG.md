@@ -20,8 +20,9 @@
 - A **difficulty reminder** when a game with difficulty achievements
   left starts: a card names the settings they need ("Start on
   Nightmare"), once per game, so the first save starts on the right one.
-  Off in Settings > Toasts > Difficulty (`set difficulty-reminder off`);
-  `test difficulty` shows one. A new `difficulty` event line
+  Silent, and shown before any queued toast. Off in Settings > Toasts >
+  Difficulty, where Try shows one (`set difficulty-reminder off`, `test
+  difficulty`). A typo in `test <kind>` is now refused. A new `difficulty` event line
   (`DifficultyCard.qml`). Needs `omarchy restart shell`.
 - Guides say whether difficulty achievements **stack**: classify marks
   each one `stacks` (a harder run also unlocks it, or it needs its own

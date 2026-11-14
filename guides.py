@@ -7,6 +7,8 @@ writes into the source folder, and never changes a guide it already holds.
 """
 import json, os, re, shutil
 
+import difficulty
+
 PHASES = ('missable', 'story', 'quick', 'challenge', 'grind', 'collect', 'online')
 NEXT_COUNT = 3
 # A hand tick is "[x]" with no "_(unlocked ...)_" note: OmaTrophy writes that
@@ -175,7 +177,18 @@ def guide_answer(store, app, achievements, folder=None):
             'agent': plan.get('agent') if isinstance(plan.get('agent'), dict) else {},
             'cost_usd': plan_cost(plan), 'outdated': outdated(plan),
             'walkthrough': steps, 'step': at, 'step_pinned': pinned >= 0, 'tree': tree(order, items, steps),
-            'frontier': frontier(order, items, done, steps, at), **difficulty_stacking(items)}
+            'frontier': frontier(order, items, done, steps, at),
+            **difficulty_stacking(stacking_items(items, achievements, done))}
+
+
+def stacking_items(items, achievements, done):
+    """The items whose `stacks` counts: achievements still open that need
+    a difficulty setting, and not hidden. A stray answer on any other item
+    would decide the game's line, and a hidden one's would hint at what it
+    asks (the tracker keeps it secret)."""
+    return {a['api']: items[a['api']] for a in achievements
+            if a['api'] in items and a['api'] not in done and not a.get('hidden')
+            and difficulty.setting(a.get('name'), a.get('desc'))}
 
 
 def difficulty_stacking(items):

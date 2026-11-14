@@ -42,8 +42,12 @@ Scope {
     if (tiers.indexOf(ev.tier) < 0) ev.tier = "bronze"
     // A burst (a backfilled library, a flood in the inbox) shows the first
     // few cards, not a queue that runs for an hour.
-    if (queue.length >= 20) return
-    queue = queue.concat([ev])
+    // A difficulty reminder is never dropped and goes first: it is shown
+    // once per game (the watcher records it as sent) and is about the save
+    // being made right now.
+    if (ev.type === "difficulty") queue = [ev].concat(queue)
+    else if (queue.length >= 20) return
+    else queue = queue.concat([ev])
     if (!current) next()
   }
 
@@ -51,8 +55,9 @@ Scope {
     if (!queue.length) { current = null; return }
     current = queue[0]
     queue = queue.slice(1)
-    // The platinum card asks for its chime when the trophy lands.
-    if (current.type !== "platinum") chime.play(current.tier || "bronze")
+    // The platinum card asks for its chime when the trophy lands; a
+    // difficulty reminder is no unlock, so it comes silent.
+    if (current.type === "unlock") chime.play(current.tier || "bronze")
   }
 
   // The focused monitor when the card starts; it stays there while shown.

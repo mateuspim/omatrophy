@@ -1687,6 +1687,69 @@ class LaunchReminder(unittest.TestCase):
         lines = [json.loads(line) for line in out.getvalue().splitlines()]
         self.assertEqual([(e['type'], e['app']) for e in lines], [('difficulty', '7')])
 
+    def run_launches(self, store, polls, clock=None):
+        class Stop(Exception):
+            pass
+        ticks = []
+        def sleep(_):
+            if len(ticks) == polls:
+                raise Stop
+            ticks.append(1)
+        out = io.StringIO()
+        with redirect_stdout(out), redirect_stderr(io.StringIO()), self.assertRaises(Stop):
+            omatrophy.watch_launches([store], sleep=sleep, clock=clock or (lambda: len(ticks) * 5))
+        return [json.loads(line) for line in out.getvalue().splitlines()]
+
+    def test_a_first_launch_is_reminded_once_its_achievements_appear(self):
+        # Steam writes a new game's files only once it is up.
+        store = self.Fake([], runs=[None] + [{'game': '7', 'since': 1}] * 4)
+        real = store.achievements
+        store.achievements = lambda game: real(game) if len(store.runs) <= 2 else []
+        store.achs = self.ACHS
+        events = self.run_launches(store, 4)
+        self.assertEqual([e['app'] for e in events], ['7'])
+
+    def test_the_retry_gives_up_after_a_while(self):
+        store = self.Fake([], runs=[None] + [{'game': '7', 'since': 1}] * 4)
+        # Launched at 100, given up after 220; its files land at 300.
+        store.achievements = lambda game: [] if len(store.runs) > 1 else self.ACHS
+        polls = []
+        store_running = store.running
+        def running():
+            polls.append(1)
+            return store_running()
+        store.running = running
+        self.assertEqual(self.run_launches(store, 4, clock=lambda: (len(polls) - 1) * 100), [])
+
+    def test_a_store_that_fails_to_say_what_runs_does_not_end_the_watch(self):
+        store = self.Fake(self.ACHS, runs=[{'game': '7', 'since': 1}])
+        calls = []
+        real = store.running
+        def running():
+            calls.append(1)
+            if len(calls) <= 2:
+                raise OSError('bad file')
+            return real()
+        store.running = running
+        self.assertEqual([e['app'] for e in self.run_launches(store, 3)], ['7'])
+
+    def test_the_reminder_carries_the_guides_word_on_stacking(self):
+        plan = {'items': {'A': {'name': 'A', 'api': 'a', 'stacks': True},
+                          'B': {'name': 'B', 'api': 'b', 'stacks': True, 'unverified': ['stacks']}}}
+        folder = os.path.join(os.environ['XDG_DATA_HOME'], 'omatrophy', 'guides')
+        os.makedirs(folder)
+        with open(os.path.join(folder, 'g-7.md'), 'w') as f:
+            f.write('# G\n\n## Achievements\n')
+        with open(os.path.join(folder, 'g-7.plan.json'), 'w') as f:
+            json.dump(plan, f)
+        ev = omatrophy.difficulty_event(self.Fake(self.ACHS), '7', self.ACHS)
+        self.assertEqual((ev['stacks'], ev['stacks_verified']), (True, True))
+
+    def test_the_sample_reminder_works_for_a_game_without_settings(self):
+        ev = omatrophy.sample_event('difficulty', self.Fake([ach('d')]), '7', [ach('d')])
+        self.assertEqual((ev['type'], ev['game']), ('difficulty', 'G'))
+        self.assertTrue(ev['settings'])
+
 
 class TestCommand(unittest.TestCase):
     def test_an_unknown_kind_is_refused_before_anything_is_queued(self):

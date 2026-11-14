@@ -4205,12 +4205,15 @@ Column {
       SettingRow {
         label: "DIFFICULTY"
         Chips {
+          // Try shows one now (TRY IT's tiles are the metals only) and
+          // leaves the setting as it is.
           options: [
-            { value: "on", label: "Remind at launch" },
-            { value: "off", label: "Off" }
+            { value: "on", label: "At launch" },
+            { value: "off", label: "Off" },
+            { value: "try", label: "Try" }
           ]
           value: root.difficultyReminder ? "on" : "off"
-          onPicked: value => root.set("difficulty-reminder", value)
+          onPicked: value => value === "try" ? root.preview("difficulty") : root.set("difficulty-reminder", value)
         }
       }
 
