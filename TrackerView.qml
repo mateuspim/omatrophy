@@ -210,6 +210,9 @@ Item {
   readonly property color foreground: Commons.Color.menu.text
   readonly property color background: Commons.Color.menu.background
   readonly property var metalColors: ({ bronze: "#e9a46b", silver: "#dfe6ee", gold: "#f3cf4a", platinum: "#e2eaff" })
+  // A light theme (flexoki-light, white): the metals are pale and their
+  // text all but vanished on the card, silver above all.
+  readonly property bool lightTheme: background.hslLightness > 0.5
   readonly property string helperPath: decodeURIComponent(String(Qt.resolvedUrl("omatrophy.py")).replace(/^file:\/\//, ""))
   readonly property real rarePercent: 10
 
@@ -970,6 +973,13 @@ Item {
     // A newer maker writes better guides (guides.MAKER): say so, as the
     // owner judged an older MGSV guide thin without knowing.
     return made + (guide.outdated ? " · older maker" : "")
+  }
+
+  // A metal as text: as it is on a dark card, darkened on a light one.
+  function metalText(tier, fallback) {
+    var metal = metalColors[tier]
+    if (!metal) return fallback
+    return lightTheme ? Qt.darker(metal, 1.9) : metal
   }
 
   function forceKeys() {
@@ -1877,7 +1887,7 @@ Item {
       y: tile.pad
       visible: tile.ach.percent !== null && tile.ach.percent !== undefined
       text: visible ? tile.ach.percent.toFixed(1) + "%" : ""
-      color: root.metalColors[tile.ach.tier] || root.foreground
+      color: root.metalText(tile.ach.tier, root.foreground)
       opacity: 0.75
       font.family: Commons.Style.font.family
       font.pixelSize: Commons.Style.font.caption
@@ -2591,7 +2601,7 @@ Item {
           textFormat: Text.PlainText
           anchors.verticalCenter: parent.verticalCenter
           text: grow.ach.percent !== null && grow.ach.percent !== undefined ? grow.ach.percent.toFixed(1) + "%" : "–"
-          color: root.metalColors[grow.ach.tier] || root.foreground
+          color: root.metalText(grow.ach.tier, root.foreground)
           opacity: grow.ach.unlocked ? 1 : 0.7
           font.family: Commons.Style.font.family
           font.pixelSize: Commons.Style.font.caption
@@ -2848,7 +2858,7 @@ Item {
               textFormat: Text.PlainText
               anchors.verticalCenter: parent.verticalCenter
               text: root.game ? "Platinum · " + root.day(root.game.platinum) : ""
-              color: root.metalColors.platinum
+              color: root.metalText("platinum", root.foreground)
               font.family: Commons.Style.font.family
               font.pixelSize: Commons.Style.font.bodySmall
               font.bold: true
@@ -2922,7 +2932,7 @@ Item {
                 textFormat: Text.PlainText
                 anchors.verticalCenter: parent.verticalCenter
                 text: root.tierCount(parent.modelData)
-                color: root.metalColors[parent.modelData]
+                color: root.metalText(parent.modelData, root.foreground)
                 font.family: Commons.Style.font.family
                 font.pixelSize: Commons.Style.font.bodySmall
                 font.bold: true
@@ -3280,7 +3290,7 @@ Item {
               anchors.verticalCenter: parent.verticalCenter
               text: row.ach.percent !== null ? row.ach.percent.toFixed(1) + "%" : "–"
               // In the metal it earns, dimmed while still locked.
-              color: row.ach.percent !== null ? root.metalColors[row.ach.tier] || root.foreground : root.foreground
+              color: row.ach.percent !== null ? root.metalText(row.ach.tier, root.foreground) : root.foreground
               opacity: row.ach.unlocked ? 1 : 0.7
               font.family: Commons.Style.font.family
               font.pixelSize: Commons.Style.font.bodySmall

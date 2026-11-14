@@ -26,6 +26,7 @@
 #   dev/render.sh --live tracker out.png the views read your real stores
 #   dev/render.sh --font 16 now out.png  at another theme font size (the base is 12)
 #   dev/render.sh --tall guide-tree out.png  a guide view on a tall card, to see the whole guide column
+#   dev/render.sh --theme flexoki-light guide-tree out.png  under another installed theme (approximate)
 #
 # Sample data is fake (dev/samples/) so captures are safe for the README;
 # --live output shows your own games and stays out of git. The software
@@ -36,20 +37,33 @@ repo=$(cd "$(dirname "$0")/.." && pwd)
 live=false
 font=""
 tall=false
+themeName=""
 while [[ ${1:-} == --* ]]; do
   case $1 in
     --live) live=true; shift ;;
     --tall) tall=true; shift ;;
     --font) font=${2:-}; shift 2 || true ;;
+    --theme) themeName=${2:-}; shift 2 || true ;;
     *) break ;;
   esac
 done
 [[ -z $font || $font =~ ^[0-9]+$ && $font -ge 6 && $font -le 40 ]] ||
   { echo "--font takes a theme base size in pixels, 6 to 40, not '$font'" >&2; exit 2; }
-[[ $# -eq 2 ]] || { sed -n '5,28p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+[[ $# -eq 2 ]] || { sed -n '5,29p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 target=$1
 out=$(realpath -m "$2")
 theme=$HOME/.local/state/omarchy/current/theme
+# --theme: another installed Omarchy theme, for a light-theme look without
+# switching the desktop's. Its shell.toml is generated only when a theme
+# is applied, so surfaces fall back to the theme's palette: close to the
+# real thing, not exact.
+if [[ -n $themeName ]]; then
+  [[ $live == false ]] || { echo "--theme renders sample data only; drop --live" >&2; exit 2; }
+  [[ $themeName =~ ^[a-z0-9-]+$ ]] || { echo "--theme takes a theme name like flexoki-light, not '$themeName'" >&2; exit 2; }
+  theme=$HOME/.config/omarchy/themes/$themeName
+  [[ -d $theme ]] || theme=/usr/share/omarchy/themes/$themeName
+  [[ -f $theme/colors.toml ]] || { echo "no theme named '$themeName' (omarchy theme list)" >&2; exit 2; }
+fi
 # The paths are pasted into QML strings below; refuse any that could end
 # the string and add code to the throwaway shell.
 for path in "$repo" "$out" "$theme"; do
@@ -87,6 +101,15 @@ if [[ -n $font ]]; then
   }"
   # The bar popup is Style.space(420) wide, so it grows with the font.
   panel=$(( (420 * font + 6) / 12 ))
+fi
+# Commons.Color finds the theme under $HOME and loads it after the
+# FileViews below, so --theme runs the throwaway shell with a HOME of its
+# own whose current theme is the one asked for.
+qsHome=$HOME
+if [[ -n $themeName ]]; then
+  qsHome=$dir/home
+  mkdir -p "$qsHome/.local/state/omarchy/current"
+  ln -s "$theme" "$qsHome/.local/state/omarchy/current/theme"
 fi
 ln -s /usr/share/omarchy/shell/Commons "$dir/Commons"
 ln -s /usr/share/omarchy/shell/Ui "$dir/Ui"
@@ -241,6 +264,6 @@ ShellRoot {
   }
 }
 QML
-QT_QPA_PLATFORM=offscreen timeout 30 quickshell -p "$dir" >"$dir/log" 2>&1 || true
+HOME=$qsHome QT_QPA_PLATFORM=offscreen timeout 30 quickshell -p "$dir" >"$dir/log" 2>&1 || true
 grep -iE "error|warn" "$dir/log" | grep -v qmlscanner | sort -u | head -20 || true
 [[ -f $out ]] && echo "$out" || { echo "no image; log:" >&2; tail -20 "$dir/log" >&2; exit 1; }
