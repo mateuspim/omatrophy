@@ -183,7 +183,8 @@ case $target in
       }" ;;
   bronze|silver|gold|platinum|difficulty|missable|recap|milestone)
     # The platinum card takes about six seconds to open fully.
-    w=1000 h=$([[ $target == platinum || $target == missable || $target == recap ]] && echo 400 || echo 260) at=$([[ $target == platinum ]] && echo 6500 || echo 3500)
+    # A missable card with four rows of two-line notes runs past 400.
+    w=1000 h=$([[ $target == missable ]] && echo 560 || { [[ $target == platinum || $target == recap ]] && echo 400 || echo 260; }) at=$([[ $target == platinum ]] && echo 6500 || echo 3500)
     card=TrophyToast; [[ $target == platinum ]] && card=PlatinumCard; [[ $target == difficulty ]] && card=DifficultyCard; [[ $target == missable ]] && card=MissableCard; [[ $target == recap ]] && card=RecapCard; [[ $target == milestone ]] && card=MilestoneCard
     view="Loader {
         anchors.horizontalCenter: parent.horizontalCenter
