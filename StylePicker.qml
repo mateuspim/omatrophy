@@ -35,7 +35,12 @@ Column {
     { id: "painted", name: "Painted" }
   ]
   readonly property var metals: ["bronze", "silver", "gold", "platinum"]
-  readonly property var metalColors: ({ bronze: "#e9a46b", silver: "#dfe6ee", gold: "#f3cf4a", platinum: "#e2eaff" })
+  // A light theme (flexoki-light, white): the metals are pale, and as
+  // text, bars and edges they all but vanished on the panel, silver and
+  // platinum above all, so a light panel takes their darker inks.
+  readonly property bool lightTheme: Commons.Color.popups.background.hslLightness > 0.5
+  readonly property var metalColors: lightTheme ? ({ bronze: "#9a5a26", silver: "#5f6b78", gold: "#8a6d00", platinum: "#4a5f9c" })
+                                                : ({ bronze: "#e9a46b", silver: "#dfe6ee", gold: "#f3cf4a", platinum: "#e2eaff" })
 
   property string tab: "now"
   property string iconSet: "omarchy"
