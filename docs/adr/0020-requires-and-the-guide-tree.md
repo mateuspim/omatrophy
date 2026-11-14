@@ -89,6 +89,8 @@ Enter does what a click does; the list keeps Page Up/Down, Home and
 End, and Left/Right stop sorting there. The ring moves by where parts
 sit on screen, not by a fixed order: the same rule walks a track
 across or down, Do now tiles side by side or stacked, and chains of
-any shape, and a new part only has to hold a `TreeFocus`. On a narrow
+any shape, and a new part only has to hold a `TreeFocus`. Escape
+first closes a picked trophy's details, then the overlay: a stray
+Escape should not throw the player out of the guide. On a narrow
 column the open step shows under its own stop, and chain rows size to
 their labels, with a chain wider than its card scrolling sideways.
