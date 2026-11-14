@@ -13,6 +13,11 @@
   stands now; only after a session that unlocked something, silent. Off
   in Settings > Toasts > Recap, where Try shows one (`set session-recap
   off`, `test recap`).
+- **Milestones**: a small toast when a locked counter achievement
+  ("52 / 80") passes 50, 75 or 90% of its goal (Steam), silent. Off in
+  Settings > Toasts > Milestones, where Try shows one (`set milestones
+  off`, `test milestone`). Whether Steam writes a counter to disk as it
+  changes is unverified, so one may come late.
 - The shell's cards come from one table, `cards.json` (each event type's
   QML file, chime, queue rank and whether a full queue may drop it), so a
   new card needs no `Service.qml` edit. This change itself needs

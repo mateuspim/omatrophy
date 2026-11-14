@@ -4,7 +4,7 @@
 Usage:
   omatrophy.py watch                  print one JSON event per new unlock (the shell service runs this)
   omatrophy.py test [kind]            queue a fake event for a running watcher: bronze, silver, gold, platinum, difficulty,
-                                      missable, recap
+                                      missable, recap, milestone
   omatrophy.py status                 progress of every game with achievements, as JSON
   omatrophy.py cabinet                trophy totals and the games nearest platinum, as JSON
   omatrophy.py now                    what is playing, recent games, platinums and totals, as JSON (the bar panel)
@@ -390,8 +390,70 @@ def unlocked_set(store, game):
     return achs, {a['api'] for a in achs if a['unlocked']}
 
 
-def check_game(store, game, seen):
-    """Emit what is newly unlocked in one game, and the platinum when it completes it."""
+# A locked counter achievement ("52 / 80") passing one of these shares of
+# its goal gets a small toast: how far a grind has come, while it's still
+# a grind.
+MILESTONES = (50, 75, 90)
+
+
+def counters_of(achs):
+    """{api: (value, max)} of every locked counter achievement."""
+    out = {}
+    for a in achs:
+        p = a.get('progress')
+        if a['unlocked'] or not isinstance(p, dict):
+            continue
+        value, top = p.get('value'), p.get('max')
+        if isinstance(value, (int, float)) and isinstance(top, (int, float)) and top > 0:
+            out[a['api']] = (value, top)
+    return out
+
+
+def reached(count, threshold):
+    """True when (value, max) is at or past `threshold` percent; in whole
+    numbers, so 40 / 80 is exactly 50%."""
+    return count is not None and 100 * count[0] >= threshold * count[1]
+
+
+def crossed_milestone(before, now):
+    """The highest milestone `now` reached that `before` hadn't, or None:
+    upward only, so a counter reset by the game never fires."""
+    new = [t for t in MILESTONES if reached(now, t) and not reached(before, t)]
+    return max(new) if new and before is not None else None
+
+
+def milestone_events(store, game, achs, before):
+    """Toasts for the counters that crossed a milestone since `before`
+    ({api: (value, max)} from the last read; None with no baseline, so a
+    game just appeared sends none). A hidden achievement is skipped, as
+    the tracker keeps it secret, unless reveal-hidden."""
+    if before is None:
+        return []
+    now = counters_of(achs)
+    crossed = {api: crossed_milestone(before.get(api), count) for api, count in now.items()}
+    crossed = {api: t for api, t in crossed.items() if t}
+    if not crossed:
+        return []
+    cfg = read_json(config_path(), {})
+    cfg = cfg if isinstance(cfg, dict) else {}
+    if cfg.get('milestones') is False:
+        return []
+    reveal = cfg.get('reveal-hidden') is True
+    out = []
+    for a in achs:
+        if a['api'] not in crossed or (a.get('hidden') and not reveal):
+            continue
+        value, top = now[a['api']]
+        out.append({'type': 'milestone', 'store': store.id, 'app': game, 'game': store.game_name(game),
+                    'name': a['name'], 'desc': a['desc'], 'icon': icon(store, game, a['icon']),
+                    'value': value, 'max': top, 'threshold': crossed[a['api']]})
+    return out
+
+
+def check_game(store, game, seen, counters=None):
+    """Emit what is newly unlocked in one game, and the platinum when it
+    completes it; with `counters` (the last read's counter values per
+    game), the counters that crossed a milestone too."""
     key = (store.id, game)
     # A game with no baseline only just appeared (first played, or cached
     # by Load from Steam): all its unlocks look new.
@@ -410,6 +472,12 @@ def check_game(store, game, seen):
         emit(unlock_event(store, game, a, achs))
     if fresh and achs and len(now) == len(achs):
         emit(platinum_event(store, game, achs))
+    # A read that found nothing (a file mid-write) keeps the old values,
+    # or the next good read would have no baseline to compare with.
+    if counters is not None and achs:
+        for ev in milestone_events(store, game, achs, counters.get(key)):
+            emit(ev)
+        counters[key] = counters_of(achs)
 
 
 def drain_inbox(offset):
@@ -648,7 +716,13 @@ def steam_load(everything=False):
 def watch(interval=1.0):
     found = found_stores()
     tokens = {s.id: s.games() for s in found}
-    seen = {(s.id, g): unlocked_set(s, g)[1] for s in found for g in tokens[s.id]}
+    # The first read is the baseline for unlocks and counters alike; it
+    # lives in memory, so a restart never repeats a milestone.
+    seen, counters = {}, {}
+    for s in found:
+        for g in tokens[s.id]:
+            achs, seen[(s.id, g)] = unlocked_set(s, g)
+            counters[(s.id, g)] = counters_of(achs)
     inbox = os.path.getsize(INBOX) if os.path.exists(INBOX) else 0
     emit({'type': 'ready', 'stores': [s.id for s in found], 'games': len(seen)})
     # In the background, after `ready`: name lookups go to the network and
@@ -663,7 +737,7 @@ def watch(interval=1.0):
             cur = s.games()
             for game, token in cur.items():
                 if tokens[s.id].get(game) != token:
-                    check_game(s, game, seen)
+                    check_game(s, game, seen, counters)
             tokens[s.id] = cur
 
 
@@ -694,6 +768,8 @@ def sample_event(kind, store, game, achs):
         return missable_event(store, game, achs) or sample_missable(store, game, achs)
     if kind == 'recap':
         return sample_recap(store, game, achs)
+    if kind == 'milestone':
+        return sample_milestone(store, game, achs)
     ach = next((a for a in achs if a['unlocked']), achs[0])
     ev = unlock_event(store, game, ach, achs)
     if kind in ('rare', 'gold'):
@@ -726,7 +802,19 @@ def sample_recap(store, game, achs):
             'platinum': False}
 
 
-TEST_KINDS = ('unlock', 'bronze', 'silver', 'gold', 'rare', 'platinum', 'difficulty', 'missable', 'recap')
+def sample_milestone(store, game, achs):
+    """A milestone toast from the game's own counter achievement when it
+    has one (made-up numbers otherwise), at 75%."""
+    a = next((a for a in achs if a.get('progress') and not a['unlocked']), None) or \
+        next((a for a in achs if not a['unlocked']), achs[0])
+    top = (a.get('progress') or {}).get('max') or 80
+    return {'type': 'milestone', 'store': store.id, 'app': game, 'game': store.game_name(game),
+            'name': a['name'], 'desc': a['desc'], 'icon': icon(store, game, a['icon']),
+            'value': -(-top * 3 // 4), 'max': top, 'threshold': 75}
+
+
+TEST_KINDS = ('unlock', 'bronze', 'silver', 'gold', 'rare', 'platinum', 'difficulty', 'missable', 'recap',
+              'milestone')
 
 
 def test(kind):
@@ -1504,6 +1592,8 @@ SETTINGS = {'position': ('top-center', 'top-left', 'top-right'),
             'missable-reminder': ('on', 'off'),
             # The recap when a game stops; on unless switched off.
             'session-recap': ('on', 'off'),
+            # Counter milestone toasts; on unless switched off.
+            'milestones': ('on', 'off'),
             'rarest': ('ever', 'month', 'platinum'),
             'settings-section': ('overview', 'toasts', 'now', 'guides', 'stores'),
             'community': ('on', 'off'),
@@ -1516,7 +1606,7 @@ NOW_SECTIONS = ('metals', 'recent', 'rarest', 'shelf')
 SETTINGS.update({f'now-{name}': ('on', 'off') for name in NOW_SECTIONS})
 # Settings stored as true/false rather than the word given.
 SWITCHES = {'community', 'guide-web', 'guide-jail', 'reveal-hidden', 'games-difficulty', 'difficulty-reminder',
-            'missable-reminder', 'session-recap'} | {f'now-{name}' for name in NOW_SECTIONS}
+            'missable-reminder', 'session-recap', 'milestones'} | {f'now-{name}' for name in NOW_SECTIONS}
 
 
 def set_option(key, value):
@@ -1553,6 +1643,7 @@ def set_option(key, value):
                          f'       omatrophy.py set difficulty-reminder on|off\n'
                          f'       omatrophy.py set missable-reminder on|off\n'
                          f'       omatrophy.py set session-recap on|off\n'
+                         f'       omatrophy.py set milestones on|off\n'
                          f'       omatrophy.py set rarest {"|".join(SETTINGS["rarest"])}\n'
                          f'       omatrophy.py set community on|off\n'
                          f'       omatrophy.py set reveal-hidden on|off\n'

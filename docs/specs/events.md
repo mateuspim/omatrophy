@@ -120,3 +120,25 @@ plays no chime.
 | `unlocked`, `total` | number | Unlocked now, and the game's total. |
 | `rarest` | object or null | The session's rarest unlock, `{name, percent, tier, icon}` (`tier` and `icon` as in `unlock`), or null when the store gives none of them a rarity. |
 | `platinum` | bool | The session took the game to 100%. |
+
+## `milestone`
+
+A locked counter achievement (`game`'s `progress`, `{value, max}`; Steam
+only today) passed 50, 75 or 90% of its goal since the watcher's last read
+of the game. One line per achievement, for the highest milestone it
+passed, upward only. The baseline is the watcher's first read and lives in
+memory: a game just appeared sends none, and a restart never repeats one.
+A hidden achievement is skipped unless `reveal-hidden` is on; none is sent
+with `milestones` off. The watcher reads a game when its file changes;
+whether Steam writes `UserGameStats` the moment a stat changes, or only
+with its next write of the game's stats (an unlock, the game quitting),
+is unverified (its files do change with no unlock). The shell queues it
+like a toast (a full queue may drop it) and plays no chime.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `type` | `"milestone"` | |
+| `store`, `app`, `game` | string | As above. |
+| `name`, `desc`, `icon` | string | As in `unlock`. |
+| `value`, `max` | number | The count now and its goal. |
+| `threshold` | number | `50`, `75` or `90`. |

@@ -1587,7 +1587,7 @@ class Qml(unittest.TestCase):
         # standalone so each reads on its own.
         siblings = {n[:-4] for n, _ in self.qml()}
         for name in ('TrophyToast.qml', 'PlatinumCard.qml', 'DifficultyCard.qml', 'MissableCard.qml', 'RecapCard.qml',
-                     'StylePicker.qml',
+                     'MilestoneCard.qml', 'StylePicker.qml',
                      'TrackerView.qml'):
             text = dict(self.qml())[name]
             for other in siblings - {name[:-4]}:
@@ -1924,6 +1924,74 @@ class SessionRecap(unittest.TestCase):
     def test_the_sample_works(self):
         ev = omatrophy.sample_event('recap', self.Fake(self.ACHS), '7', self.ACHS)
         self.assertEqual((ev['type'], ev['count'], ev['rarest']['tier']), ('recap', 4, 'gold'))
+
+
+class Milestones(unittest.TestCase):
+    def counter(self, api, value, top=80, **kw):
+        return dict(ach(api, **kw), progress={'value': value, 'max': top})
+
+    def setUp(self):
+        d = tempfile.TemporaryDirectory()
+        self.addCleanup(d.cleanup)
+        self.cfg = os.path.join(d.name, 'config.json')
+        for patch in (mock.patch.object(omatrophy, 'config_path', return_value=self.cfg),
+                      mock.patch.object(omatrophy, 'icon', lambda store, game, url: url)):
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def test_the_highest_milestone_crossed_upward(self):
+        self.assertEqual(omatrophy.crossed_milestone((30, 80), (40, 80)), 50)
+        self.assertEqual(omatrophy.crossed_milestone((30, 80), (75, 80)), 90)
+        self.assertIsNone(omatrophy.crossed_milestone((40, 80), (45, 80)))
+        self.assertIsNone(omatrophy.crossed_milestone((75, 80), (10, 80)))
+        # No earlier value: a baseline, not a crossing.
+        self.assertIsNone(omatrophy.crossed_milestone(None, (75, 80)))
+
+    def test_counters_are_the_locked_ones_with_a_goal(self):
+        achs = [self.counter('a', 3), self.counter('b', 3, unlocked=True), ach('c'), self.counter('d', 0, top=0)]
+        self.assertEqual(omatrophy.counters_of(achs), {'a': (3, 80)})
+
+    def test_an_event_per_crossing_with_hidden_ones_kept_secret(self):
+        achs = [self.counter('a', 60), self.counter('b', 41), self.counter('h', 79, hidden=True), self.counter('n', 10)]
+        before = {'a': (50, 80), 'b': (39, 80), 'h': (1, 80), 'n': (9, 80)}
+        events = omatrophy.milestone_events(LaunchReminder.Fake(achs), '7', achs, before)
+        self.assertEqual(events, [{'type': 'milestone', 'store': 'steam', 'app': '7', 'game': 'G', 'name': 'A',
+                                   'desc': 'Do a', 'icon': 'a.jpg', 'value': 60, 'max': 80, 'threshold': 75},
+                                  {'type': 'milestone', 'store': 'steam', 'app': '7', 'game': 'G', 'name': 'B',
+                                   'desc': 'Do b', 'icon': 'b.jpg', 'value': 41, 'max': 80, 'threshold': 50}])
+        omatrophy.write_json(self.cfg, {'reveal-hidden': True})
+        names = [e['name'] for e in omatrophy.milestone_events(LaunchReminder.Fake(achs), '7', achs, before)]
+        self.assertEqual(names, ['A', 'B', 'H'])
+        omatrophy.write_json(self.cfg, {'milestones': False})
+        self.assertEqual(omatrophy.milestone_events(LaunchReminder.Fake(achs), '7', achs, before), [])
+
+    def test_check_game_compares_with_the_last_read_and_keeps_a_baseline_through_a_bad_one(self):
+        store = LaunchReminder.Fake([self.counter('a', 30)])
+        seen, counters = {('steam', '7'): set()}, {('steam', '7'): {'a': (30, 80)}}
+        out = io.StringIO()
+        with redirect_stdout(out):
+            store.achs = [self.counter('a', 45)]
+            omatrophy.check_game(store, '7', seen, counters)
+            store.achs = []  # mid-write
+            omatrophy.check_game(store, '7', seen, counters)
+            store.achs = [self.counter('a', 61)]
+            omatrophy.check_game(store, '7', seen, counters)
+            # Already past 75: the same count read again sends nothing.
+            omatrophy.check_game(store, '7', seen, counters)
+        self.assertEqual([json.loads(line)['threshold'] for line in out.getvalue().splitlines()], [50, 75])
+
+    def test_a_game_with_no_baseline_sends_none(self):
+        store = LaunchReminder.Fake([self.counter('a', 70)])
+        counters = {}
+        with redirect_stdout(io.StringIO()) as out:
+            omatrophy.check_game(store, '7', {}, counters)
+        self.assertEqual(out.getvalue(), '')
+        self.assertEqual(counters, {('steam', '7'): {'a': (70, 80)}})
+
+    def test_the_sample_uses_the_games_own_counter(self):
+        achs = [ach('a', True, 5), self.counter('b', 2, top=40)]
+        ev = omatrophy.sample_event('milestone', LaunchReminder.Fake(achs), '7', achs)
+        self.assertEqual((ev['name'], ev['value'], ev['max'], ev['threshold']), ('B', 30, 40, 75))
 
 
 class CardTable(unittest.TestCase):

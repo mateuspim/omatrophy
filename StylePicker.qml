@@ -50,6 +50,8 @@ Column {
   property bool missableReminder: true
   // The recap when a game stops (config `session-recap`).
   property bool sessionRecap: true
+  // Counter milestone toasts (config `milestones`).
+  property bool milestones: true
   // The Steam profile backfill's latest line, from its status.json
   // (stores/steam_community.py); {} before the first run.
   property var backfill: ({})
@@ -397,6 +399,7 @@ Column {
     if (key === "difficulty-reminder") difficultyReminder = value === "on"
     if (key === "missable-reminder") missableReminder = value === "on"
     if (key === "session-recap") sessionRecap = value === "on"
+    if (key === "milestones") milestones = value === "on"
     if (key === "guide-web") guideWeb = value === "on"
     if (key === "guide-jail") guideJail = value === "on"
     if (key === "guide-agent") guideAgent = value === "default" ? "" : value
@@ -677,6 +680,7 @@ Column {
       root.difficultyReminder = c["difficulty-reminder"] !== false
       root.missableReminder = c["missable-reminder"] !== false
       root.sessionRecap = c["session-recap"] !== false
+      root.milestones = c.milestones !== false
       root.guideAgent = typeof c["guide-agent"] === "string" ? c["guide-agent"] : ""
       root.guideModels = c["guide-models"] && typeof c["guide-models"] === "object" ? c["guide-models"] : {}
       root.guideWeb = c["guide-web"] !== false
@@ -4251,6 +4255,21 @@ Column {
           ]
           value: root.sessionRecap ? "on" : "off"
           onPicked: value => value === "try" ? root.preview("recap") : root.set("session-recap", value)
+        }
+      }
+
+      // A small toast when a counter achievement ("52 / 80") passes half,
+      // three quarters or nine tenths of its goal.
+      SettingRow {
+        label: "MILESTONES"
+        Chips {
+          options: [
+            { value: "on", label: "50 · 75 · 90%" },
+            { value: "off", label: "Off" },
+            { value: "try", label: "Try" }
+          ]
+          value: root.milestones ? "on" : "off"
+          onPicked: value => value === "try" ? root.preview("milestone") : root.set("milestones", value)
         }
       }
 

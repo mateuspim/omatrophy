@@ -34,6 +34,14 @@ achievement list.
   Only after a session that unlocked something; no chime. Off in
   Settings > Toasts > Recap, where **Try** shows one (`omatrophy.py set
   session-recap off`, `omatrophy.py test recap`).
+- Milestones on a grind: a small toast when a locked counter achievement
+  ("52 / 80") passes 50, 75 or 90% of its goal, with its icon and a bar.
+  Steam only (GOG keeps no counters); hidden ones stay quiet unless you
+  reveal hidden ones. Off in Settings > Toasts > Milestones (`omatrophy.py
+  set milestones off`, `omatrophy.py test milestone`). Whether Steam
+  saves a counter to disk the moment it changes, or only when it next
+  writes the game's stats (an unlock, quitting), is unverified, so a
+  milestone may come late.
 - The achievement icon, its description, the share of players, and your
   progress through the game, filling in as you watch.
 - A trophy cabinet in the bar: the game you're playing with this session's
@@ -374,7 +382,9 @@ Format and stages: [docs/specs/guides.md](docs/specs/guides.md).
 The panel's **Settings** tab opens on an **Overview**: one line per
 section saying what it is set to; click one, or pick a section above it.
 **Toasts** holds the trophy style, then position, glass
-and sound as rows of choices, and **Try it** tiles that show a toast of
+and sound as rows of choices, one row each for the difficulty and
+missable reminders, the session recap and milestones (with **Try** to
+show one), and **Try it** tiles that show a toast of
 each tier with your settings. Each choice applies to the next toast.
 **Now tab** picks which sections the Now tab shows. **Guides** picks the
 agent that makes 100% guides and its model, each from a list that unfolds
@@ -399,7 +409,7 @@ omatrophy.py set sound off              # on, off, omatrophy, classic
 omatrophy.py set icons vector           # omarchy, vector, painted
 omatrophy.py set glass clear            # clear, frosted, solid
 omatrophy.py hide steam 20920           # out of "closest to platinum" and the shelf; unhide brings it back
-omatrophy.py test platinum              # bronze, silver, gold, platinum, difficulty, missable, recap
+omatrophy.py test platinum              # bronze, silver, gold, platinum, difficulty, missable, recap, milestone
 omatrophy.py status                     # progress of every game
 omatrophy.py now                        # the panel's Now tab, as JSON
 omatrophy.py game                       # every achievement of the running game

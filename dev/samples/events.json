@@ -116,5 +116,17 @@
    "icon": "dev/samples/art/icon-long-way-home.svg"
   },
   "platinum": false
+ },
+ "milestone": {
+  "type": "milestone",
+  "store": "steam",
+  "app": "1",
+  "game": "Starfall Odyssey",
+  "name": "Long Way Home",
+  "desc": "Cross the Veil 80 times",
+  "icon": "dev/samples/art/icon-long-way-home.svg",
+  "value": 60,
+  "max": 80,
+  "threshold": 75
  }
 }
