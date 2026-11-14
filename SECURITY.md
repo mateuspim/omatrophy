@@ -18,7 +18,7 @@ what OmaTrophy does with that access:
 
 - Runs: `python3 omatrophy.py watch` for as long as the shell runs (restarted
   10 s after it exits); `python3 omatrophy.py now|games|set|hide|unhide|test` when you use
-  the bar panel; `python3 omatrophy.py sync` only when you run it; `python3 omatrophy.py game` when the tracker opens; `pw-play` for the chime (a bundled WAV, or a freedesktop sound with the classic set).
+  the bar panel; `python3 omatrophy.py sync` only when you run it; `python3 omatrophy.py game` when the tracker opens; `python3 omatrophy.py share` when you press Save image, which runs a throwaway `quickshell` offscreen (its own temporary config folder, gone when it exits) to draw the image, and `notify-send` to say where it went; `pw-play` for the chime (a bundled WAV, or a freedesktop sound with the classic set).
 - Reads: Steam's local achievement cache
   (`<Steam>/appcache/stats/UserGameStats*_*.bin`) and library art
   (`<Steam>/appcache/librarycache/`), once a second for changed files; when
@@ -40,7 +40,10 @@ what OmaTrophy does with that access:
   pairs, test inbox),
   `~/.cache/omatrophy/` (achievement icons, art, global rarity per game,
   refreshed daily, and with the backfill on, profile pages per game in
-  `community/`).
+  `community/`); and, only when you press Save image or run
+  `omatrophy.py share`, one PNG per game in your pictures folder
+  (`~/Pictures/omatrophy/`, or `--out`). The image is drawn from local
+  files only and never uploaded.
 - 100% guides, only when you press Make guide or run `omatrophy.py guide
   make`: runs your coding agent (`claude`, the one checked so far) headless
   in a fresh empty temporary folder, with its built-in tools limited to

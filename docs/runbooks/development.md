@@ -77,8 +77,9 @@ sample.
 
 ```sh
 dev/render.sh now /tmp/now.png          # the panel mid-game; also idle, games, settings, loading
-dev/render.sh tracker /tmp/tracker.png  # the achievement tracker; tracker-loading for its skeleton
+dev/render.sh tracker /tmp/tracker.png  # the achievement tracker; tracker-loading for its skeleton, tracker-done finished
 dev/render.sh gold /tmp/gold.png        # a toast: bronze, silver, gold, platinum
+dev/render.sh share /tmp/share.png      # the saved platinum image (on the GPU, as omatrophy.py share draws it)
 dev/render.sh --live tracker /tmp/t.png # your running or last game
 dev/render.sh --font 16 now /tmp/n.png  # at a larger theme font (the base is 12)
 ```
