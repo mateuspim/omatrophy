@@ -14,7 +14,7 @@ class SettingTest(unittest.TestCase):
         self.check([
             ('Finish the game on Nightmare difficulty.', 'Nightmare'),
             ('Complete the game on Hard.', 'Hard'),
-            ('Beat the game on Hard or higher', 'Hard'),
+            ('Beat the game on Hard or higher', 'Hard+'),
             ('Beat the game on Very Hard without dying', 'Very Hard'),
             ('Complete the game on Legendary', 'Legendary'),
             ('Complete the game in Hardcore mode', 'Hardcore'),
@@ -23,19 +23,27 @@ class SettingTest(unittest.TestCase):
             ('Win a Long Game on Offices on Hell on Earth Difficulty.', 'Hell on Earth'),
             ('Clear every chapter with the difficulty set to Expert', 'Expert'),
             ('Clear every chapter at difficulty level Expert', 'Expert'),
-            ('Complete the game on "Nightmare" or higher.', 'Nightmare'),
+            ('Complete the game on "Nightmare" or higher.', 'Nightmare+'),
             ("Reach milestone 5 in 'Challenge' difficulty.", 'Challenge'),
-            ('Finish the story on at least Standard (Classic) difficulty.', 'Standard'),
+            ('Finish the story on at least Standard (Classic) difficulty.', 'Standard+'),
             ('Complete Shadow of the Tomb Raider on One with the Jungle difficulty', 'One with the Jungle'),
             ('Finish the game on the "Death March!" difficulty level.', 'Death March'),
             ('Complete the game on Dante Must Die mode.', 'Dante Must Die'),
-            ("Clear Riku's story on Proud Mode or a higher difficulty level.", 'Proud'),
-            ('Clear game on Final Mix or a higher difficulty level.', 'Final Mix'),
+            ("Clear Riku's story on Proud Mode or a higher difficulty level.", 'Proud+'),
+            ('Clear game on Final Mix or a higher difficulty level.', 'Final Mix+'),
             ('Complete the game in Tactician mode.', 'Tactician'),
             ('Feel like taking the plunge into Survival Mode on extreme? Come back alive', 'Extreme'),
             ('Deliver 2,000 Alien shapes in Classic - Insane', 'Insane'),
             ('Finish on the highest difficulty', 'Highest'),
             ('Complete the campaign on all difficulties', 'Every'),
+        ])
+
+    def test_a_floor_is_marked_with_a_plus(self):
+        self.check([
+            ('Finish the game on Normal difficulty or higher.', 'Normal+'),
+            ('Finish the story on at least Casual difficulty.', 'Casual+'),
+            ('Complete Rock The Cradle on Very Hard or above.', 'Very Hard+'),
+            ('Finish on the highest difficulty or higher', 'Highest'),
         ])
 
     def test_reads_the_name_too(self):

@@ -123,9 +123,10 @@ the next read names them locally. The command itself exits at once.
 one per game with achievements, in no set order: the panel sorts them
 (recent, closest to platinum, name). `played` is `0` when the store doesn't
 say; `hidden` is `true` for games set aside with `hide`. `difficulty` lists
-the settings the game's locked achievements need (`["Hard", "Nightmare"]`),
-each once in the game's order, as `game`'s `difficulty` names them; `[]`
-when none does.
+the settings the game's locked achievements need (`["Nightmare", "Hard+"]`),
+each once, exact settings first, then floors in the game's order;
+`[]` when none does. A `+` marks a floor ("Normal or higher", "at least
+Casual"), in `game`'s `difficulty` too.
 
 ## game
 

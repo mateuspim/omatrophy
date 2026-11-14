@@ -44,6 +44,9 @@ TOP = re.compile(r'\b(?:the\s+)?(highest|hardest|maximum|max|top)\s+difficulty\b
 EVERY = re.compile(r'\b(?:all|every|each)\s+(?:the\s+)?difficult(?:y|ies)(?:\s+(?:levels?|settings?))?\b', re.I)
 # "on any difficulty" says the setting doesn't matter.
 ANY = re.compile(r'\b(?:any|regardless\s+of(?:\s+the)?)\s+difficult', re.I)
+# "on Normal or higher", "on at least Casual": a floor, which a harder run
+# also meets, so it's marked "Normal+" and ranks after exact settings.
+FLOOR = re.compile(r'\b(?:or\s+(?:a\s+)?(?:higher|harder|above|greater)|at\s+least|and\s+(?:up|above))\b', re.I)
 # Quotes around a name ("on "Hardcore" or higher") only get in the way.
 QUOTES = re.compile(r'["“”‘’]|(?<!\w)\'|\'(?!\w)')
 
@@ -52,7 +55,16 @@ SMALL_WORDS = {'on', 'or', 'of', 'the', 'and', 'with', 'a', 'to'}
 
 def setting(name, desc):
     """The difficulty setting an achievement needs ("Nightmare", "Highest",
-    "Every"), or None when its text names none."""
+    "Every"; "Normal+" for "Normal or higher"), or None when its text names
+    none."""
+    found = named(name, desc)
+    if found and found not in ('Highest', 'Every') and FLOOR.search(f'{name or ""}. {desc or ""}'):
+        return found + '+'
+    return found
+
+
+def named(name, desc):
+    """The setting's name alone, as `setting` finds it."""
     text = QUOTES.sub('', f'{name or ""}. {(desc or "").strip()}')
     if ANY.search(text):
         return None

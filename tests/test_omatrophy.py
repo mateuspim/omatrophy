@@ -597,6 +597,10 @@ class NowTab(unittest.TestCase):
         self.assertEqual(omatrophy.open_difficulties(achs), ['Hard', 'Nightmare'])
         self.assertEqual(omatrophy.open_difficulties([ach('e')]), [])
 
+    def test_open_difficulties_put_exact_settings_before_floors(self):
+        achs = [dict(ach('a'), desc='Finish on Normal or higher.'), dict(ach('b'), desc='Finish on Insanity.')]
+        self.assertEqual(omatrophy.open_difficulties(achs), ['Insanity', 'Normal+'])
+
     def test_tracker_detail_names_the_difficulty_an_achievement_needs(self):
         hard = dict(ach('a'), desc='Finish the game on Nightmare difficulty.')
         self.assertEqual(omatrophy.detail(hard, {})['difficulty'], 'Nightmare')

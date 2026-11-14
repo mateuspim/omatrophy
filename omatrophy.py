@@ -723,9 +723,11 @@ def games():
 def open_difficulties(achs):
     """The settings a game's locked achievements need, each once, in the
     game's order: what to pick before the next save. Done ones are left out,
-    as they no longer decide anything."""
+    as they no longer decide anything. Exact settings lead and floors
+    ("Normal+") follow, as a run on the exact one usually meets them; a
+    row cut short then still shows the one that decides."""
     found = (difficulty.setting(a['name'], a['desc']) for a in achs if not a['unlocked'])
-    return list(dict.fromkeys(d for d in found if d))
+    return sorted(dict.fromkeys(d for d in found if d), key=lambda d: d.endswith('+'))
 
 
 # Fields of a panel or tracker answer that hold an image URL.
