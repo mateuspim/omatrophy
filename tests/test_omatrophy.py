@@ -1322,8 +1322,9 @@ class Settings(unittest.TestCase):
             with redirect_stdout(io.StringIO()):
                 omatrophy.set_option('games-sort', 'closest')
                 omatrophy.set_option('rarest', 'platinum')
+                omatrophy.set_option('games-difficulty', 'on')
             with open(f'{home}/.config/omatrophy/config.json') as f:
-                self.assertEqual(json.load(f), {'games-sort': 'closest', 'rarest': 'platinum'})
+                self.assertEqual(json.load(f), {'games-sort': 'closest', 'rarest': 'platinum', 'games-difficulty': True})
             with self.assertRaises(SystemExit):
                 omatrophy.set_option('rarest', 'yesterday')
 

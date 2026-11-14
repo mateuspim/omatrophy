@@ -15,6 +15,7 @@ bar panel).
 | `icons` | `"omarchy"`, `"vector"`, `"painted"` | `"omarchy"` |
 | `glass` | How much of the screen shows through a toast: `"clear"`, `"frosted"`, `"solid"` (the platinum card stays solid) | `"frosted"` |
 | `games-sort` | The Games tab's last sort: `"recent"`, `"closest"`, `"name"`. Written when you pick one. | `"recent"` |
+| `games-difficulty` | The Games tab's Difficulty toggle: `true` keeps only games with a difficulty achievement left. Written when you click it. | `false` |
 | `rarest` | The Now tab's last rarest-unlocks list: `"ever"`, `"month"`, `"platinum"`. Written when you pick one. | `"ever"` |
 | `settings-section` | The Settings tab's last section: `"overview"`, `"toasts"`, `"now"`, `"guides"`, `"stores"`. Written when you pick one. | `"overview"` |
 | `tracker-sort` | `"recent"`, `"rarity"`, `"name"`, `"game"` (the store's own order) | `"recent"` |

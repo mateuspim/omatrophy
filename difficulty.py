@@ -71,7 +71,11 @@ FLOOR_AFTER = re.compile(rf'(?:\s+(?:game\s+)?(?:difficulty|mode))?(?:\s+(?:leve
 # Quotes around a name ("on "Hardcore" or higher") only get in the way.
 QUOTES = re.compile(r'["“”‘’]|(?<!\w)\'|\'(?!\w)')
 
-STRONG = (NAMED_DIFFICULTY, ON_NAMED_MODE, SETTING_DIFFICULTY, SETTING_MODE, DIFFICULTY_SETTING)
+# Metro's Ranger settings name two things: "in Ranger Mode Hardcore",
+# "in Ranger Hardcore mode". "Ranger" alone wouldn't tell them apart.
+RANGER = re.compile(r'\b(ranger\s+(?:mode\s+)?(?:easy|normal|hardcore))\b', re.I)
+
+STRONG = (RANGER, NAMED_DIFFICULTY, ON_NAMED_MODE, SETTING_DIFFICULTY, SETTING_MODE, DIFFICULTY_SETTING)
 BARE = (ON_SETTING, ON_AMBIGUOUS, DASH_SETTING)
 SMALL_WORDS = {'on', 'or', 'of', 'the', 'and', 'with', 'a', 'to'}
 
@@ -107,6 +111,6 @@ def floor(text, found):
 
 def tidy(word):
     """"very  hard" -> "Very Hard"; "hell ON earth" -> "Hell on Earth";
-    "Proud Mode" -> "Proud"."""
-    words = re.sub(r'\s+mode$', '', word.strip('!:'), flags=re.I).lower().split()
+    "Proud Mode" -> "Proud"; "Ranger Mode Easy" -> "Ranger Easy"."""
+    words = re.sub(r'\s+mode\b', '', word.strip('!:'), flags=re.I).lower().split()
     return ' '.join(w if i and w in SMALL_WORDS else w[:1].upper() + w[1:] for i, w in enumerate(words))

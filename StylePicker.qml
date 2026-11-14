@@ -671,6 +671,7 @@ Column {
       root.guideKeyInstalled = typeof c["guide-key"] === "string" ? c["guide-key"] : ""
       root.guideJail = c["guide-jail"] === true
       if (c["games-sort"]) root.sort = c["games-sort"]
+      root.difficultyOnly = c["games-difficulty"] === true
       if (c.rarest) root.rarestRange = c.rarest
       if (root.settingsSections.some(function(x) { return x.value === c["settings-section"] })) root.settingsSection = c["settings-section"]
       var shows = {}
@@ -3640,7 +3641,10 @@ Column {
         visible: root.difficultyGames > 0 || root.difficultyOnly
         options: [{ value: "difficulty", label: "Difficulty " + root.difficultyGames }]
         value: root.difficultyOnly ? "difficulty" : ""
-        onPicked: root.difficultyOnly = !root.difficultyOnly
+        onPicked: {
+          root.difficultyOnly = !root.difficultyOnly
+          runner.exec(["python3", root.helperPath, "set", "games-difficulty", root.difficultyOnly ? "on" : "off"])
+        }
       }
       Rectangle {
         id: sortRule

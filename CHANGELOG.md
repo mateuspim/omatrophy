@@ -15,8 +15,8 @@
 - Games tab: a **Difficulty** toggle keeps the games with a locked
   achievement that needs a difficulty setting, and their rows name the
   settings, exact ones first and floors marked ("Normal+": Normal or
-  higher). `games` gives each game a `difficulty` list. Needs no
-  restart.
+  higher). The toggle is remembered (`set games-difficulty on|off`).
+  `games` gives each game a `difficulty` list. Needs no restart.
 
 ## 0.7.1 - 2026-11-14
 

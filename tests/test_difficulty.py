@@ -65,6 +65,8 @@ class SettingTest(unittest.TestCase):
             ('Cook a steak on medium.', None),
             ('Complete the game on Standard or higher.', 'Standard+'),
             ('Complete the game in Iron Mode.', 'Iron'),
+            ('Complete the game in Ranger Mode Easy.', 'Ranger Easy'),
+            ('Complete the game in Ranger Hardcore mode.', 'Ranger Hardcore'),
         ])
 
     def test_modes_that_are_what_is_played_are_not_settings(self):

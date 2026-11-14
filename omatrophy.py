@@ -1165,6 +1165,7 @@ SETTINGS = {'position': ('top-center', 'top-left', 'top-right'),
             'tracker-sort': ('recent', 'rarity', 'name', 'game'),
             # The panel's last picks, so the next open shows the same view.
             'games-sort': ('recent', 'closest', 'name'),
+            'games-difficulty': ('on', 'off'),
             'rarest': ('ever', 'month', 'platinum'),
             'settings-section': ('overview', 'toasts', 'now', 'guides', 'stores'),
             'community': ('on', 'off'),
@@ -1176,7 +1177,7 @@ SETTINGS = {'position': ('top-center', 'top-left', 'top-right'),
 NOW_SECTIONS = ('metals', 'recent', 'rarest', 'shelf')
 SETTINGS.update({f'now-{name}': ('on', 'off') for name in NOW_SECTIONS})
 # Settings stored as true/false rather than the word given.
-SWITCHES = {'community', 'guide-web', 'guide-jail', 'reveal-hidden'} | {f'now-{name}' for name in NOW_SECTIONS}
+SWITCHES = {'community', 'guide-web', 'guide-jail', 'reveal-hidden', 'games-difficulty'} | {f'now-{name}' for name in NOW_SECTIONS}
 
 
 def set_option(key, value):
@@ -1209,6 +1210,7 @@ def set_option(key, value):
                          f'       omatrophy.py set glass {"|".join(SETTINGS["glass"])}\n'
                          f'       omatrophy.py set tracker-sort {"|".join(SETTINGS["tracker-sort"])}\n'
                          f'       omatrophy.py set games-sort {"|".join(SETTINGS["games-sort"])}\n'
+                         f'       omatrophy.py set games-difficulty on|off\n'
                          f'       omatrophy.py set rarest {"|".join(SETTINGS["rarest"])}\n'
                          f'       omatrophy.py set community on|off\n'
                          f'       omatrophy.py set reveal-hidden on|off\n'

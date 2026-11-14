@@ -101,7 +101,8 @@ Type (or press `/`) to filter by name; Enter opens the first match.
 difficulty setting, and each of those rows names the settings ("Difficulty:
 Insanity, Normal+") so you can pick one before you start (see the tracker's
 Difficulty filter below). A hidden achievement's setting stays out unless
-you reveal hidden achievements in the tracker. Hover a
+you reveal hidden achievements in the tracker. The toggle is remembered.
+Hover a
 game and click **Hide** to set aside one you won't finish: it leaves
 Closest and dims in the other sorts until you click **Show**.
 
