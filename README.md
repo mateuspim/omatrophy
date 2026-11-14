@@ -104,7 +104,7 @@ achievement cache and, for GOG, the database Heroic's Comet service keeps, reads
 and calls Steam's public endpoints for rarity, game names and art when a
 toast shows, the bar panel opens or the watcher starts (game names, once
 each). GOG needs no network at all. Save image writes a PNG to your
-pictures folder and nothing else; it uploads nothing. No root, no API key, no login. Making a 100%
+pictures folder (fetching the game's art once if it isn't cached yet); it uploads nothing. No root, no API key, no login. Making a 100%
 guide is the one exception, and only when you ask: it runs your own coding
 agent, locked to web search and fetch, through its own login. Details in
 [SECURITY.md](SECURITY.md).
@@ -168,8 +168,9 @@ bottom, as a 2400 x 1260 PNG in `~/Pictures/omatrophy/` (your XDG
 pictures folder), named after the game (`starfall-odyssey-platinum.png`;
 saving again replaces it). A notification shows it when it's ready, in a
 second or two. It follows your theme and trophy style. The image is drawn
-on your machine from art already there, and nothing is uploaded; post it
-wherever you like.
+on your machine; the game's art comes from Steam's cache, or is fetched
+once from the store when it isn't there yet, as the platinum toast does.
+Nothing is uploaded; post it wherever you like.
 
 ![The saved image of a sample platinum: the platinum card held open over the game's blurred art, with OmaTrophy, the store and the date along the bottom](docs/brand/captures/platinum-share.png)
 

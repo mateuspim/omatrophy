@@ -3,13 +3,10 @@
 - Status: Accepted
 - Date: 2026-11-14
 
-Numbered 23 because 21 (manual ticks) and 22 (toast screen and Do Not
-Disturb) were taken by branches in flight when this was written.
-
 ## Context
 
 The owner wanted a finished game's platinum saved as an image to share,
-from the tracker and the platinum shelf, with no network. The image
+from the tracker and the platinum shelf, uploading nothing. The image
 should be the platinum card the owner already saw, not a second design
 that drifts from it.
 
@@ -39,8 +36,10 @@ that platform.
 - `PlatinumShare.qml` loads `PlatinumCard.qml` with `still: true`, which
   jumps to the end of the card's timeline (open, written, counted, lit),
   over the game's art blurred into the theme, with a footer.
-- Art goes in only as local files; a web URL is dropped so the drawing
-  never fetches.
+- Art goes in only as local files: `omatrophy.py` first fetches store
+  art missing from the cache, once, as the platinum toast does (owner's
+  call, 2026-11-14), and a URL still left is dropped, so the throwaway
+  shell never fetches and nothing is uploaded.
 - The panel and tracker run the command (`--notify`) and show a tick or
   the error; they draw nothing themselves.
 

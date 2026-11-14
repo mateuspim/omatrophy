@@ -195,6 +195,54 @@ class ShareEvent(unittest.TestCase):
         self.assertEqual(omatrophy.share_event(store, '1', store.achs, '../x')['icon_set'], 'omarchy')
 
 
+class ShareArt(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        cache = mock.patch.object(omatrophy, 'CACHE', self.tmp.name)
+        cache.start()
+        self.addCleanup(cache.stop)
+
+    def test_missing_art_is_fetched_once_then_local(self):
+        url = 'https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1/header.jpg'
+        fetched = []
+
+        def fetch(urls):
+            fetched.extend(urls)
+            for u in urls:
+                path = f'{self.tmp.name}/{omatrophy.image_name(u)}'
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                with open(path, 'wb') as f:
+                    f.write(b'jpg')
+
+        ev = omatrophy.share_art({'game': 'x', 'header': url, 'hero': ''}, fetch=fetch)
+        self.assertEqual(fetched, [url])
+        self.assertEqual(ev['header'], f'file://{self.tmp.name}/{omatrophy.image_name(url)}')
+
+    def test_nothing_missing_fetches_nothing(self):
+        ev = omatrophy.share_art({'game': 'x', 'header': '', 'hero': 'file:///a.jpg'},
+                                 fetch=lambda urls: self.fail('fetched'))
+        self.assertEqual(ev['hero'], 'file:///a.jpg')
+
+
+class OutPath(unittest.TestCase):
+    def test_default_and_file_and_folder(self):
+        with tempfile.TemporaryDirectory() as home:
+            self.assertEqual(share.out_path('', 'Starfall Odyssey', home=home, config_home=home + '/c'),
+                             f'{home}/Pictures/omatrophy/starfall-odyssey-platinum.png')
+            self.assertEqual(share.out_path(f'{home}/x.png', 'Starfall'), f'{home}/x.png')
+            self.assertEqual(share.out_path(home, 'Starfall Odyssey'), f'{home}/starfall-odyssey-platinum.png')
+
+
+class Notify(unittest.TestCase):
+    def test_options_end_before_the_text(self):
+        with mock.patch.object(share.subprocess, 'run') as run:
+            share.notify('-u critical', '--help', image='/x.png')
+        args = run.call_args[0][0]
+        self.assertEqual(args[-3:], ['--', '-u critical', '--help'])
+        self.assertNotIn('shell', run.call_args[1])
+
+
 class ShareArgs(unittest.TestCase):
     def test_forms(self):
         self.assertEqual(omatrophy.share_args(['steam', '20']), ('steam', '20', '', False))
@@ -218,6 +266,7 @@ class ShareCommand(unittest.TestCase):
         rendered = []
         with mock.patch.object(omatrophy, 'found_stores', return_value=[store]), \
                 mock.patch.object(share, 'render', side_effect=lambda ev, out: rendered.append((ev, out))), \
+                mock.patch.object(omatrophy, 'save_images', side_effect=AssertionError('fetched')), \
                 redirect_stdout(io.StringIO()) as out:
             omatrophy.share_platinum(args)
         return rendered, out.getvalue().strip()

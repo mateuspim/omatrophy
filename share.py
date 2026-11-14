@@ -4,8 +4,10 @@ offscreen Quickshell instance and written to a PNG.
 The live shell is never asked: its windows are layer surfaces over the
 game, and a grab there would need a visible card. A separate process
 draws the same QML the platinum toast uses, on the GPU (the software
-renderer drops the card's masks and its art), and exits. Nothing is
-fetched or sent: the art is a local copy or left out.
+renderer drops the card's masks and its art), and exits. The drawing
+fetches nothing: omatrophy.py caches the store's art first (once, as the
+platinum toast does), and art without a local copy is left out. Nothing
+is uploaded.
 """
 import json, os, re, shutil, subprocess, tempfile
 
@@ -48,6 +50,17 @@ def pictures_dir(home=None, config_home=None):
 
 def default_path(game_name, home=None, config_home=None):
     return f'{pictures_dir(home, config_home)}/omatrophy/{slug(game_name)}-platinum.png'
+
+
+def out_path(out, game_name, home=None, config_home=None):
+    """Where the image goes: `--out` (with `~` expanded; a folder gets the
+    default file name inside it), else the default path."""
+    if not out:
+        return default_path(game_name, home, config_home)
+    out = os.path.abspath(os.path.expanduser(out))
+    if os.path.isdir(out):
+        out = f'{out}/{slug(game_name)}-platinum.png'
+    return out
 
 
 def local_art(value):
@@ -151,7 +164,8 @@ def notify(summary, body, image=''):
     """A desktop notification, for a save started from the panel, which
     may be gone by the time the image is written. Quietly nothing without
     notify-send."""
-    args = ['notify-send', '-a', 'OmaTrophy'] + (['-i', image] if image else []) + [summary, body]
+    # `--` ends the options: a game's name or an error never reads as one.
+    args = ['notify-send', '-a', 'OmaTrophy'] + (['-i', image] if image else []) + ['--', summary, body]
     try:
         subprocess.run(args, timeout=4, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
     except (OSError, subprocess.SubprocessError):

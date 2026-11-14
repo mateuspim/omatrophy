@@ -1291,6 +1291,17 @@ def share_event(store, game, achs, icon_set='omarchy'):
     return local_images(ev, [])
 
 
+def share_art(ev, fetch=None):
+    """`ev` with its store art fetched into the cache first when there is
+    no copy yet, once, as the platinum toast does: the drawing itself only
+    takes local files. Offline, the art is left out."""
+    missing = []
+    local_images(ev, missing)
+    if missing:
+        (fetch or save_images)(missing)
+    return local_images(ev, [])
+
+
 def share_args(args):
     """(store id, game, out, notify) from `share <store> <game> [--out f] [--notify]`; None when malformed."""
     rest, out, notify = [], '', False
@@ -1328,9 +1339,9 @@ def share_platinum(args):
         done = sum(a['unlocked'] for a in achs)
         raise SystemExit(f'{store.game_name(game)} is at {done} / {len(achs)}; '
                          'only a finished game (a platinum) gets an image')
-    out = os.path.abspath(os.path.expanduser(out)) if out else share.default_path(ev['game'])
+    out = share.out_path(out, ev['game'])
     try:
-        share.render(ev, out)
+        share.render(share_art(ev), out)
     except (RuntimeError, OSError) as e:
         if notify:
             share.notify(f'No image of {ev["game"]}', str(e))

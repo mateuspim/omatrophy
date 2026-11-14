@@ -42,8 +42,10 @@ what OmaTrophy does with that access:
   refreshed daily, and with the backfill on, profile pages per game in
   `community/`); and, only when you press Save image or run
   `omatrophy.py share`, one PNG per game in your pictures folder
-  (`~/Pictures/omatrophy/`, or `--out`). The image is drawn from local
-  files only and never uploaded.
+  (`~/Pictures/omatrophy/`, or `--out`). The game's art is fetched
+  once into the cache when there is no copy yet (as for the platinum
+  toast); the drawing itself reads local files only, and the image is
+  never uploaded.
 - 100% guides, only when you press Make guide or run `omatrophy.py guide
   make`: runs your coding agent (`claude`, the one checked so far) headless
   in a fresh empty temporary folder, with its built-in tools limited to

@@ -9,8 +9,8 @@
   `~/Pictures/omatrophy/<game>-platinum.png` (your XDG pictures folder);
   a notification says where. From a terminal:
   `omatrophy.py share <store> <game> [--out file.png]`. It runs on this
-  machine only: a throwaway offscreen Quickshell draws it, and nothing is
-  uploaded. No shell restart: the panel, tracker and card are built from
+  machine only: a throwaway offscreen Quickshell draws it, the game's art
+  is fetched once if it isn't cached yet, and nothing is uploaded. No shell restart: the panel, tracker and card are built from
   their text, and the image is drawn outside the shell.
 - The platinum card's PLATINUM TROPHY label, rail and bar take a darker
   platinum on light themes, where the pale metal all but vanished.
