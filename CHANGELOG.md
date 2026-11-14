@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.14.0 - 2026-11-14
+
+- **Save image** of a platinum: from the tracker (beside Completionist)
+  or a platinum shelf tile (hover, top-right), OmaTrophy draws the
+  platinum card, held open over the game's art, with the date and the
+  store along the bottom, and saves it as a 2400 x 1260 PNG in
+  `~/Pictures/omatrophy/<game>-platinum.png` (your XDG pictures folder);
+  a notification says where. From a terminal:
+  `omatrophy.py share <store> <game> [--out file.png]`. It runs on this
+  machine only: a throwaway offscreen Quickshell draws it, the game's art
+  is fetched once if it isn't cached yet, and nothing is uploaded. No shell restart: the panel, tracker and card are built from
+  their text, and the image is drawn outside the shell.
+- The platinum card's PLATINUM TROPHY label, rail and bar take a darker
+  platinum on light themes, where the pale metal all but vanished.
+- `dev/render.sh share` renders the saved image from the sample platinum
+  (`--theme` works with it), and `tracker-done` the tracker of a finished
+  game.
+
 ## 0.13.0 - 2026-11-14
 
 - **By hand** ([ADR 21](docs/adr/0021-tick-and-note-by-hand.md)): tick an

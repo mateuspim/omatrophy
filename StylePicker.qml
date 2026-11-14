@@ -526,6 +526,18 @@ Column {
     return !gameFilter || g.game.toLowerCase().indexOf(gameFilter.toLowerCase()) >= 0
   }
 
+  // The shelf's Save image: the platinum card as a PNG (share.py). The
+  // notification says where it went; the tile shows a tick until the
+  // panel closes.
+  property string imageSaving: ""
+  property string imageSaved: ""
+  function saveImage(g) {
+    if (!live || imageSaver.running) return
+    imageSaving = g.store + ":" + g.app
+    imageSaver.command = ["python3", helperPath, "share", g.store, g.app, "--notify"]
+    imageSaver.running = true
+  }
+
   function toggleHidden(g) {
     var hide = !isHidden(g)
     var next = Object.assign({}, hiddenKeys)
@@ -802,6 +814,14 @@ Column {
   }
 
   Process { id: runner }
+
+  Process {
+    id: imageSaver
+    onExited: function(code) {
+      root.imageSaved = code === 0 ? root.imageSaving : ""
+      root.imageSaving = ""
+    }
+  }
 
   // Is the default Guide key free? Asked once Guides is open, so a taken
   // default shows its warning instead of an Install button.
@@ -2834,7 +2854,7 @@ Column {
             anchors.margins: 1
             source: shelfCard.modelData.header || ""
             label: shelfCard.modelData.game
-            zoom: shelfHit.containsMouse || removeHit.containsMouse ? 1.08 : 1
+            zoom: shelfHit.containsMouse || removeHit.containsMouse || imageHit.containsMouse ? 1.08 : 1
           }
           Thumb {
             anchors.right: parent.right
@@ -2847,8 +2867,45 @@ Column {
           }
           Hit { id: shelfHit; game: shelfCard.modelData }
           PanelToolTip {
-            visible: shelfHit.containsMouse && !removeHit.containsMouse
+            visible: shelfHit.containsMouse && !removeHit.containsMouse && !imageHit.containsMouse
             text: shelfCard.modelData.game + " · " + root.day(shelfCard.modelData.platinum)
+          }
+          // Saves the platinum card as an image; shown on hover, and with
+          // a tick once saved.
+          Rectangle {
+            readonly property string key: shelfCard.modelData.store + ":" + shelfCard.modelData.app
+            readonly property bool saving: root.imageSaving === key
+            readonly property bool saved: root.imageSaved === key
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.margins: 3
+            width: 16
+            height: 16
+            radius: 8
+            visible: shelfHit.containsMouse || removeHit.containsMouse || imageHit.containsMouse || saving || saved
+            color: imageHit.containsMouse || saved ? Commons.Color.accent : Qt.alpha(Commons.Color.popups.background, 0.85)
+            Accessible.role: Accessible.Button
+            Accessible.name: "Save " + shelfCard.modelData.game + "'s platinum card as an image"
+            Text {
+              textFormat: Text.PlainText
+              anchors.centerIn: parent
+              text: parent.saved ? "✓" : parent.saving ? "…" : "⤓"
+              color: imageHit.containsMouse || parent.saved ? Commons.Color.popups.background : root.foreground
+              font.pixelSize: 11
+              font.bold: true
+            }
+            MouseArea {
+              id: imageHit
+              anchors.fill: parent
+              anchors.margins: -2
+              hoverEnabled: true
+              cursorShape: Qt.PointingHandCursor
+              onClicked: root.saveImage(shelfCard.modelData)
+            }
+            PanelToolTip {
+              visible: imageHit.containsMouse
+              text: parent.saved ? "Saved in Pictures/omatrophy" : "Save the platinum card as an image (Pictures/omatrophy)"
+            }
           }
           // Takes the game off the shelf; shown on hover only.
           Rectangle {

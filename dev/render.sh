@@ -12,7 +12,8 @@
 #   dev/render.sh settings out.png       its Settings tab (settings-toasts, -now, -guides, -stores: one section)
 #   dev/render.sh settings-monitors out.png  Toasts with many monitors and a long disconnected name
 #   dev/render.sh tracker out.png        the achievement tracker (tracker-hand: ticks, a count and notes by hand;
-#                                        tracker-note: a note being written)
+#                                        tracker-note: a note being written; tracker-done: a finished game,
+#                                        its Save image)
 #   dev/render.sh guide out.png          its Guide view (guide-making: a make running; guide-empty: none yet;
 #                                        guide-failed: the last make failed; guide-steps: a guide with
 #                                        step actions; guide-tree: its Tree; guide-tree-done, -locked,
@@ -25,6 +26,7 @@
 #                                        guide-tree-narrow-pinned, -narrow-pinnable, ...: a state on
 #                                        the narrow card, its track down the side;
 #                                        guide-hand: ticks and notes by hand)
+#   dev/render.sh share out.png          the saved platinum image (omatrophy.py share), 2400x1260
 #   dev/render.sh gold out.png           a toast: bronze, silver, gold, platinum; difficulty, missable: the launch reminders; recap: a session; milestone: a counter
 #   dev/render.sh --live tracker out.png the views read your real stores
 #   dev/render.sh --font 16 now out.png  at another theme font size (the base is 12)
@@ -56,7 +58,7 @@ while [[ ${1:-} == --* ]]; do
 done
 [[ -z $font || $font =~ ^[0-9]+$ && $font -ge 6 && $font -le 40 ]] ||
   { echo "--font takes a theme base size in pixels, 6 to 40, not '$font'" >&2; exit 2; }
-[[ $# -eq 2 ]] || { sed -n '5,29p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+[[ $# -eq 2 ]] || { sed -n '5,33p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 target=$1
 out=$(realpath -m "$2")
 theme=$HOME/.local/state/omarchy/current/theme
@@ -77,6 +79,26 @@ for path in "$repo" "$out" "$theme"; do
   [[ $path != *[\"\\]* && $path != *$'\n'* ]] ||
     { echo "can't render with a quote, backslash or newline in a path: $path" >&2; exit 2; }
 done
+
+# share: the image `omatrophy.py share` saves, drawn by share.py itself
+# (its own offscreen Quickshell, on the GPU) from the sample platinum.
+if [[ $target == share ]]; then
+  [[ $live == false && -z $font ]] || { echo "share renders the sample platinum only; drop --live and --font" >&2; exit 2; }
+  python3 - "$repo" "$out" "$theme" <<'PY'
+import json, sys
+repo, out, theme = sys.argv[1:]
+sys.path.insert(0, repo)
+import share
+ev = json.load(open(f'{repo}/dev/samples/events.json'))['platinum']
+ev.update(hero=f"{repo}/{ev['hero']}", header=f"{repo}/{ev['header']}", platinum=ev['last'],
+          store_name='Steam', icon_set='omarchy')
+try:
+    print(share.render(ev, out, theme=theme))
+except RuntimeError as e:
+    sys.exit(f'no image: {e}')
+PY
+  exit
+fi
 
 extra=""
 dir=$(mktemp -d)
@@ -153,7 +175,7 @@ case $target in
           item.tab = \"$tab\"
         }
       }" ;;
-  tracker|tracker-loading|tracker-hand|tracker-note)
+  tracker|tracker-loading|tracker-hand|tracker-note|tracker-done)
     w=1000 h=900 at=3000
     [[ $target == tracker-loading ]] && live=skeleton
     # By hand (ADR 21): The Quiet Part ticked, Collector counted by hand
@@ -164,6 +186,9 @@ case $target in
     # Opened after the rows' entry cascade, as a key press would be: a row
     # that grows mid-transition isn't re-laid by ListView.
     [[ $target == tracker-note ]] && hand="$hand; var t = Qt.createQmlObject(\"import QtQuick; Timer { interval: 1500; running: true }\", item); t.triggered.connect(function() { item.editNote('A5') })"
+    # tracker-done: every achievement unlocked, so the header shows the
+    # platinum with Completionist and Save image.
+    [[ $target == tracker-done ]] && hand="var g = item.game; item.game = Object.assign({}, g, { achievements: g.achievements.map(function(a) { return Object.assign({}, a, { unlocked: true, time: a.time || 1793000000 }) }), unlocked: g.total, platinum: 1793000000 })"
     view="Loader {
         anchors.centerIn: parent
         source: \"file:$repo/TrackerView.qml\"

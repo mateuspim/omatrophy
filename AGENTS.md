@@ -32,6 +32,10 @@ says how the parts fit, `docs/adr/` why, `docs/specs/` what the contracts are
   plugin files, so a `?v=` URL no longer works). They must not use other QML types from this folder; the `Trophy`
   component is repeated on purpose. `Service.qml`, `Panel.qml`, `Tracker.qml`,
   `FreshObject.qml` and `manifest.json` need `omarchy restart shell`.
+  `PlatinumShare.qml` (the saved platinum image) is loaded only by
+  `share.py`'s throwaway offscreen Quickshell, never the live shell; it
+  loads `PlatinumCard.qml` with `still: true`, so a card change shows in
+  the image too (`dev/render.sh share`).
   A new card is a QML file plus a row in `cards.json` (file, chime, rank,
   keep), which `Service.qml` and the test inbox both read; no
   `Service.qml` edit. Add it to `tests/test_qml.py`'s `VIEWS` too.

@@ -38,7 +38,7 @@ achievement list.
 - Rarity picks the metal: bronze, silver at 35% of players or fewer, gold at
   10% or fewer, with glitter and a sweep of light for gold.
 - A platinum card at 100%: the trophy spins in over the game's hero art and
-  the count rolls up.
+  the count rolls up. **Save image** keeps it as a PNG to share.
 - A recap when you quit a game: how long you played, the trophies the
   session brought, the rarest of them, and where the game stands now.
   Only after a session that unlocked something; no chime, and never
@@ -103,7 +103,8 @@ OmaTrophy runs inside `omarchy-shell` as your user. It reads Steam's local
 achievement cache and, for GOG, the database Heroic's Comet service keeps, reads whether Omarchy's Do Not Disturb is on, keeps its settings and a small cache in its own folders,
 and calls Steam's public endpoints for rarity, game names and art when a
 toast shows, the bar panel opens or the watcher starts (game names, once
-each). GOG needs no network at all. No root, no API key, no login. Making a 100%
+each). GOG needs no network at all. Save image writes a PNG to your
+pictures folder (fetching the game's art once if it isn't cached yet); it uploads nothing. No root, no API key, no login. Making a 100%
 guide is the one exception, and only when you ask: it runs your own coding
 agent, locked to web search and fetch, through its own login. Details in
 [SECURITY.md](SECURITY.md).
@@ -157,6 +158,21 @@ Click any game for the **tracker**, a card over the screen with every
 achievement: rarity, the trophy it would earn, and the date you got it.
 Locked counter achievements show how far along you are ("52 / 80") when
 the game tracks the count.
+
+### Save a platinum as an image
+
+A finished game's tracker has **⤓ Save image** beside its Platinum, and
+each platinum shelf tile shows ⤓ in its corner on hover. Either saves the
+platinum card, held open over the game's art with the date along the
+bottom, as a 2400 x 1260 PNG in `~/Pictures/omatrophy/` (your XDG
+pictures folder), named after the game (`starfall-odyssey-platinum.png`;
+saving again replaces it). A notification shows it when it's ready, in a
+second or two. It follows your theme and trophy style. The image is drawn
+on your machine; the game's art comes from Steam's cache, or is fetched
+once from the store when it isn't there yet, as the platinum toast does.
+Nothing is uploaded; post it wherever you like.
+
+![The saved image of a sample platinum: the platinum card held open over the game's blurred art, with OmaTrophy, the store and the date along the bottom](docs/brand/captures/platinum-share.png)
 
 **Difficulty** (shown only when the game has any) lists the achievements
 that need a difficulty setting ("Finish the game on Nightmare"), each
@@ -473,6 +489,7 @@ omatrophy.py set glass clear            # clear, frosted, solid
 omatrophy.py set screen DP-1            # focused, or a monitor from `hyprctl monitors`
 omatrophy.py set dnd ignore             # hold (wait out Do Not Disturb), ignore
 omatrophy.py hide steam 20920           # out of "closest to platinum" and the shelf; unhide brings it back
+omatrophy.py share steam 20920          # save its platinum as an image (--out file.png); prints where
 omatrophy.py test platinum              # bronze, silver, gold, platinum, difficulty, missable, recap, milestone
 omatrophy.py status                     # progress of every game
 omatrophy.py now                        # the panel's Now tab, as JSON

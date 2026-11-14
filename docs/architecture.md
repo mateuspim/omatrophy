@@ -41,7 +41,9 @@ turns those lines into cards on screen.
 | `RecapCard.qml` | The session recap when a game stops: its length, trophies, rarest unlock and the game's progress. |
 | `MilestoneCard.qml` | A small toast when a counter achievement passes 50, 75 or 90% of its goal. |
 | `cards.json` | The one table of cards: each event type's QML file, chime, rank in the queue and whether a full queue may drop it. `Service.qml` reads it live; `omatrophy.py` lets only its types through the test inbox. |
-| `PlatinumCard.qml` | 100% of a game: badge, ring, trophy, then a wide card over the hero art. |
+| `PlatinumCard.qml` | 100% of a game: badge, ring, trophy, then a wide card over the hero art. With `still`, straight to the opened card, for the saved image. |
+| `PlatinumShare.qml` | The saved platinum image: `PlatinumCard.qml` held open over the game's blurred art, with the date and store along the bottom. Loaded only by `share.py`'s throwaway Quickshell, never the live shell. |
+| `share.py` | `omatrophy.py share`: draws `PlatinumShare.qml` in an offscreen Quickshell on the GPU and saves the PNG to the pictures folder (ADR 23). |
 | `Panel.qml` | Bar button; opens a `KeyboardPanel` that loads `StylePicker.qml`, and turns its `track` signal into a summon of the tracker. |
 | `StylePicker.qml` | Three tabs. Now: totals, the running game (or the last three) and the platinum shelf, from `omatrophy.py now`. Games: every game, sortable, from `omatrophy.py games` on first open. Settings: trophy style, previews, position and sound, through `omatrophy.py set`. |
 | `FreshObject.qml` | Builds a sibling QML file from its current text, so the cards, the panel content and the tracker pick up edits without a restart. |
@@ -71,6 +73,10 @@ turns those lines into cards on screen.
 5. The panel runs `omatrophy.py now` each time it opens. Clicking a game
    summons the plugin's overlay with `{store, app}`; `Tracker.qml` passes it
    to `TrackerView.qml`, which runs `omatrophy.py game --guide` (ADR 9, ADR 19).
+6. Save image (the tracker of a finished game, or a shelf tile) runs
+   `omatrophy.py share --notify`, which starts its own offscreen Quickshell
+   to draw `PlatinumShare.qml`, writes the PNG and exits; the live shell
+   draws nothing for it (ADR 23).
 
 Line shapes are in [specs/events.md](specs/events.md), the CLI in
 [specs/cli.md](specs/cli.md), the settings file in
@@ -84,5 +90,6 @@ Line shapes are in [specs/events.md](specs/events.md), the CLI in
   tier it gets (ADR 7).
 - If the watcher exits (no store found, a crash), `Service.qml` restarts it
   after 10 s.
-- Nothing runs as root and nothing outside OmaTrophy's own files is written
+- Nothing runs as root and nothing outside OmaTrophy's own files is written,
+  except the platinum images you ask for in `~/Pictures/omatrophy/`
   ([SECURITY.md](../SECURITY.md)).
