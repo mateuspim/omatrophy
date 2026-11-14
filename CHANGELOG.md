@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.13.0 - 2026-11-14
 
 - **By hand** ([ADR 21](docs/adr/0021-tick-and-note-by-hand.md)): tick an
   achievement the store missed, count a guide counter the store doesn't
@@ -9,6 +9,11 @@
   tick is never an unlock: no toast, no platinum, progress stays the
   store's; the guide counts it as done (Up next, steps, Do now, the
   missable reminder), and it can overrule a hand tick in a guide's `.md`.
+- In the tracker: a round tick target on locked trophies and Do now
+  tiles, − and + beside a guide counter, a plain-text note per trophy
+  and **Your notes** for the game on Guide; **Ctrl+Enter** ticks,
+  **Ctrl+N** opens a note, **Ctrl+Up/Down** counts, also on the Tree.
+  The header reads "4 / 9 unlocked · 1 by hand". Needs no restart.
 - The settings spec lists every state file (`guide-here.json`,
   `guide-key.json`, `reminded.json`, `missable-reminded.json`).
 
