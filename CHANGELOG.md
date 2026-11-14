@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.11.0 - 2026-11-14
 
 - Guide Tree from the keyboard: while the Tree shows, the arrows move a
   ring between Do now tiles, the story track, the open step's actions,
