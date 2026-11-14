@@ -15,7 +15,7 @@
 #                                        guide-failed: the last make failed; guide-steps: a guide with
 #                                        step actions; guide-tree: its Tree; guide-tree-done, -locked,
 #                                        -bare (no steps, no chains), -narrow, -pick, -wide (a chain wider
-#                                        than its card): its edge states;
+#                                        than its card), -wide-keys (focus its far edge): its edge states;
 #                                        guide-tree-pinned: the player pinned step 3 (I'm here);
 #                                        guide-tree-keys: arrow keys pressed, the focus ring on a node;
 #                                        guide-tree-pinnable: step 4 shown, its I'm here button;
@@ -42,8 +42,12 @@ while [[ ${1:-} == --* ]]; do
   case $1 in
     --live) live=true; shift ;;
     --tall) tall=true; shift ;;
-    --font) font=${2:-}; shift 2 || true ;;
-    --theme) themeName=${2:-}; shift 2 || true ;;
+    --font)
+      [[ $# -ge 2 && -n $2 ]] || { echo "--font needs a size in pixels" >&2; exit 2; }
+      font=$2; shift 2 ;;
+    --theme)
+      [[ $# -ge 2 && -n $2 ]] || { echo "--theme needs an installed theme name" >&2; exit 2; }
+      themeName=$2; shift 2 ;;
     *) break ;;
   esac
 done
@@ -177,8 +181,8 @@ case $target in
       guide-tree-locked) tweak="Object.keys(g.items).forEach(function(k) { if (!item.byApi[k].unlocked) g.items[k].requires = [k === 'L9' ? 'L8' : 'L9'] }); g.frontier = []" ;;
       guide-tree-bare) tweak="g.walkthrough = []; g.step = -1; g.tree.chains = []; g.tree.alone = g.tree.alone.concat(['L5', 'L6', 'L7', 'L8', 'L9', 'L15'])" ;;
       guide-tree-narrow) width=820 ;;
-      # A goal that needs seven trophies: wider than the card, it scrolls.
-      guide-tree-wide) tweak="var more = ['L10', 'L11', 'L12', 'L13', 'L14']; g.items.L9.requires = g.items.L9.requires.concat(more); g.tree.chains = g.tree.chains.slice(0, 4).concat(more.map(function(a) { return { api: a, depth: 1 } }), g.tree.chains.slice(4)); g.tree.alone = []" ;;
+      # A goal with twelve leaves: wider even than the full guide column.
+      guide-tree-wide|guide-tree-wide-keys) tweak="var more = ['L0', 'L1', 'L2', 'L3', 'L4', 'L10', 'L11', 'L12', 'L13', 'L14']; g.items.L9.requires = g.items.L9.requires.concat(more); g.tree.chains = g.tree.chains.slice(0, 4).concat(more.map(function(a) { return { api: a, depth: 1 } }), g.tree.chains.slice(4)); g.tree.alone = []" ;;
       # Arrow keys pressed once it has drawn: the focus ring on a track
       # node (each press is one arrow; the first only shows the ring).
       guide-tree-keys) later="['down', 'down', 'down', 'right', 'right'].forEach(function(k) { item.treeMove(k === 'right' ? 1 : 0, k === 'down' ? 1 : 0) })" ;;
@@ -189,6 +193,9 @@ case $target in
       guide-tree) ;;
       guide-tree-*) echo "unknown view: $target" >&2; exit 2 ;;
     esac
+    if [[ $state == guide-tree-wide-keys ]]; then
+      later="var boxes = item.treeBoxes().filter(function(b) { return b.ring.key.indexOf('chain:L9:') === 0 }); boxes.sort(function(a, b) { return a.x - b.x }); item.setTreeKey(boxes[boxes.length - 1])"
+    fi
     guide="JSON.parse(guideSample.text())"; [[ $target == guide-empty || $target == guide-making || $target == guide-failed ]] && guide="({})"
     job="({})"; [[ $target == guide-making ]] && job="JSON.parse(jobSample.text())"
     [[ $target == guide-failed ]] && job="Object.assign(JSON.parse(jobSample.text()), { state: 'failed', line: 'failed: route: opencode: the agent could not reach its model server inside the sandbox; the old guide is unchanged' })"

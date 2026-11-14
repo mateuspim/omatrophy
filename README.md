@@ -170,14 +170,14 @@ Its keys:
 
 | Key | Does |
 | --- | --- |
-| Up, Down, Page Up/Down, Home, End | Move the highlight |
+| Up, Down (outside the Tree), Page Up/Down, Home, End | Move the list highlight |
 | Arrows, Enter (the guide's Tree) | Move between its tiles, stops and trophies; open one |
 | Enter (or Space, when not searching) | Reveal a hidden achievement |
 | Shift+Enter | Reveal all hidden achievements, or hide them again (remembered) |
 | Tab, Shift+Tab | All, Locked, Unlocked, Rare, Difficulty, Guide |
-| Left, Right | Sort: recent, rarest, A–Z, the game's own order (remembered) |
+| Left, Right (outside the Tree) | Sort: recent, rarest, A–Z, the game's own order (remembered) |
 | Any letter | Search; Backspace edits |
-| Escape | Clear the search, then close |
+| Escape | Clear the search or close picked Tree trophy details; press again to close |
 
 From a script:
 

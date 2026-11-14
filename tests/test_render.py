@@ -11,10 +11,25 @@ def render(*args):
     with tempfile.TemporaryDirectory() as home:
         env = dict(os.environ, HOME=home)
         return subprocess.run(['bash', RENDER, *args, os.path.join(home, 'out.png')],
-                              capture_output=True, text=True, env=env)
+                              capture_output=True, text=True, env=env, timeout=5)
 
 
 class ThemeFlag(unittest.TestCase):
+    def test_missing_option_value_exits_instead_of_looping(self):
+        for option in ('--theme', '--font'):
+            with self.subTest(option=option):
+                done = subprocess.run(['bash', RENDER, option], capture_output=True,
+                                      text=True, timeout=5)
+                self.assertEqual(done.returncode, 2)
+                self.assertIn('needs', done.stderr)
+
+    def test_empty_option_value_is_rejected(self):
+        for option in ('--theme', '--font'):
+            with self.subTest(option=option):
+                done = render(option, '', 'guide-tree')
+                self.assertEqual(done.returncode, 2)
+                self.assertIn('needs', done.stderr)
+
     def test_refuses_a_name_that_could_be_a_path(self):
         done = render('--theme', '../../etc', 'guide-tree')
         self.assertEqual(done.returncode, 2)

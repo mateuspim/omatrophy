@@ -5,7 +5,9 @@
 - Guide Tree from the keyboard: while the Tree shows, the arrows move a
   ring between Do now tiles, the story track, the open step's actions,
   chain nodes and the grid, by where each sits, and Enter does what a
-  click does (Left/Right sort only outside the Tree). Needs no restart.
+  click does (Left/Right sort only outside the Tree). Escape closes
+  picked trophy details first; press it again to close the overlay.
+  Space still types into a search while it is being filtered. Needs no restart.
 - Chain cards: rows are as tall as their labels (no empty band under a
   short chain), "needs ..." names the first need in full and counts the
   rest instead of cutting it short, cards fill half or all of the row,
@@ -17,8 +19,9 @@
 - Light themes: rarity percentages and trophy counts stay readable;
   the pale metal colours all but vanished on a light card.
 - `dev/render.sh --theme <name>` renders under another installed theme,
-  and gains `guide-tree-keys`, `guide-tree-wide` and
-  `guide-tree-narrow-<state>` views.
+  and gains `guide-tree-keys`, `guide-tree-wide`, `guide-tree-wide-keys` and
+  `guide-tree-narrow-<state>` views. Missing theme or font values fail
+  with a usage error instead of looping.
 
 ## 0.10.0 - 2026-11-14
 

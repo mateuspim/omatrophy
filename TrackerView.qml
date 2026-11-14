@@ -2722,7 +2722,10 @@ Item {
       Keys.onPressed: function(event) {
         if (event.key === Qt.Key_Escape) {
           if (root.search) root.search = ""
-          else root.closeRequested()
+          else if (root.treeKeys && root.treePick) {
+            root.treePick = ""
+            root.treePickIn = ""
+          } else root.closeRequested()
         } else if (event.key === Qt.Key_Tab) {
           root.cycleFilter(1)
         } else if (event.key === Qt.Key_Backtab) {
@@ -2732,7 +2735,7 @@ Item {
           root.treeMove(event.key === Qt.Key_Right ? 1 : event.key === Qt.Key_Left ? -1 : 0,
                         event.key === Qt.Key_Down ? 1 : event.key === Qt.Key_Up ? -1 : 0)
         } else if (root.treeKeys && !(event.modifiers & Qt.ShiftModifier)
-                   && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space)
+                   && (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || (event.key === Qt.Key_Space && !root.search))
                    && root.treeActivate()) {
           // Done: the focused part acted as on a click.
         } else if (event.key === Qt.Key_Right) {
@@ -4451,7 +4454,7 @@ Item {
                       border.color: root.treePick === modelData && root.treePickIn === "story" ? Commons.Color.accent : Qt.alpha(root.foreground, 0.1)
                       HoverHandler { id: looseHover; cursorShape: Qt.PointingHandCursor }
                       TapHandler { onTapped: root.pickInTree(looseChip.modelData, "story") }
-                    TreeFocus { key: "loose:" + looseChip.modelData; inset: Commons.Style.space(3); radius: looseChip.radius + inset; onActivated: root.pickInTree(looseChip.modelData, "story") }
+                      TreeFocus { key: "loose:" + looseChip.modelData; inset: Commons.Style.space(3); radius: looseChip.radius + inset; onActivated: root.pickInTree(looseChip.modelData, "story") }
                       Row {
                         id: looseRow
                         anchors.centerIn: parent
@@ -4842,7 +4845,7 @@ Item {
         Key { cap: "⇧Enter"; action: "reveal all" }
         Key { cap: "Tab"; action: "filter" }
         Key { visible: !root.treeKeys; cap: "←→"; action: "sort" }
-        Key { cap: "Esc"; action: "close" }
+        Key { cap: "Esc"; action: root.search ? "clear search" : root.treeKeys && root.treePick ? "close details" : "close" }
       }
       Caption {
         anchors.horizontalCenter: parent.horizontalCenter
