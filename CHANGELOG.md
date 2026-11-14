@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.9.0 - 2026-11-14
 
 - Guides: **missable** now means lost for that save. Classify marks one
   missable only when no chapter select, mission replay or free roam
