@@ -1451,12 +1451,22 @@ def count_change(store, app, achs, ach, word):
     if not isinstance(target, int) or isinstance(target, bool) or target < 2:
         raise SystemExit(f'omatrophy: hand count: the guide gives no counter for {ach["name"]}; '
                          'only a guide counter can be counted by hand')
-    current = by_hand.game_hand(store.id, app, achs)['counts'].get(ach['api'], 0)
     try:
-        value = by_hand.parse_count(word, current, target)
+        by_hand.parse_count(word, 0, target)
     except ValueError as e:
         raise SystemExit(f'omatrophy: hand count: {e}')
-    return lambda entry, now: by_hand.set_count(entry, ach['api'], value, now)
+
+    def change(entry, now):
+        # Relative edits must read the previous count under update's lock:
+        # two CLI processes can both validate before either writes.
+        count = by_hand.section(entry, 'counts').get(ach['api'])
+        current = count.get('value', 0) if isinstance(count, dict) else 0
+        if not isinstance(current, int) or isinstance(current, bool) or current < 0:
+            current = 0
+        value = by_hand.parse_count(word, current, target)
+        by_hand.set_count(entry, ach['api'], value, now)
+
+    return change
 
 
 def guide_job(args):

@@ -997,6 +997,39 @@ class PanelJson(unittest.TestCase):
             self.hand('count', 'steam', '20', 'ACH_2', 'clear')
             self.assertEqual(self.hand('steam', '20')['counts'], {})
 
+    def test_hand_relative_counts_read_the_previous_value_under_the_lock(self):
+        import by_hand
+        store = mock.Mock(id='steam')
+        store.name = 'Steam'  # Mock(name=...) names the mock, not .name
+        ach = {'api': 'A', 'name': 'Alpha', 'unlocked': False, 'progress': None}
+        guide = {'items': {'A': {'counter': {'target': 10}}}}
+        with tempfile.TemporaryDirectory() as folder, \
+                mock.patch.dict(os.environ, {'XDG_DATA_HOME': folder}), \
+                mock.patch('guides.guide_answer', return_value=guide):
+            # Both processes validate before either has acquired update's
+            # lock. A captured value here would lose the second increment.
+            first = omatrophy.count_change(store, '1', [ach], ach, '+1')
+            second = omatrophy.count_change(store, '1', [ach], ach, '+1')
+            by_hand.update('steam', '1', first)
+            by_hand.update('steam', '1', second)
+            self.assertEqual(by_hand.game_hand('steam', '1', [ach])['counts'], {'A': 2})
+            for bad in (True, -3, 'junk'):
+                by_hand.update('steam', '1', lambda e, now: e.update(counts={'A': {'value': bad}}))
+                by_hand.update('steam', '1', first)
+                self.assertEqual(by_hand.game_hand('steam', '1', [ach])['counts'], {'A': 1})
+
+    def test_hand_count_refuses_a_store_counter_and_unlocked_trophies(self):
+        store = mock.Mock(id='steam')
+        store.name = 'Steam'  # Mock(name=...) names the mock, not .name
+        ach = {'api': 'A', 'name': 'Alpha', 'unlocked': False, 'progress': {'value': 1, 'max': 10}}
+        with self.assertRaises(SystemExit) as error:
+            omatrophy.hand_change('count', store, '1', [ach], ['A', '+1'])
+        self.assertIn('Steam counts Alpha itself', str(error.exception))
+        ach['unlocked'] = True
+        with self.assertRaises(SystemExit) as error:
+            omatrophy.hand_change('count', store, '1', [ach], ['A', '+1'])
+        self.assertIn('already unlocked', str(error.exception))
+
     def test_game_detail_without_cached_achievements_says_what_to_do(self):
         with FakeLibrary():
             with self.assertRaises(SystemExit) as e:
