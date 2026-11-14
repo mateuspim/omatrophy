@@ -105,6 +105,10 @@ class GuideAnswer(unittest.TestCase):
         self.assertEqual(out['sections']['route'], 'Lantern first, then stars.')
         self.assertEqual(out['generated'], 1792990000)
 
+    def test_a_guide_without_stacks_says_nothing_about_them(self):
+        out = guides.guide_answer('steam', '1', ACHS, self.folder())
+        self.assertEqual((out['stacks'], out['stacks_verified']), (None, False))
+
     def test_walkthrough_steps_map_names_and_find_the_current_step(self):
         plan = {'walkthrough': [
             {'title': 'Act 1', 'text': 'Go.', 'achievements': ['a', 'gone'], 'missables': ['a']},
@@ -423,6 +427,21 @@ class Import(unittest.TestCase):
     def test_not_a_folder(self):
         with self.assertRaises(SystemExit):
             guides.import_guides('/nonexistent-omatrophy-folder')
+
+
+
+class DifficultyStacking(unittest.TestCase):
+    def test_one_no_outweighs_the_yeses(self):
+        items = {'a': {'stacks': True}, 'b': {'stacks': False, 'unverified': ['stacks']}, 'c': {'stacks': None}}
+        self.assertEqual(guides.difficulty_stacking(items), {'stacks': False, 'stacks_verified': False})
+
+    def test_yes_is_verified_when_a_quote_backs_one(self):
+        items = {'a': {'stacks': True, 'unverified': ['stacks']}, 'b': {'stacks': True}, 'c': {}}
+        self.assertEqual(guides.difficulty_stacking(items), {'stacks': True, 'stacks_verified': True})
+
+    def test_no_answer_is_none(self):
+        self.assertEqual(guides.difficulty_stacking({'a': {}, 'b': {'stacks': 'yes'}}),
+                         {'stacks': None, 'stacks_verified': False})
 
 
 if __name__ == '__main__':

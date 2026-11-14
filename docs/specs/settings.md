@@ -19,6 +19,7 @@ bar panel).
 | `rarest` | The Now tab's last rarest-unlocks list: `"ever"`, `"month"`, `"platinum"`. Written when you pick one. | `"ever"` |
 | `settings-section` | The Settings tab's last section: `"overview"`, `"toasts"`, `"now"`, `"guides"`, `"stores"`. Written when you pick one. | `"overview"` |
 | `tracker-sort` | `"recent"`, `"rarity"`, `"name"`, `"game"` (the store's own order) | `"recent"` |
+| `difficulty-reminder` | `true`, `false`: when a game with difficulty achievements left starts, a card names the settings they need, once per game. Settings > Toasts. | `true` |
 | `reveal-hidden` | `true`, `false`: the tracker shows hidden achievements' names and tips without a hover. Written by the tracker's Reveal all and Shift+Enter. | `false` |
 | `guide-key` | The key that opens the running game's guide over it, like `"SUPER + CTRL + G"`; `""` binds none. Written by Settings > Guides (Install, Change, Remove) and `omatrophy.py set guide-key <key>\|none` ([ADR 18](../adr/0018-bind-the-guide-key-at-runtime.md)). | `""` |
 | `community` | `true`, `false`: fill in games that never ran here from your public Steam profile (ADR 11) | `false` |

@@ -44,6 +44,8 @@ Column {
   property string chimes: "omatrophy"
   property string glass: "frosted"
   property bool community: false
+  // The difficulty reminder when a game starts (config `difficulty-reminder`).
+  property bool difficultyReminder: true
   // The Steam profile backfill's latest line, from its status.json
   // (stores/steam_community.py); {} before the first run.
   property var backfill: ({})
@@ -388,6 +390,7 @@ Column {
     if (key === "position") position = value
     if (key === "glass") glass = value
     if (key === "community") community = value === "on"
+    if (key === "difficulty-reminder") difficultyReminder = value === "on"
     if (key === "guide-web") guideWeb = value === "on"
     if (key === "guide-jail") guideJail = value === "on"
     if (key === "guide-agent") guideAgent = value === "default" ? "" : value
@@ -665,6 +668,7 @@ Column {
       if (c.chimes) root.chimes = c.chimes
       if (c.glass) root.glass = c.glass
       root.community = c.community === true
+      root.difficultyReminder = c["difficulty-reminder"] !== false
       root.guideAgent = typeof c["guide-agent"] === "string" ? c["guide-agent"] : ""
       root.guideModels = c["guide-models"] && typeof c["guide-models"] === "object" ? c["guide-models"] : {}
       root.guideWeb = c["guide-web"] !== false
@@ -4193,6 +4197,20 @@ Column {
           ]
           value: root.sound ? root.chimes : "off"
           onPicked: value => root.set("sound", value)
+        }
+      }
+
+      // A card when a game with difficulty achievements left starts, once
+      // per game, naming the setting to start the new save on.
+      SettingRow {
+        label: "DIFFICULTY"
+        Chips {
+          options: [
+            { value: "on", label: "Remind at launch" },
+            { value: "off", label: "Off" }
+          ]
+          value: root.difficultyReminder ? "on" : "off"
+          onPicked: value => root.set("difficulty-reminder", value)
         }
       }
 

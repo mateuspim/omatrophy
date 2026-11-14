@@ -1323,8 +1323,10 @@ class Settings(unittest.TestCase):
                 omatrophy.set_option('games-sort', 'closest')
                 omatrophy.set_option('rarest', 'platinum')
                 omatrophy.set_option('games-difficulty', 'on')
+                omatrophy.set_option('difficulty-reminder', 'off')
             with open(f'{home}/.config/omatrophy/config.json') as f:
-                self.assertEqual(json.load(f), {'games-sort': 'closest', 'rarest': 'platinum', 'games-difficulty': True})
+                self.assertEqual(json.load(f), {'games-sort': 'closest', 'rarest': 'platinum', 'games-difficulty': True,
+                                                'difficulty-reminder': False})
             with self.assertRaises(SystemExit):
                 omatrophy.set_option('rarest', 'yesterday')
 
@@ -1579,7 +1581,7 @@ class Qml(unittest.TestCase):
         # Cards are built from their text (FreshObject.qml, ADR 10) and stay
         # standalone so each reads on its own.
         siblings = {n[:-4] for n, _ in self.qml()}
-        for name in ('TrophyToast.qml', 'PlatinumCard.qml', 'StylePicker.qml', 'TrackerView.qml'):
+        for name in ('TrophyToast.qml', 'PlatinumCard.qml', 'DifficultyCard.qml', 'StylePicker.qml', 'TrackerView.qml'):
             text = dict(self.qml())[name]
             for other in siblings - {name[:-4]}:
                 self.assertNotRegex(text, rf'\b{other}\s*\{{', f'{name} uses {other}')
@@ -1612,3 +1614,76 @@ class LocalImages(unittest.TestCase):
         self.assertEqual(out['next'][0], {'icon': lack, 'icon_locked': 'https://evil.example/x.jpg'})
         self.assertEqual(out['hero'], 'file:///already/local.jpg')
         self.assertEqual(missing, [lack])
+
+
+class LaunchReminder(unittest.TestCase):
+    class Fake:
+        id, name = 'steam', 'Steam'
+        def __init__(self, achs, runs=()):
+            self.achs, self.runs = achs, list(runs)
+        def achievements(self, game):
+            return self.achs
+        def running(self):
+            return self.runs.pop(0) if self.runs else None
+        def game_name(self, game):
+            return 'G'
+        def art(self, game):
+            return {'header': 'h.jpg', 'hero': ''}
+
+    ACHS = [dict(ach('a'), desc='Finish on Nightmare.'), dict(ach('b'), desc='Finish on Normal or higher.'),
+            dict(ach('c', hidden=True), desc='Finish on Insane.'), ach('d')]
+
+    def setUp(self):
+        d = tempfile.TemporaryDirectory()
+        self.addCleanup(d.cleanup)
+        patch = mock.patch.object(omatrophy, 'reminded_path', return_value=os.path.join(d.name, 'reminded.json'))
+        patch.start()
+        self.addCleanup(patch.stop)
+        # No guide: guide_answer reads an empty data folder of the test's own.
+        env = mock.patch.dict(os.environ, {'XDG_DATA_HOME': d.name})
+        env.start()
+        self.addCleanup(env.stop)
+
+    def test_the_event_names_the_open_settings_and_keeps_hidden_ones_secret(self):
+        ev = omatrophy.difficulty_event(self.Fake(self.ACHS), '7', self.ACHS)
+        self.assertEqual(ev, {'type': 'difficulty', 'store': 'steam', 'app': '7', 'game': 'G',
+                              'settings': ['Nightmare', 'Normal+'], 'count': 2, 'header': 'h.jpg',
+                              'stacks': None, 'stacks_verified': False})
+        self.assertEqual(omatrophy.difficulty_event(self.Fake(self.ACHS), '7', self.ACHS, reveal=True)['count'], 3)
+        self.assertIsNone(omatrophy.difficulty_event(self.Fake([ach('d')]), '7', [ach('d')]))
+
+    def test_a_game_is_reminded_of_once(self):
+        store = self.Fake(self.ACHS)
+        self.assertEqual(omatrophy.launch_reminder(store, '7', {})['settings'], ['Nightmare', 'Normal+'])
+        self.assertIsNone(omatrophy.launch_reminder(store, '7', {}))
+        self.assertIsNotNone(omatrophy.launch_reminder(store, '8', {}))
+
+    def test_switched_off_or_nothing_to_say_stays_quiet_and_unrecorded(self):
+        self.assertIsNone(omatrophy.launch_reminder(self.Fake(self.ACHS), '7', {'difficulty-reminder': False}))
+        self.assertIsNone(omatrophy.launch_reminder(self.Fake([ach('d')]), '7', {}))
+        # Neither counted as shown: the reminder still comes later.
+        self.assertIsNotNone(omatrophy.launch_reminder(self.Fake(self.ACHS), '7', {}))
+
+    def test_new_launch_is_a_game_that_was_not_running(self):
+        self.assertEqual(omatrophy.new_launch(None, {'game': '7', 'since': 1}), '7')
+        self.assertEqual(omatrophy.new_launch('6', {'game': '7', 'since': 1}), '7')
+        self.assertIsNone(omatrophy.new_launch('7', {'game': '7', 'since': 1}))
+        self.assertIsNone(omatrophy.new_launch('7', None))
+
+    def test_the_watcher_reminds_at_a_launch_but_not_of_a_game_already_running(self):
+        class Stop(Exception):
+            pass
+        ticks = []
+        def sleep(_):
+            if len(ticks) == 3:
+                raise Stop
+            ticks.append(1)
+        # Running at start (not a launch), then quit, then started again.
+        store = self.Fake(self.ACHS, runs=[{'game': '7', 'since': 1}, {'game': '7', 'since': 1}, None,
+                                           {'game': '7', 'since': 9}])
+        out = io.StringIO()
+        with redirect_stdout(out), self.assertRaises(Stop):
+            omatrophy.watch_launches([store], sleep=sleep)
+        lines = [json.loads(line) for line in out.getvalue().splitlines()]
+        self.assertEqual([(e['type'], e['app']) for e in lines], [('difficulty', '7')])
+

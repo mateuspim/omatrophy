@@ -39,7 +39,7 @@ SITES = ('PowerPyx (powerpyx.com)', 'TrueAchievements (trueachievements.com)',
 SITE_HOSTS = ('powerpyx.com', 'trueachievements.com', 'playstationtrophies.org', 'xboxachievements.com',
               'steamcommunity.com', 'fandom.com')
 # Item fields the view marks "(unverified)" when no quote backs the item.
-CLAIMS = ('time', 'missable', 'counter', 'tips', 'combine_with', 'requires')
+CLAIMS = ('time', 'missable', 'counter', 'tips', 'combine_with', 'requires', 'stacks')
 WORD = re.compile(r"[a-z0-9']+")
 STOPWORDS = set('the and for with that this from your you are all any one into over have has its not but get '
                 'got can will each every than then them they their what when where which while who also out '
@@ -472,6 +472,11 @@ def check_item(raw, names):
             item['requires'].append(r)
         else:
             errors.append(f'{name}: requires names {r!r}, which is not an achievement here')
+    # Whether a run on a harder setting also unlocks this one (a "beat it
+    # on Normal" that a Nightmare run gives too): it decides how many runs
+    # the difficulty achievements take. Only a yes or no; anything else
+    # is "the sources don't say".
+    item['stacks'] = raw['stacks'] if isinstance(raw.get('stacks'), bool) else None
     item['tips'] = raw.get('tips').strip() if isinstance(raw.get('tips'), str) else ''
     item['dlc'] = raw.get('dlc').strip() if isinstance(raw.get('dlc'), str) else ''
     item['cites'] = check_cites(raw.get('cites'))
@@ -769,7 +774,8 @@ def verify_cites(item, sources, pieces, given=()):
     # Only claims the item makes can be unverified: a model also lists
     # fields it left empty, or judgments like difficulty, which would only
     # be noise in the view.
-    claimed = [f for f in CLAIMS if item.get(f) not in (None, '', [], False)]
+    # `stacks: false` is a claim too ("each setting needs its own run").
+    claimed = [f for f in CLAIMS if item.get(f) not in (None, '', [], False) or (f == 'stacks' and item.get(f) is False)]
     said = set(item.get('unverified', []))
     if 'missable_note' in said:
         said.add('missable')
@@ -811,6 +817,8 @@ def table_line(name, item, unlocked, desc=''):
         parts.append('combines with ' + ', '.join(item['combine_with']))
     if item.get('requires'):
         parts.append('needs first ' + ', '.join(item['requires']))
+    if isinstance(item.get('stacks'), bool):
+        parts.append('a harder setting counts too' if item['stacks'] else 'needs a run on this setting itself')
     if item.get('dlc'):
         parts.append(f'DLC {item["dlc"]}')
     return f'- {name}{" [unlocked]" if unlocked else ""}: ' + '; '.join(parts) + (f' — {desc}' if desc else '')

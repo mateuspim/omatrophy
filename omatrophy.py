@@ -3,7 +3,7 @@
 
 Usage:
   omatrophy.py watch                  print one JSON event per new unlock (the shell service runs this)
-  omatrophy.py test [kind]            queue a fake event for a running watcher: bronze, silver, gold, platinum
+  omatrophy.py test [kind]            queue a fake event for a running watcher: bronze, silver, gold, platinum, difficulty
   omatrophy.py status                 progress of every game with achievements, as JSON
   omatrophy.py cabinet                trophy totals and the games nearest platinum, as JSON
   omatrophy.py now                    what is playing, recent games, platinums and totals, as JSON (the bar panel)
@@ -96,8 +96,97 @@ def platinum_event(store, game, achs):
             'hero': art['hero'], 'header': art['header']}
 
 
+EMIT_LOCK = threading.Lock()
+
+
 def emit(ev):
-    print(json.dumps(ev), flush=True)
+    # The launch watcher emits from its own thread: one write per line,
+    # under a lock, so two events never interleave mid-line.
+    with EMIT_LOCK:
+        sys.stdout.write(json.dumps(ev) + '\n')
+        sys.stdout.flush()
+
+
+def difficulty_event(store, game, achs, reveal=False):
+    """The reminder the shell shows when a game with difficulty
+    achievements left starts: the settings they need and, from its guide,
+    whether a harder run counts for the easier ones. None when nothing is
+    left to decide."""
+    settings = open_difficulties(achs, reveal)
+    if not settings:
+        return None
+    count = sum(1 for a in achs if not a['unlocked'] and (reveal or not a.get('hidden'))
+                and difficulty.setting(a['name'], a['desc']))
+    stacking = guide_stacking(store.id, game, achs)
+    return {'type': 'difficulty', 'store': store.id, 'app': game, 'game': store.game_name(game),
+            'settings': settings, 'count': count, 'header': store.art(game)['header'], **stacking}
+
+
+def guide_stacking(store_id, game, achs):
+    """The guide's word on whether difficulty achievements stack; a
+    missing or broken guide says nothing."""
+    import guides
+    try:
+        answer = guides.guide_answer(store_id, game, achs)
+    except Exception:
+        answer = {}
+    return {'stacks': answer.get('stacks'), 'stacks_verified': bool(answer.get('stacks_verified'))}
+
+
+def reminded_path():
+    return f'{STATE}/reminded.json'
+
+
+def launch_reminder(store, game, cfg):
+    """The difficulty reminder for a game that just started, once per
+    game: it's for picking the setting of a new save, so a game already
+    reminded of stays quiet. None when switched off, already shown, or
+    with nothing to say."""
+    if cfg.get('difficulty-reminder') is False:
+        return None
+    key = game_key(store.id, game)
+    shown = read_json(reminded_path(), [])
+    shown = shown if isinstance(shown, list) else []
+    if key in shown:
+        return None
+    achs, _ = unlocked_set(store, game)
+    ev = difficulty_event(store, game, achs, cfg.get('reveal-hidden') is True)
+    # Kept only once shown: a game whose achievements aren't on disk yet
+    # (its first launch ever) gets its reminder on a later start.
+    if ev:
+        write_json(reminded_path(), shown + [key])
+    return ev
+
+
+def new_launch(previous, run):
+    """The game id that just started, given the one running before (or
+    None) and `running()` now; None when nothing new started."""
+    game = run['game'] if run else None
+    return game if game and game != previous else None
+
+
+LAUNCH_POLL = 5
+
+
+def watch_launches(found, sleep=time.sleep):
+    """Shows the difficulty reminder when a game starts. A game already
+    running when the watcher starts (a shell restart mid-game) is no
+    launch. In a thread of its own: reading achievements and names can
+    take a while and must never hold up an unlock."""
+    playing = {s.id: (s.running() or {}).get('game') for s in found}
+    while True:
+        sleep(LAUNCH_POLL)
+        for s in found:
+            try:
+                run = s.running()
+                game = new_launch(playing[s.id], run)
+                playing[s.id] = run['game'] if run else None
+                ev = game and launch_reminder(s, game, read_json(config_path(), {}))
+            except Exception as e:
+                print(f'omatrophy: launch reminder failed: {e}', file=sys.stderr, flush=True)
+                continue
+            if ev:
+                emit(ev)
 
 
 def unlocked_set(store, game):
@@ -363,6 +452,7 @@ def watch(interval=1.0):
     # must never hold up an unlock.
     threading.Thread(target=background, args=(found, [(s, g) for s in found for g in tokens[s.id]]),
                      daemon=True).start()
+    threading.Thread(target=watch_launches, args=(found,), daemon=True).start()
     while True:
         time.sleep(interval)
         inbox = drain_inbox(inbox)
@@ -391,6 +481,12 @@ def sample_event(kind, store, game, achs):
         ev['first'] = ev['first'] or int(time.time()) - 86400 * 12
         ev['last'] = ev['last'] or int(time.time())
         return ev
+    if kind == 'difficulty':
+        # A made-up set when the game has none, so any game can show it.
+        return difficulty_event(store, game, achs) or {
+            'type': 'difficulty', 'store': store.id, 'app': game, 'game': store.game_name(game),
+            'settings': ['Nightmare', 'Hard+'], 'count': 3, 'header': store.art(game)['header'],
+            'stacks': True, 'stacks_verified': True}
     ach = next((a for a in achs if a['unlocked']), achs[0])
     ev = unlock_event(store, game, ach, achs)
     if kind in ('rare', 'gold'):
@@ -1166,6 +1262,8 @@ SETTINGS = {'position': ('top-center', 'top-left', 'top-right'),
             # The panel's last picks, so the next open shows the same view.
             'games-sort': ('recent', 'closest', 'name'),
             'games-difficulty': ('on', 'off'),
+            # The difficulty reminder when a game starts; on unless switched off.
+            'difficulty-reminder': ('on', 'off'),
             'rarest': ('ever', 'month', 'platinum'),
             'settings-section': ('overview', 'toasts', 'now', 'guides', 'stores'),
             'community': ('on', 'off'),
@@ -1177,7 +1275,7 @@ SETTINGS = {'position': ('top-center', 'top-left', 'top-right'),
 NOW_SECTIONS = ('metals', 'recent', 'rarest', 'shelf')
 SETTINGS.update({f'now-{name}': ('on', 'off') for name in NOW_SECTIONS})
 # Settings stored as true/false rather than the word given.
-SWITCHES = {'community', 'guide-web', 'guide-jail', 'reveal-hidden', 'games-difficulty'} | {f'now-{name}' for name in NOW_SECTIONS}
+SWITCHES = {'community', 'guide-web', 'guide-jail', 'reveal-hidden', 'games-difficulty', 'difficulty-reminder'} | {f'now-{name}' for name in NOW_SECTIONS}
 
 
 def set_option(key, value):
@@ -1211,6 +1309,7 @@ def set_option(key, value):
                          f'       omatrophy.py set tracker-sort {"|".join(SETTINGS["tracker-sort"])}\n'
                          f'       omatrophy.py set games-sort {"|".join(SETTINGS["games-sort"])}\n'
                          f'       omatrophy.py set games-difficulty on|off\n'
+                         f'       omatrophy.py set difficulty-reminder on|off\n'
                          f'       omatrophy.py set rarest {"|".join(SETTINGS["rarest"])}\n'
                          f'       omatrophy.py set community on|off\n'
                          f'       omatrophy.py set reveal-hidden on|off\n'

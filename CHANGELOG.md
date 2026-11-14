@@ -17,6 +17,17 @@
   settings, exact ones first and floors marked ("Normal+": Normal or
   higher). The toggle is remembered (`set games-difficulty on|off`).
   `games` gives each game a `difficulty` list. Needs no restart.
+- A **difficulty reminder** when a game with difficulty achievements
+  left starts: a card names the settings they need ("Start on
+  Nightmare"), once per game, so the first save starts on the right one.
+  Off in Settings > Toasts > Difficulty (`set difficulty-reminder off`);
+  `test difficulty` shows one. A new `difficulty` event line
+  (`DifficultyCard.qml`). Needs `omarchy restart shell`.
+- Guides say whether difficulty achievements **stack**: classify marks
+  each one `stacks` (a harder run also unlocks it, or it needs its own
+  run), quoted like any claim. The tracker's Difficulty filter and the
+  reminder say it. Maker 6: earlier guides show "older maker"; make one
+  again to get it.
 
 ## 0.7.1 - 2026-11-14
 

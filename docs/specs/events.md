@@ -46,3 +46,23 @@ The game's last achievement just unlocked. Always follows its `unlock` line.
 | `first`, `last` | number | Unix seconds of the first and last unlock (0 when unknown). |
 | `hero` | string | Wide art (`file://` or URL) behind the card, or `""`. |
 | `header` | string | Banner URL, or `""`. |
+
+## `difficulty`
+
+A game just started (no game of that store was running a moment before)
+and has locked achievements that need a difficulty setting. Once per game:
+the watcher keeps the games it reminded of in
+`~/.local/state/omatrophy/reminded.json`. Not sent with
+`difficulty-reminder` off, for a game already running when the watcher
+started, or for a hidden achievement's setting unless `reveal-hidden` is
+on.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `type` | `"difficulty"` | |
+| `store`, `app`, `game` | string | As above. |
+| `settings` | string[] | As `games` gives `difficulty`: each setting once, exact ones first, floors marked `+`. |
+| `count` | number | Locked achievements that need one. |
+| `header` | string | Banner URL, or `""`. |
+| `stacks` | bool or null | The guide's word: `true` when a harder run also counts for the easier settings, `false` when a setting needs its own run, `null` with no guide or no word. |
+| `stacks_verified` | bool | A quote backs `stacks`. |

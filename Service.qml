@@ -5,8 +5,9 @@ import Quickshell.Io
 import Quickshell.Wayland
 import qs.Commons as Commons
 
-// Runs omatrophy.py, which prints one JSON line per new Steam unlock, and
-// shows each as a card on the focused monitor. The window sits on the
+// Runs omatrophy.py, which prints one JSON line per new Steam unlock (and a
+// difficulty reminder when a game starts), and shows each as a card on the
+// focused monitor. The window sits on the
 // Overlay layer like Omarchy's own notifications, so it lands above
 // fullscreen games, and its mask is empty, so it never takes a click or focus.
 //
@@ -36,7 +37,7 @@ Scope {
   readonly property var tiers: ["bronze", "silver", "gold", "platinum"]
 
   function enqueue(ev) {
-    if (ev.type !== "unlock" && ev.type !== "platinum") return
+    if (["unlock", "platinum", "difficulty"].indexOf(ev.type) < 0) return
     // `tier` names the chime file; anything else falls back to bronze.
     if (tiers.indexOf(ev.tier) < 0) ev.tier = "bronze"
     // A burst (a backfilled library, a flood in the inbox) shows the first
@@ -162,7 +163,7 @@ Scope {
 
         function show() {
           if (!root.current) return
-          var item = load(root.current.type === "platinum" ? "PlatinumCard.qml" : "TrophyToast.qml")
+          var item = load(({ platinum: "PlatinumCard.qml", difficulty: "DifficultyCard.qml" })[root.current.type] || "TrophyToast.qml")
           // A card that doesn't build would stall the queue; skip to the next.
           if (!item) { Qt.callLater(root.next); return }
           item.edge = root.position

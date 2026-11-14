@@ -41,6 +41,11 @@ For each achievement to classify, give:
   after the story. Only when an excerpt says so, with a cite; else `[]`.
   Never the chapters played on the way, and never a "same run" partner:
   those go in `combine_with`.
+- `stacks`: only for an achievement that needs a difficulty setting
+  ("finish the game on Normal"): `true` when an excerpt says a run on a
+  harder setting also unlocks it (beating Hard gives the Normal and Easy
+  ones too), `false` when it says that setting needs its own run, with a
+  cite either way; else `null`. `null` for every other achievement.
 - `tips`: two to four plain sentences a player can act on: where and
   when (chapter, mission, area), how to do it, and what to watch out
   for. Never just "unlocks through the story": say which mission, or
@@ -59,5 +64,5 @@ For each achievement to classify, give:
 <items>
 [{"name": "...", "phase": "quick", "difficulty": 1, "time": "~5 min", "minutes": [5, 5],
   "missable": false, "missable_note": "", "counter": null, "combine_with": [], "requires": [],
-  "tips": "...", "dlc": "", "cites": [{"source": "S1.2", "quote": "..."}], "unverified": []}]
+  "stacks": null, "tips": "...", "dlc": "", "cites": [{"source": "S1.2", "quote": "..."}], "unverified": []}]
 </items>
