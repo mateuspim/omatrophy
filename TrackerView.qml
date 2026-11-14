@@ -2184,7 +2184,8 @@ Item {
     // wider takes the whole row, so cards line up instead of leaving
     // ragged space at the right.
     readonly property real half: (maxWidth - gap) / 2
-    readonly property bool wide: layout.cols * Commons.Style.space(96) + pad * 2 > half
+    // Half a narrow column cut the goal's name short ("Glassbl...").
+    readonly property bool wide: layout.cols * Commons.Style.space(96) + pad * 2 > half || half < Commons.Style.space(210)
     readonly property real slot: Math.max(minSlot, Math.min(Commons.Style.space(128), (width - pad * 2 - ringRoom * 2) / Math.max(1, layout.cols)))
     readonly property real nodeSize: Commons.Style.space(36)
     readonly property real rowGap: Commons.Style.space(18)
