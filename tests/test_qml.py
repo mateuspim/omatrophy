@@ -41,5 +41,50 @@ class Views(unittest.TestCase):
                                  f'{name}:{i + 2}: {a.group(2) if a else ""} set twice')
 
 
+def own_blocks(source, opener):
+    """(line, own text) of every block opened by the regex `opener` (ending
+    in `{`): the text at the block's own depth, without nested objects, so
+    a child's property never counts for its parent."""
+    for m in re.finditer(opener, source, re.M):
+        depth, i, own = 1, m.end(), []
+        while depth and i < len(source):
+            ch = source[i]
+            depth += (ch == '{') - (ch == '}')
+            if depth == 1 and ch != '}':
+                own.append(ch)
+            i += 1
+        yield source.count('\n', 0, m.start()) + 1, ''.join(own)
+
+
+class TextFormats(unittest.TestCase):
+    """Game names, achievement text, guide tips and agent prose come from
+    stores, web pages and the user's agent. A Text left on AutoText renders
+    a string that looks like HTML, and `<img src="http://...">` in it is
+    fetched as the view shows: a beacon, or a fake line in the panel."""
+
+    def qml_files(self):
+        return sorted(n for n in os.listdir(HERE) if n.endswith('.qml'))
+
+    def test_every_text_sets_its_format(self):
+        for name in self.qml_files():
+            for line, own in own_blocks(text(name), r'^\s*(?:component\s+\w+\s*:\s*)?Text\s*\{'):
+                self.assertIn('textFormat:', own, f'{name}:{line}: a Text without textFormat renders HTML')
+
+    def test_only_prose_is_markdown_and_it_goes_through_safe_markdown(self):
+        for name in self.qml_files():
+            source = text(name)
+            for m in re.finditer(r'textFormat:\s*\w+\.(\w+)', source):
+                if m.group(1) in ('PlainText',):
+                    continue
+                self.assertEqual((name, m.group(1)), ('TrackerView.qml', 'MarkdownText'),
+                                 f'{name}: {m.group(1)} outside the guide prose')
+        source = text('TrackerView.qml')
+        for line, own in own_blocks(source, r'^\s*Prose\s*\{'):
+            self.assertRegex(own, r'text:\s*.*root\.safeMarkdown\(', f'TrackerView.qml:{line}: prose not made safe')
+        safe = re.search(r'function safeMarkdown\(text\) \{(.*?)\n  \}', source, re.S).group(1)
+        self.assertIn('/!+(?=\\[)/g', safe, 'safeMarkdown must drop every ! before a [ (images)')
+        self.assertIn('<img', safe)
+
+
 if __name__ == '__main__':
     unittest.main()

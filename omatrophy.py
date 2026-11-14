@@ -71,7 +71,7 @@ from concurrent.futures import ThreadPoolExecutor
 import difficulty
 import stores
 import by_hand
-from stores.base import CACHE, STATE, cached, read_json, trusted_url, write_json
+from stores.base import CACHE, STATE, cached, read_json, shown_image, trusted_url, write_json
 
 INBOX = f'{STATE}/inbox.jsonl'
 # An unlock older than this when its file changes is a cache sync of past
@@ -107,7 +107,7 @@ def platinum_event(store, game, achs):
     art = store.art(game)
     return {'type': 'platinum', 'store': store.id, 'app': game, 'game': store.game_name(game),
             'total': len(achs), 'first': min(times) if times else 0, 'last': max(times) if times else 0,
-            'hero': art['hero'], 'header': art['header']}
+            'hero': shown_image(art['hero']), 'header': shown_image(art['header'])}
 
 
 EMIT_LOCK = threading.Lock()
@@ -1215,6 +1215,10 @@ def local_images(value, missing):
         return value
     out = {}
     for key, v in value.items():
+        if key in IMAGE_KEYS and isinstance(v, str):
+            # A URL off the stores' hosts never reaches the panel, which
+            # would load it as given.
+            v = shown_image(v)
         if key in IMAGE_KEYS and isinstance(v, str) and trusted_url(v):
             path = f'{CACHE}/{image_name(v)}'
             if os.path.exists(path):

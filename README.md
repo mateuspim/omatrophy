@@ -103,7 +103,7 @@ OmaTrophy runs inside `omarchy-shell` as your user. It reads Steam's local
 achievement cache and, for GOG, the database Heroic's Comet service keeps, reads whether Omarchy's Do Not Disturb is on, keeps its settings and a small cache in its own folders,
 and calls Steam's public endpoints for rarity, game names and art when a
 toast shows, the bar panel opens or the watcher starts (game names, once
-each). GOG needs no network at all. Save image writes a PNG to your
+each). GOG makes no API calls: only its icons and art come from GOG's image hosts. Save image writes a PNG to your
 pictures folder (fetching the game's art once if it isn't cached yet); it uploads nothing. No root, no API key, no login. Making a 100%
 guide is the one exception, and only when you ask: it runs your own coding
 agent, locked to web search and fetch, through its own login. Details in

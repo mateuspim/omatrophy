@@ -84,6 +84,10 @@ what OmaTrophy does with that access:
 
 ## Untrusted input
 
+The review before 1.0.0, with what it found and fixed, is in
+[docs/security-review-1.0.md](docs/security-review-1.0.md).
+
+
 Steam's files, its web pages and the shell's IPC are treated as untrusted:
 
 - Binary stats files are read up to 64 MB and parsed with bounded nesting;
@@ -94,8 +98,6 @@ Steam's files, its web pages and the shell's IPC are treated as untrusted:
 - App, account and GOG product and client ids must be ASCII digits before
   they reach a file path,
   a URL or a command; anything else is ignored.
-- Every piece of text the views show (game names, achievement names and
-  descriptions) is drawn as plain text, never rich text.
 - Icon URLs from profile pages are kept only when they are HTTPS on
   Steam's hosts.
 - Files are written to a temporary file in the same folder, then renamed
@@ -105,13 +107,33 @@ Steam's files, its web pages and the shell's IPC are treated as untrusted:
 - A guide is the agent's text: its answers are parsed only as JSON between
   stage tags and checked field by field; achievement names it gives must
   be the game's own; prose is shown as Markdown whose links open only when
-  they are `https`, and images in it are not loaded from the network.
+  they are `https`. Images in it become plain links before it shows (Qt's
+  Markdown view would fetch them, plain http included), both in
+  `guides.py` and in the tracker. The prompts tell the agent that pages
+  and excerpts are material to quote, never instructions; a page can
+  still steer what the agent writes, which is why every claim must quote
+  a source OmaTrophy fetched itself.
+- Pages the agent cites are fetched by OmaTrophy only over `https` and
+  only from the public internet: `localhost`, loopback, LAN, link-local
+  (cloud metadata), CGNAT and reserved addresses are refused, checked on
+  the address the connection reached, so DNS tricks and redirects are
+  covered.
+- `guide import` reads only plain files from the folder you give (no
+  links, at most 16 MB each), and every file OmaTrophy writes in its own
+  folders goes through a temporary file and a rename.
+- Every view draws text as plain text except the guide prose (Markdown,
+  above): a game or achievement name that looks like HTML is shown as
+  written, never rendered (`tests/test_qml.py` checks every `Text`).
+- Image URLs reach the shell only when they are local files or `https` on
+  the stores' hosts; one from another program's files (Comet, Heroic) on
+  any other host is dropped, since the shell's images load what they are
+  given.
 
 Local processes running as you can already do anything you can; within
 that, the IPC target `pym.omatrophy` (`omarchy-shell shell summon
 pym.omatrophy '{...}'`) opens the tracker for a game, and the test inbox
-(`~/.local/state/omatrophy/inbox.jsonl`) forwards only `unlock` and
-`platinum` events, at most 64 KB a line; the shell plays only the four
+(`~/.local/state/omatrophy/inbox.jsonl`) forwards only events whose
+type has a card in `cards.json`, at most 64 KB a line; the shell plays only the four
 bundled tier chimes and queues at most 20 cards.
 
 ## Windows and input

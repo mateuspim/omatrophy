@@ -1128,8 +1128,13 @@ Item {
 
   // Guide prose is the agent's (or an imported file's) text: images, as
   // Markdown or HTML, are dropped so showing it fetches nothing.
+  // Qt's MarkdownText fetches an image's URL (http too) the moment the
+  // prose shows; the prose is the agent's or a shared guide's. Every image
+  // becomes a link (`![x](u)` -> `[x](u)`, reference images too), which
+  // opens only on a click and only for https. guides.py does the same; a
+  // pattern for whole images missed `![a [b] c](u)` and `![x][ref]`.
   function safeMarkdown(text) {
-    return String(text || "").replace(/!\[[^\]]*\]\([^)]*\)/g, "").replace(/<img\b[^>]*>/gi, "")
+    return String(text || "").replace(/<img\b[^>]*>?/gi, "").replace(/!+(?=\[)/g, "")
   }
 
   // Short facts in a wrapping line ("~1-2 h", "9 / 14 systems") stay
@@ -1902,6 +1907,8 @@ Item {
   }
 
   component Caption: Text {
+    // Game names, store and guide text: never rendered as HTML.
+    textFormat: Text.PlainText
     color: root.foreground
     opacity: 0.6
     font.family: Commons.Style.font.family

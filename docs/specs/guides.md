@@ -57,6 +57,9 @@ per-DLC sections, Efficiency combos. Links are the citations.>
 ```
 
 The reader takes the prose between `## Guide notes` and `## Achievements`.
+Images in any prose (notes, `sections`, walkthrough `text`) reach the
+tracker as plain links (`![x](u)` becomes `[x](u)`, `<img>` is dropped):
+Qt's Markdown view would fetch an image's URL the moment it shows.
 A `[x]` line without `_(unlocked ...)_` is a hand tick and counts as done
 (slice b). OmaTrophy rewrites the checklist from the store when it makes a
 guide; it never changes a hand tick. `ticks` also takes
@@ -159,7 +162,7 @@ OmaTrophy doesn't know survive a rewrite.
 | --- | --- |
 | `guide [store app]` | Prints the guide as JSON for the tracker: `{store, app, file, generated, order, items: {api: item}, sections, notes, ticks: [api], next: [api], agent, cost_usd, outdated, walkthrough, step, step_pinned, tree, frontier: [api], stacks, stacks_verified}` (`agent` is the plan's, `cost_usd` the sum of its `usage`, `walkthrough` the plan's steps with `achievements` and `missables` as `api`s, `done` when none is left open, `marker` the `api` of the achievement that proves the step finished (`""` when it has none, as in guides before maker 5) and `cleared` once that one is done, `step` where the player is: the step they pinned with `guide here` while that pin holds (`step_pinned` true), else the first step with one open after the last finished step, or -1; markers bound that guess: never before the step after the last cleared marker, never past the next marked step not cleared, so a side trophy got early doesn't move the player (with no markers, the latest step with an unlock stands in when none is finished), `outdated` true when OmaTrophy made it with a `maker` older than `guides.MAKER`, so the tracker says "older maker" and lights Make again, `tree` the guide as an outline: `{story: [api], chains: [{api, depth}], alone: [api]}`, story items in play order, each item that `requires` others at depth 0 with its prerequisites under it, the rest alone, `frontier` every open item whose `requires` are all done, in play order from the current step on (a missable of that step first, ones left open in earlier steps last), the tree's Do now, `stacks` the guide's word on difficulty achievements, from the items of open, not hidden achievements whose text names a setting (`difficulty.py`): `false` when any of them says its setting needs its own run, `true` when those that say agree a harder run counts, `null` when none says, and `stacks_verified` when a quoted item backs that answer), or `{}` when there is none. Each item's `requires` is given as `api`s. The reader is `guides.py`. `items` holds only the plan items that match a store achievement (by `api`, then name); `ticks` are the `api`s of hand ticks (the `.md`'s, plus [by hand](by-hand.md)'s, minus its unticks); `ticks` and the store's unlocks both count as done for `next`. `next` is the first three open items in `order` whose `requires` are all done, missables first. Without arguments, the game running now, else the last one played. |
 | `guide here <store> <app> <step\|clear>` | Pins the walkthrough step the player is at (1-based), or clears the pin, then prints the guide as `guide <store> <app>` does. The pin is saved in `~/.local/state/omatrophy/guide-here.json` as `{"<store>:<app>": {step, title, finished}}` (`step` 0-based, `finished` the steps already finished when pinned); the guide files are not touched. It holds while that step's `title` is the same and no step at or after it finishes that wasn't finished when pinned; after that the automatic rule answers again. Exits non-zero, with what to do, when the game has no guide with steps or the number is out of range. |
-| `guide import <folder>` | Copies every `*-<app>.md` with its `.plan.json` and `.sources.json` from another folder (the games app's `games/`), skipping files we already have (`--replace` overwrites). Read-only on `<folder>`. Prints `imported N, skipped M`. |
+| `guide import <folder>` | Copies every `*-<app>.md` with its `.plan.json` and `.sources.json` from another folder (the games app's `games/`), skipping files we already have (`--replace` overwrites). Read-only on `<folder>`; only its plain files of up to 16 MB are copied (a link named like a guide is skipped, never followed). Prints `imported N, skipped M`. |
 | `guide agents` | Every agent with its models and picks (see Settings). |
 | `guide model <agent> <model> [effort] [@http://endpoint]`, `guide model <agent> default` | Sets or clears that agent's pick in `guide-models`; `@endpoint` points claude at a local Anthropic-compatible server (`ANTHROPIC_BASE_URL`) for that model. |
 | `guide jail` | Prints the installed ai-jail's version and path, whether the sandbox is on, and each agent's jail options; exits non-zero when ai-jail isn't installed. |
@@ -207,6 +210,12 @@ it.
      timeout, 10 pages a job at most. A 403, 429 or captcha page counts
      as "not fetchable" and is skipped, never retried with another
      client.
+   - Only `https` on the public internet: `localhost`, loopback, LAN,
+     link-local, CGNAT and reserved addresses are refused, checked on the
+     address the connection reached (after DNS, and on every redirect), so
+     a page that steers the agent to cite one can't make OmaTrophy reach
+     the owner's router or a local service. Through a proxy only the host
+     name is checked.
 2. **Research** (model, web tools, only with `guide-web` and an agent that
    has them). The agent gets the game, the open achievements and the
    trusted sites (list below) and answers with links plus a quote per
