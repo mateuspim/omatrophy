@@ -80,3 +80,15 @@ the answer after it stands, as the model may know no achievement
 stands for that prerequisite. It reads sentences, not meaning, so it
 finds only these shapes; a miss costs no more than before.
 `guides.MAKER` goes to 7.
+
+## Update 2026-11-14: the Tree from the keyboard
+
+The guide over a game opens on a key, yet the Tree was mouse-only.
+While it shows, the arrows move a focus ring between its parts and
+Enter does what a click does; the list keeps Page Up/Down, Home and
+End, and Left/Right stop sorting there. The ring moves by where parts
+sit on screen, not by a fixed order: the same rule walks a track
+across or down, Do now tiles side by side or stacked, and chains of
+any shape, and a new part only has to hold a `TreeFocus`. On a narrow
+column the open step shows under its own stop, and chain rows size to
+their labels, with a chain wider than its card scrolling sideways.

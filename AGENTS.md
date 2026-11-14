@@ -92,7 +92,10 @@ says how the parts fit, `docs/adr/` why, `docs/specs/` what the contracts are
   `dev/preview.sh --picker` runs a throwaway Quickshell instance with sample
   events; it never touches the live shell. `dev/render.sh <view> out.png`
   renders offscreen from the fake games in `dev/samples/`; hero captures for
-  the README come from it only, never with `--live`.
+  the README come from it only, never with `--live`. `--theme <name>`
+  renders under another installed theme (a light one: `flexoki-light`,
+  `white`) without switching the desktop's; the README's captures use
+  `--theme dos-moos`.
 - Live shell log (read-only):
   `quickshell log -p /usr/share/omarchy/shell -t 200 | grep -i omatrophy`.
 
