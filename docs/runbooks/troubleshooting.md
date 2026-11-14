@@ -58,6 +58,16 @@ community on`, then `omatrophy.py sync` to watch it work.
   `~/.cache/omatrophy/community/games/<app>.json` to fetch it on the next
   run.
 
+## Try shows nothing after an update
+
+The shell keeps the `Service.qml` and watcher it started with until it
+restarts, while the panel is built from the new files (ADR 24). Settings >
+Toasts says so: "Restart the shell to use the new cards", with both
+versions, and **Try after restart** in place of Try for cards the running
+copy doesn't have. `python3 omatrophy.py running` prints the same
+(`"stale": true`), and `omatrophy.py test <kind>` warns on stderr. Run
+`omarchy restart shell` once no game is running.
+
 ## The toast is under the game
 
 Fullscreen games on a different monitor than the focused one: the card goes

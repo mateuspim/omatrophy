@@ -29,7 +29,8 @@ installed.
 | [`brand/logo.svg`](brand/logo.svg) | mark + wordmark on dark surfaces |
 | [`brand/logo-light.svg`](brand/logo-light.svg) | mark + wordmark on light surfaces |
 | [`brand/preview.svg`](brand/preview.svg) | README hero source, renders [`preview.png`](../preview.png) |
-| `brand/captures/*.png` | 2× offscreen renders from `dev/samples/` |
+| [`brand/cards.svg`](brand/cards.svg) | the README's card gallery, renders `brand/captures/cards.png` |
+| `brand/captures/*.png` | 2× offscreen renders from `dev/samples/`, under the `dos-moos` theme |
 
 ## Rules
 

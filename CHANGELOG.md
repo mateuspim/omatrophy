@@ -24,6 +24,29 @@
   - The marketplace's static security baseline passes on the repo.
   The views and the panel's reads apply at once; the running watcher
   (toast art) picks its part up when the shell next restarts.
+- After an update the shell keeps running the watcher it started with
+  until `omarchy restart shell`, so a Try for a card that copy doesn't
+  have showed nothing. Settings > Toasts now says "Restart the shell to
+  use the new cards", with both versions, and offers **Try after
+  restart** for those cards; `omatrophy.py test` warns the same way on
+  stderr. New: `omatrophy.py running` (which OmaTrophy the shell runs, as
+  JSON), `watch --shell <version>`, `~/.local/state/omatrophy/watcher.json`
+  and `version` on the `ready` event (ADR 24). Needs one `omarchy restart
+  shell` to start (Service.qml passes its version); from then on it tells
+  you itself.
+- Light themes (flexoki-light, white): the panel and the tracker take
+  darker metal inks for text, bars, rails and edges, where silver and
+  platinum all but vanished, and locked cups are dimmed less.
+- The Guide's Do now tiles lose the empty strip under them: the tick by
+  hand sits beside the share of players instead.
+- `dev/render.sh` draws on the GPU (as `omatrophy.py share` does), so
+  card banners and the omarchy cups' inlay show in captures; without a GPU
+  it falls back to software. New view: `settings-restart`.
+- Docs: README Update section, a card gallery and full requirements;
+  SECURITY.md's run, read and write lists, and the test inbox's card
+  types; the CLI, events and settings specs; architecture; troubleshooting.
+  Every README capture and the hero are rendered again from the fake
+  samples.
 
 ## 0.14.0 - 2026-11-14
 

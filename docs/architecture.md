@@ -30,6 +30,8 @@ turns those lines into cards on screen.
 | `guides.py` | Reads 100% guides: finds a game's `.md` by its trailing id, parses notes, checklist and `.plan.json`, matches items to achievements (`omatrophy.py guide`), and imports guide files. |
 | `by_hand.py` | The player's ticks, counts and notes by hand in `~/.local/share/omatrophy/by-hand.json` (ADR 21): reads them for `game` and `guide`, writes them for `omatrophy.py hand` only, under a lock. A tick is done for the guide, never an unlock. |
 | `guide_maker.py` | Makes a guide on request (ADR 14): gather sources, research, classify, route, verify quotes, write the files; status and stop like Load from Steam. Prompts in `prompts/guide/`. |
+| `guide_bench.py` | `guide bench`: makes one game's guide with several agents and models side by side and ranks them by what can be checked ([guides](specs/guides.md#benchmark)). |
+| `guide_key.py` | The Guide key (ADR 18): parses a key, checks it against Hyprland's binds and binds or unbinds it at runtime through `hyprctl`; never edits Hyprland's config. |
 | `guide_agents.py` | One adapter per coding agent: its locked headless command, model list and answer parsing; only adapters whose lock was checked run. |
 | `stores/__init__.py` | The list of stores; `available()` keeps the installed ones. |
 | `difficulty.py` | Reads from an achievement's own text the difficulty setting it needs ("on Nightmare", "Normal or higher"), for the `difficulty` fields of `game` and `games`. Pure, no store or network. |
@@ -45,7 +47,7 @@ turns those lines into cards on screen.
 | `PlatinumShare.qml` | The saved platinum image: `PlatinumCard.qml` held open over the game's blurred art, with the date and store along the bottom. Loaded only by `share.py`'s throwaway Quickshell, never the live shell. |
 | `share.py` | `omatrophy.py share`: draws `PlatinumShare.qml` in an offscreen Quickshell on the GPU and saves the PNG to the pictures folder (ADR 23). |
 | `Panel.qml` | Bar button; opens a `KeyboardPanel` that loads `StylePicker.qml`, and turns its `track` signal into a summon of the tracker. |
-| `StylePicker.qml` | Three tabs. Now: totals, the running game (or the last three) and the platinum shelf, from `omatrophy.py now`. Games: every game, sortable, from `omatrophy.py games` on first open. Settings: trophy style, previews, position and sound, through `omatrophy.py set`. |
+| `StylePicker.qml` | Four tabs. Now: guides being made, totals, the running game (or the last three), rarest unlocks and the platinum shelf, from `omatrophy.py now`. Profile: favorite game, showcase, completionist and playtime. Games: every game, sortable, from `omatrophy.py games` on first open. Settings: toasts (style, position, glass, monitor, Do Not Disturb, sound, reminders, Try), the Now tab's sections, guides and stores, through `omatrophy.py set`; it asks `omatrophy.py running` whether the shell needs a restart. |
 | `FreshObject.qml` | Builds a sibling QML file from its current text, so the cards, the panel content and the tracker pick up edits without a restart. |
 | `Tracker.qml` | The `overlay` entry point (kept loaded): a dimmed full-screen window that takes the keyboard while open and loads `TrackerView.qml`, kept built between opens while its text is unchanged (ADR 19). |
 | `TrackerView.qml` | One game's every achievement with rarity and dates; filters, type-to-search and a keyboard-driven highlight. Its Guide tab shows the game's 100% guide and starts or stops a make (`omatrophy.py guide make`, detached). |
@@ -54,7 +56,9 @@ turns those lines into cards on screen.
 ## Data flow
 
 1. On start, `watch` instantiates every installed store, records each game's
-   change token and unlocked set, and prints a `ready` line.
+   change token and unlocked set, writes `watcher.json` (its version, the
+   `Service.qml` version it was started with, the cards it lets through)
+   and prints a `ready` line.
 2. Once a second it forwards new lines from the test inbox and asks each
    store for its tokens. For each game whose token changed it rereads the
    achievements, diffs the unlocked set and prints an `unlock` line per new,
@@ -73,7 +77,11 @@ turns those lines into cards on screen.
 5. The panel runs `omatrophy.py now` each time it opens. Clicking a game
    summons the plugin's overlay with `{store, app}`; `Tracker.qml` passes it
    to `TrackerView.qml`, which runs `omatrophy.py game --guide` (ADR 9, ADR 19).
-6. Save image (the tracker of a finished game, or a shelf tile) runs
+6. The shell keeps its startup `Service.qml` and watcher until a restart,
+   while the panel is built fresh: Settings asks `omatrophy.py running`,
+   which compares `watcher.json` with the installed version, and offers a
+   restart instead of a Try the old watcher would drop.
+7. Save image (the tracker of a finished game, or a shelf tile) runs
    `omatrophy.py share --notify`, which starts its own offscreen Quickshell
    to draw `PlatinumShare.qml`, writes the PNG and exits; the live shell
    draws nothing for it (ADR 23).

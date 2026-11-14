@@ -26,6 +26,7 @@ Printed once, when the watcher has its baseline.
 | `type` | `"ready"` | |
 | `stores` | string[] | Ids of the stores being watched, e.g. `["steam"]`. |
 | `games` | number | Games with achievement data across those stores. |
+| `version` | string | The watcher's OmaTrophy version (`manifest.json`), since 1.0.0. The shell doesn't read it; it is there for logs. `watcher.json` holds the same, for the panel ([settings](settings.md#files-omatrophy-owns)). |
 
 ## `unlock`
 

@@ -6,8 +6,9 @@ installed.
 
 | Command | Does |
 | --- | --- |
-| `watch` | The default. Prints [event lines](events.md) until killed. `Service.qml` runs this. After `ready` it looks up uncached game names in the background (eight at a time, 4 s timeout each); events never wait on it. |
-| `test [kind]` | Queues one sample event for a running watcher, built from your most recently played game. `kind`: `bronze`, `silver`, `gold` (or `rare`), `platinum`, `difficulty` (the launch reminder; made-up settings when the game has none), `missable` (the missable reminder; a made-up step when the game's guide has none open), `recap` (the session recap, from the game's last four unlocks, with made-up rarity and length), `milestone` (a counter at 75%: the game's own counter achievement, else a made-up count); `unlock` (the default) keeps the achievement's real rarity. |
+| `watch [--shell <version>]` | The default. Prints [event lines](events.md) until killed. `Service.qml` runs this, passing its own version (`--shell`, since 1.0.0). Before `ready` it writes `~/.local/state/omatrophy/watcher.json` ([running](#running)). After `ready` it looks up uncached game names in the background (eight at a time, 4 s timeout each); events never wait on it. |
+| `running` | Prints [which OmaTrophy the shell runs](#running) and whether it needs a restart. Settings > Toasts reads it each time Settings opens. |
+| `test [kind]` | Queues one sample event for a running watcher, built from your most recently played game. `kind`: `bronze`, `silver`, `gold` (or `rare`), `platinum`, `difficulty` (the launch reminder; made-up settings when the game has none), `missable` (the missable reminder; a made-up step when the game's guide has none open), `recap` (the session recap, from the game's last four unlocks, with made-up rarity and length), `milestone` (a counter at 75%: the game's own counter achievement, else a made-up count); `unlock` (the default) keeps the achievement's real rarity. When the running shell is an older OmaTrophy without that card, it says so on stderr (`omatrophy: test: the shell still runs OmaTrophy 0.14.0, which has no recap card; run \`omarchy restart shell\` ...`) and still queues it. |
 | `status` | Prints `[{store, app, unlocked, total}]` for every game with achievements, most complete first. |
 | `cabinet` | Prints `{games, trophies, platinums, nearest}`: totals across every game, and `nearest`, the four started, unfinished games closest to 100%, each a `status` row plus `game` (name) and `header` (art URL). |
 | `now` | Prints [what the bar panel's Now tab shows](#now), in one read of every store, and keeps a copy in `~/.cache/omatrophy/panel/now.json` that the panel shows on its next open until a fresh read answers. |
@@ -62,6 +63,27 @@ are URLs (`https://` or `file://`) or `""`. `now`, `games` and `game` give
 the local copy (`file://`) of any image already in the cache; for the rest
 they answer with the URL, then a detached child fetches those images, so
 the next read names them locally. The command itself exits at once.
+
+## running
+
+The shell keeps the `Service.qml` and watcher it started with until
+`omarchy restart shell`, while the panel and cards are built fresh from
+their text ([ADR 10](../adr/0010-build-views-from-their-text.md)). After
+an update, a card the old watcher doesn't let through would never show.
+`running` compares the running watcher with this copy:
+
+```json
+{"installed": "1.0.0", "running": true, "watcher": "0.14.0", "shell": "0.14.0",
+ "cards": ["unlock", "platinum", "difficulty"], "stale": true}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `installed` | This copy's `manifest.json` version. |
+| `running` | Whether an `omatrophy.py watch` process runs (any install). |
+| `watcher`, `shell` | The running watcher's version and that of the `Service.qml` that started it, from `watcher.json`; `null` when unknown (a watcher from before 1.0.0 writes no record; a watcher started from a terminal has no `shell`). |
+| `cards` | The card types the running watcher lets through its inbox; for a watcher older than the record, `unlock`, `platinum` and `difficulty`. `null` with no watcher. |
+| `stale` | `true` when the watcher or its `Service.qml` is another version than `installed`, or a watcher runs that wrote no record. A watcher started from a terminal counts by its own version only. Settings > Toasts then shows a restart banner and "Try after restart" for cards missing from `cards`. |
 
 ## now
 

@@ -39,6 +39,11 @@ achievement list.
   10% or fewer, with glitter and a sweep of light for gold.
 - A platinum card at 100%: the trophy spins in over the game's hero art and
   the count rolls up. **Save image** keeps it as a PNG to share.
+- Reminders as a game starts: the difficulty settings its achievements
+  left need, so the new save starts on the right one, and, with a guide,
+  the trophies you can miss in the step you're on. Once per game or step,
+  without a chime ([difficulty](#trophy-cabinet-and-tracker),
+  [missables](#100-guides)).
 - A recap when you quit a game: how long you played, the trophies the
   session brought, the rarest of them, and where the game stands now.
   Only after a session that unlocked something; no chime, and never
@@ -81,6 +86,8 @@ achievement list.
 - Steam and GOG today, and built for more: each store is a small module
   ([adding a store](docs/guide/stores.md)).
 
+![Four sample cards: a missable reminder naming the step and three trophies lost by moving on, a session recap with its rarest unlock, a difficulty reminder saying to start on Nightmare, and a milestone toast at 75% of a counter](docs/brand/captures/cards.png)
+
 ## Install
 
 ```bash
@@ -89,6 +96,18 @@ omarchy plugin add https://github.com/mateuspim/omatrophy.git --enable
 
 This places a trophy button in the bar. If it doesn't show, run
 `omarchy restart shell` once (not while a game runs).
+
+## Update
+
+```bash
+omarchy plugin update pym.omatrophy
+```
+
+The panel, the tracker and the cards pick up the new files at once; the
+watcher behind the toasts keeps running the old copy until
+`omarchy restart shell` (not while a game runs). Until then, Settings >
+Toasts says the shell runs an older OmaTrophy and offers **Try after
+restart** for the cards it doesn't have yet.
 
 ## Remove
 
@@ -567,11 +586,15 @@ Other launchers plug in as one module each:
 
 ## Requirements
 
-- Omarchy 4.0+ with the Quickshell-based `omarchy-shell`
-- Python 3 (standard library only)
+- Omarchy 4.0+ with the Quickshell-based `omarchy-shell` (Quickshell and
+  Hyprland's `hyprctl` come with it)
+- Python 3 (standard library only; no pip packages)
 - Steam, or Heroic Games Launcher for GOG (Heroic 2.x with Comet, its
   default), with games that have achievements
-- PipeWire (`pw-play`) for the chime
+- PipeWire's `pw-play` for the chime, and `notify-send` (libnotify) for
+  Save image and guide notifications; both ship with Omarchy
+- Optional: a coding agent (Claude Code today) to make 100% guides, and
+  [ai-jail](https://github.com/akitaonrails/ai-jail) to run it in a sandbox
 
 ## Documentation
 
