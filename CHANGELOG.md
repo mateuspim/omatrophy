@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.8.0 - 2026-11-14
 
 - No more "Using a Component as the root of a QML document is
   deprecated" warning each time a view is built from its text
