@@ -35,7 +35,12 @@ Column {
     { id: "painted", name: "Painted" }
   ]
   readonly property var metals: ["bronze", "silver", "gold", "platinum"]
-  readonly property var metalColors: ({ bronze: "#e9a46b", silver: "#dfe6ee", gold: "#f3cf4a", platinum: "#e2eaff" })
+  // A light theme (flexoki-light, white): the metals are pale, and as
+  // text, bars and edges they all but vanished on the panel, silver and
+  // platinum above all, so a light panel takes their darker inks.
+  readonly property bool lightTheme: Commons.Color.popups.background.hslLightness > 0.5
+  readonly property var metalColors: lightTheme ? ({ bronze: "#9a5a26", silver: "#5f6b78", gold: "#8a6d00", platinum: "#4a5f9c" })
+                                                : ({ bronze: "#e9a46b", silver: "#dfe6ee", gold: "#f3cf4a", platinum: "#e2eaff" })
 
   property string tab: "now"
   property string iconSet: "omarchy"
@@ -57,6 +62,12 @@ Column {
   property bool sessionRecap: true
   // Counter milestone toasts (config `milestones`).
   property bool milestones: true
+  // `omatrophy.py running`: which OmaTrophy the shell runs. The shell keeps
+  // the Service.qml and watcher it started with, while this panel is built
+  // from the current text, so after an update a Try could queue a card the
+  // old watcher drops: {stale, cards, shell, watcher, installed}.
+  property var shellState: ({})
+  readonly property bool shellStale: shellState.stale === true
   // The Steam profile backfill's latest line, from its status.json
   // (stores/steam_community.py); {} before the first run.
   property var backfill: ({})
@@ -130,6 +141,7 @@ Column {
   onTabChanged: {
     if (tab === "games" && !gamesRead && live) { gamesRead = true; gamesReader.running = true }
     if (tab === "settings" && live && !guideAgentsReader.running && guideAgents.length === 0) guideAgentsReader.running = true
+    if (tab === "settings" && live && !shellStateReader.running) shellStateReader.running = true
   }
 
   // Settings > Guides (ADR 14): `guide agents` lists the agents and their
@@ -201,10 +213,10 @@ Column {
   function settingsSummary(section) {
     if (section === "toasts") {
       var style = styles.find(function(st) { return st.id === iconSet })
-      return [(style ? style.name : iconSet) + " trophies",
+      return (shellStale ? ["Restart the shell for the new cards"] : []).concat([(style ? style.name : iconSet) + " trophies",
               { "top-left": "top left", "top-center": "top centre", "top-right": "top right" }[position] || position,
               screenName === "focused" ? "focused monitor" : screenName,
-              glass + " glass", sound ? (chimes === "classic" ? "classic chimes" : "OmaTrophy chimes") : "silent"].join(" · ")
+              glass + " glass", sound ? (chimes === "classic" ? "classic chimes" : "OmaTrophy chimes") : "silent"]).join(" · ")
     }
     if (section === "now") {
       var shown = nowSections.filter(function(n) { return nowShows[n.value] !== false }).map(function(n) { return n.label.toLowerCase() })
@@ -581,6 +593,27 @@ Column {
     runner.exec(["python3", helperPath, "test", kind])
   }
 
+  // Can the running shell show a `test <kind>` card? Not when it runs an
+  // older OmaTrophy without that card (a metal toast is in every version).
+  function canTry(kind) {
+    if (!shellStale || !Array.isArray(shellState.cards)) return true
+    var type = metals.indexOf(kind) >= 0 && kind !== "platinum" ? "unlock" : kind
+    return shellState.cards.indexOf(type) >= 0
+  }
+
+  // A reminder row's choices: Try, or, when the shell can't show that card
+  // yet, a chip that says why (the banner above says how).
+  function reminderOptions(on, kind) {
+    return [on, { value: "off", label: "Off" },
+            canTry(kind) ? { value: "try", label: "Try" } : { value: "restart", label: "Try after restart" }]
+  }
+
+  // What the shell runs, for the restart banner: "the shell still runs 0.14.0".
+  function shellRunning() {
+    var version = shellState.shell || shellState.watcher
+    return version ? "OmaTrophy " + version : "an older OmaTrophy"
+  }
+
   function day(t) {
     return t ? Qt.formatDate(new Date(t * 1000), "d MMM yyyy") : ""
   }
@@ -814,6 +847,16 @@ Column {
   }
 
   Process { id: runner }
+
+  // Read each time Settings opens: a restart in between clears the banner.
+  Process {
+    id: shellStateReader
+    running: root.live && root.tab === "settings"
+    command: ["python3", root.helperPath, "running"]
+    stdout: StdioCollector {
+      onStreamFinished: { try { root.shellState = JSON.parse(text) || {} } catch (e) {} }
+    }
+  }
 
   Process {
     id: imageSaver
@@ -1189,6 +1232,25 @@ Column {
     cursorShape: Qt.PointingHandCursor
     // A row naming one achievement (a rarest unlock) opens on it.
     onClicked: if (game) root.track(game.store, game.app, game.api || "")
+  }
+
+  // A finished game's platinum cup over its art: top-right on a dark plate,
+  // so it reads over any header. Bottom-right it sat on the title a header
+  // carries there ("LANTERNS OF ASTER").
+  component PlatinumBadge: Rectangle {
+    property real size: 16
+    anchors.margins: 2
+    width: size + 4
+    height: size + 4
+    radius: 3
+    color: Qt.rgba(0, 0, 0, 0.55)
+    Thumb {
+      anchors.centerIn: parent
+      style: root.iconSet
+      metal: "platinum"
+      width: parent.size
+      height: parent.size
+    }
   }
 
   // A quiet choice of a few options (the Games sort): plain words, the
@@ -2623,15 +2685,11 @@ Column {
           label: recentCard.modelData.game
           zoom: recentHit.containsMouse ? 1.06 : 1
         }
-        Thumb {
+        PlatinumBadge {
           visible: recentCard.platinum
           anchors.right: recentArt.right
-          anchors.bottom: recentArt.bottom
-          anchors.margins: 2
-          style: root.iconSet
-          metal: "platinum"
-          width: 20
-          height: 20
+          anchors.top: recentArt.top
+          size: 18
         }
 
         Column {
@@ -3864,15 +3922,11 @@ Column {
           opacity: gameRow.dim
           zoom: gameHit.containsMouse ? 1.06 : 1
         }
-        Thumb {
+        PlatinumBadge {
           visible: gameRow.platinum
           anchors.right: gameArt.right
-          anchors.bottom: gameArt.bottom
-          anchors.margins: 2
-          style: root.iconSet
-          metal: "platinum"
-          width: 16
-          height: 16
+          anchors.top: gameArt.top
+          size: 14
         }
         Column {
           id: gameBody
@@ -4173,6 +4227,35 @@ Column {
       spacing: root.spacing
       visible: root.settingsSection === "toasts"
 
+      // OmaTrophy was updated, the shell still runs the copy it started
+      // with: a Try for a card that copy lacks would show nothing.
+      Rectangle {
+        id: restartBanner
+        visible: root.shellStale
+        width: root.width
+        height: visible ? restartText.implicitHeight + Commons.Style.space(20) : 0
+        radius: Commons.Style.cornerRadius
+        color: Qt.alpha(Commons.Color.accent, 0.1)
+        border.width: 1
+        border.color: Qt.alpha(Commons.Color.accent, 0.45)
+        Accessible.role: Accessible.StaticText
+        Accessible.name: restartText.text
+        Text {
+          textFormat: Text.PlainText
+          id: restartText
+          x: Commons.Style.space(12)
+          anchors.verticalCenter: parent.verticalCenter
+          width: parent.width - Commons.Style.space(24)
+          wrapMode: Text.WordWrap
+          text: "Restart the shell to use the new cards. OmaTrophy " + (root.shellState.installed || "")
+                + " is installed; the shell still runs " + root.shellRunning()
+                + ". Run omarchy restart shell when no game is running."
+          color: root.foreground
+          font.family: Commons.Style.font.family
+          font.pixelSize: Commons.Style.font.caption
+        }
+      }
+
       Row {
         id: styleCards
         spacing: Commons.Style.space(6)
@@ -4343,13 +4426,9 @@ Column {
         Chips {
           // Try shows one now (TRY IT's tiles are the metals only) and
           // leaves the setting as it is.
-          options: [
-            { value: "on", label: "At launch" },
-            { value: "off", label: "Off" },
-            { value: "try", label: "Try" }
-          ]
+          options: root.reminderOptions({ value: "on", label: "At launch" }, "difficulty")
           value: root.difficultyReminder ? "on" : "off"
-          onPicked: value => value === "try" ? root.preview("difficulty") : root.set("difficulty-reminder", value)
+          onPicked: value => value === "try" ? root.preview("difficulty") : (value === "restart" ? null : root.set("difficulty-reminder", value))
         }
       }
 
@@ -4358,13 +4437,9 @@ Column {
       SettingRow {
         label: "MISSABLE"
         Chips {
-          options: [
-            { value: "on", label: "At launch" },
-            { value: "off", label: "Off" },
-            { value: "try", label: "Try" }
-          ]
+          options: root.reminderOptions({ value: "on", label: "At launch" }, "missable")
           value: root.missableReminder ? "on" : "off"
-          onPicked: value => value === "try" ? root.preview("missable") : root.set("missable-reminder", value)
+          onPicked: value => value === "try" ? root.preview("missable") : (value === "restart" ? null : root.set("missable-reminder", value))
         }
       }
 
@@ -4372,13 +4447,9 @@ Column {
       SettingRow {
         label: "RECAP"
         Chips {
-          options: [
-            { value: "on", label: "When a game stops" },
-            { value: "off", label: "Off" },
-            { value: "try", label: "Try" }
-          ]
+          options: root.reminderOptions({ value: "on", label: "When a game stops" }, "recap")
           value: root.sessionRecap ? "on" : "off"
-          onPicked: value => value === "try" ? root.preview("recap") : root.set("session-recap", value)
+          onPicked: value => value === "try" ? root.preview("recap") : (value === "restart" ? null : root.set("session-recap", value))
         }
       }
 
@@ -4387,13 +4458,9 @@ Column {
       SettingRow {
         label: "MILESTONES"
         Chips {
-          options: [
-            { value: "on", label: "50 · 75 · 90%" },
-            { value: "off", label: "Off" },
-            { value: "try", label: "Try" }
-          ]
+          options: root.reminderOptions({ value: "on", label: "50 · 75 · 90%" }, "milestone")
           value: root.milestones ? "on" : "off"
-          onPicked: value => value === "try" ? root.preview("milestone") : root.set("milestones", value)
+          onPicked: value => value === "try" ? root.preview("milestone") : (value === "restart" ? null : root.set("milestones", value))
         }
       }
 

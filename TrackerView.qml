@@ -228,10 +228,12 @@ Item {
 
   readonly property color foreground: Commons.Color.menu.text
   readonly property color background: Commons.Color.menu.background
-  readonly property var metalColors: ({ bronze: "#e9a46b", silver: "#dfe6ee", gold: "#f3cf4a", platinum: "#e2eaff" })
   // A light theme (flexoki-light, white): the metals are pale and their
-  // text all but vanished on the card, silver above all.
+  // text all but vanished on the card, silver above all; their rails,
+  // edges and bars too, so a light card takes their darker inks.
   readonly property bool lightTheme: background.hslLightness > 0.5
+  readonly property var metalColors: lightTheme ? ({ bronze: "#9a5a26", silver: "#5f6b78", gold: "#8a6d00", platinum: "#4a5f9c" })
+                                                : ({ bronze: "#e9a46b", silver: "#dfe6ee", gold: "#f3cf4a", platinum: "#e2eaff" })
   readonly property string helperPath: decodeURIComponent(String(Qt.resolvedUrl("omatrophy.py")).replace(/^file:\/\//, ""))
   readonly property real rarePercent: 10
 
@@ -1165,11 +1167,9 @@ Item {
     return made + (guide.outdated ? " · older maker" : "")
   }
 
-  // A metal as text: as it is on a dark card, darkened on a light one.
+  // A metal as text: metalColors already holds the inks on a light card.
   function metalText(tier, fallback) {
-    var metal = metalColors[tier]
-    if (!metal) return fallback
-    return lightTheme ? Qt.darker(metal, 1.9) : metal
+    return metalColors[tier] || fallback
   }
 
   function forceKeys() {
@@ -2085,7 +2085,7 @@ Item {
         metal: art.ach.tier || "bronze"
         width: parent.width * 0.62
         height: width
-        opacity: art.done ? 1 : 0.5
+        opacity: art.done ? 1 : (root.lightTheme ? 0.75 : 0.5)
       }
     }
   }
@@ -2269,7 +2269,11 @@ Item {
     readonly property bool missable: root.isMissable(api)
     readonly property bool picked: root.treePick === api && root.treePickIn === "now"
     readonly property real pad: Commons.Style.space(10)
-    implicitHeight: (stacked ? tileArt.height + Commons.Style.space(8) : 0) + tileBody.height + pad * 2 + Commons.Style.space(24)
+    // No strip kept under the body for the tick: stacked, the tick sits in
+    // the art's row beside the share; side by side, it shares the right
+    // column with it, which needs the share's line and the tick's height.
+    implicitHeight: stacked ? tileArt.height + Commons.Style.space(8) + tileBody.height + pad * 2
+                    : Math.max(tileArt.height, tileBody.height, tilePercent.implicitHeight + Commons.Style.space(30)) + pad * 2
     implicitWidth: 0
     radius: Commons.Style.cornerRadius
     color: tileHover.hovered ? Commons.Style.hoverFill : first ? Qt.alpha(Commons.Color.accent, 0.08) : Qt.alpha(root.foreground, 0.035)
@@ -2291,10 +2295,9 @@ Item {
       picked: tile.picked
     }
     HandTick {
-      anchors.right: parent.right
-      anchors.rightMargin: tile.pad
-      anchors.bottom: parent.bottom
-      anchors.bottomMargin: tile.pad
+      x: tile.stacked ? (tilePercent.visible ? tilePercent.x : tile.width - tile.pad) - width - Commons.Style.space(2)
+                      : tile.width - tile.pad - width + Commons.Style.space(5)
+      y: tile.stacked ? tileArt.y + (tileArt.height - height) / 2 : tile.height - tile.pad - height + Commons.Style.space(5)
       api: tile.api
       visible: !tile.ach.unlocked
       opacity: on || tileHover.hovered || tile.picked || hovered ? 1 : 0
@@ -2302,6 +2305,7 @@ Item {
     // Share of players, in the metal's colour, as the list has it.
     Text {
       textFormat: Text.PlainText
+      id: tilePercent
       anchors.right: parent.right
       anchors.rightMargin: tile.pad
       y: tile.pad
@@ -3035,7 +3039,7 @@ Item {
           metal: grow.ach.tier || "bronze"
           width: 16
           height: 16
-          opacity: grow.ach.unlocked ? 1 : 0.35
+          opacity: grow.ach.unlocked ? 1 : (root.lightTheme ? 0.7 : 0.35)
         }
       }
       Caption {
@@ -3802,7 +3806,9 @@ Item {
               anchors.verticalCenter: parent.verticalCenter
               style: root.iconSet
               metal: row.ach.tier
-              opacity: row.ach.unlocked ? 1 : 0.35
+              // The cup art is pale: dimmed to a third, a locked silver or
+              // platinum cup vanished on a light card.
+              opacity: row.ach.unlocked ? 1 : (root.lightTheme ? 0.7 : 0.35)
             }
           }
           // A locked counter achievement shows how far along it is

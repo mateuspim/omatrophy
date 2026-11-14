@@ -2219,3 +2219,99 @@ class TestCommand(unittest.TestCase):
                 omatrophy.test('diffictulty')
         self.assertIn('difficulty', str(caught.exception))
 
+
+
+class ShellState(unittest.TestCase):
+    """`running`: the shell keeps the Service.qml and watcher it started
+    with until a restart, so after an update the panel's Try for a new card
+    showed nothing (owner's report, 2026-11-14)."""
+
+    CARDS = ['unlock', 'platinum', 'difficulty', 'missable', 'recap', 'milestone']
+
+    def record(self, **kw):
+        return dict({'pid': 1, 'version': '1.0.0', 'shell': '1.0.0', 'parent': 'quickshell', 'cards': self.CARDS}, **kw)
+
+    def test_the_same_version_is_not_stale(self):
+        state = omatrophy.shell_state(self.record(), True, 1, '1.0.0')
+        self.assertEqual((state['running'], state['stale'], state['cards']), (True, False, self.CARDS))
+
+    def test_an_older_watcher_or_service_is_stale(self):
+        self.assertTrue(omatrophy.shell_state(self.record(version='0.14.0'), True, 1, '1.0.0')['stale'])
+        state = omatrophy.shell_state(self.record(shell='0.14.0'), True, 1, '1.0.0')
+        self.assertTrue(state['stale'])
+        self.assertEqual(state['shell'], '0.14.0')
+
+    def test_a_watcher_from_before_the_record_is_stale_with_the_old_cards(self):
+        state = omatrophy.shell_state(None, False, 1, '1.0.0')
+        self.assertEqual((state['running'], state['stale'], state['watcher']), (True, True, None))
+        self.assertEqual(state['cards'], ['unlock', 'platinum', 'difficulty'])
+        # A record left by a watcher that has died says nothing.
+        self.assertTrue(omatrophy.shell_state(self.record(), False, 1, '1.0.0')['stale'])
+
+    def test_no_watcher_is_not_stale(self):
+        state = omatrophy.shell_state(self.record(), False, 0, '1.0.0')
+        self.assertEqual((state['running'], state['stale']), (False, False))
+
+    def test_an_old_service_restarting_new_code_is_stale_but_a_terminal_watcher_is_not(self):
+        # A Service.qml from before 1.0.0 passes no version.
+        self.assertTrue(omatrophy.shell_state(self.record(shell=''), True, 1, '1.0.0')['stale'])
+        self.assertFalse(omatrophy.shell_state(self.record(shell='', parent='bash'), True, 1, '1.0.0')['stale'])
+
+    def test_is_watcher_reads_proc_cmdlines(self):
+        self.assertTrue(omatrophy.is_watcher('/usr/bin/python3\0/x/pym.omatrophy/omatrophy.py\0watch\0'))
+        self.assertTrue(omatrophy.is_watcher('python3\0omatrophy.py\0watch\0--shell\0001.0.0\0'))
+        self.assertTrue(omatrophy.is_watcher('python3\0omatrophy.py\0'))
+        self.assertFalse(omatrophy.is_watcher('python3\0omatrophy.py\0demo\0unlock\0'))
+        self.assertFalse(omatrophy.is_watcher('python3\0omatrophy.py\0running\0'))
+        self.assertFalse(omatrophy.is_watcher('vim\0omatrophy.py.bak\0watch\0'))
+        self.assertFalse(omatrophy.is_watcher(''))
+
+    def test_stale_note_names_the_restart_only_for_a_card_the_shell_lacks(self):
+        old = omatrophy.shell_state(None, False, 1, '1.0.0')
+        note = omatrophy.stale_note(old, 'recap')
+        self.assertIn('omarchy restart shell', note)
+        self.assertIn('an older OmaTrophy', note)
+        self.assertEqual(omatrophy.stale_note(old, 'gold'), '')
+        self.assertEqual(omatrophy.stale_note(old, 'difficulty'), '')
+        fresh = omatrophy.shell_state(self.record(), True, 1, '1.0.0')
+        self.assertEqual(omatrophy.stale_note(fresh, 'recap'), '')
+        self.assertEqual(omatrophy.stale_note(omatrophy.shell_state(None, False, 0, '1.0.0'), 'recap'), '')
+        named = omatrophy.shell_state(self.record(shell='0.9.0', cards=['unlock', 'platinum']), True, 1, '1.0.0')
+        self.assertIn('OmaTrophy 0.9.0', omatrophy.stale_note(named, 'milestone'))
+
+    def test_the_watcher_records_itself_and_running_reads_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, 'watcher.json')
+            record = omatrophy.watcher_record('1.0.0')
+            self.assertEqual(record['pid'], os.getpid())
+            self.assertEqual(record['cards'], list(omatrophy.INBOX_TYPES))
+            self.assertEqual(record['version'], omatrophy.plugin_version())
+            stores_base.write_json(path, record)
+            # This test process isn't `omatrophy.py watch`: its record is dead.
+            with mock.patch.object(omatrophy, 'WATCHER_FILE', path), \
+                    mock.patch.object(omatrophy, 'watcher_pids', return_value=[]):
+                self.assertFalse(omatrophy.running_state()['running'])
+            with mock.patch.object(omatrophy, 'WATCHER_FILE', path), \
+                    mock.patch.object(omatrophy, 'proc_cmdline', return_value='python3\0omatrophy.py\0watch\0'), \
+                    mock.patch.object(omatrophy, 'watcher_pids', return_value=[os.getpid()]):
+                state = omatrophy.running_state()
+            self.assertTrue(state['running'])
+            self.assertEqual(state['stale'], record['version'] != '1.0.0')
+
+    def test_main_parses_the_shell_version(self):
+        with mock.patch.object(omatrophy, 'watch') as watch:
+            omatrophy.main(['omatrophy.py', 'watch', '--shell', '1.0.0'])
+            watch.assert_called_with(shell_version='1.0.0')
+            omatrophy.main(['omatrophy.py'])
+            watch.assert_called_with()
+        with self.assertRaises(SystemExit):
+            omatrophy.main(['omatrophy.py', 'watch', '--bogus'])
+
+    def test_plugin_version_is_the_manifests(self):
+        with open(os.path.join(os.path.dirname(__file__), '..', 'manifest.json')) as f:
+            self.assertEqual(omatrophy.plugin_version(), json.load(f)['version'])
+
+    def test_test_card_type_maps_the_metals_to_unlock(self):
+        for kind in omatrophy.TEST_KINDS:
+            ev = omatrophy.sample_event(kind, LaunchReminder.Fake(LaunchReminder.ACHS), '7', LaunchReminder.ACHS)
+            self.assertEqual(omatrophy.test_card_type(kind), ev['type'], kind)

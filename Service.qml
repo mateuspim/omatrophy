@@ -25,8 +25,12 @@ Scope {
   // The classic set: freedesktop sounds, before OmaTrophy had its own.
   readonly property var classic: ({ bronze: "message-new-instant.oga", silver: "message-new-instant.oga",
                                     gold: "bell.oga", platinum: "complete.oga" })
+  // This Service.qml's version, read once at startup: the shell keeps this
+  // copy until `omarchy restart shell`, so the watcher records it in
+  // watcher.json and the panel can tell an update that needs a restart.
+  property string shellVersion: ""
   // dev/preview.sh swaps in `omatrophy.py demo` to show cards without Steam.
-  property var watchCommand: ["python3", helperPath, "watch"]
+  property var watchCommand: ["python3", helperPath, "watch"].concat(shellVersion ? ["--shell", shellVersion] : [])
 
   property var queue: []
   property var current: null
@@ -223,10 +227,30 @@ Scope {
     } catch (e) { return false }
   }
 
+  FileView {
+    id: manifestFile
+    path: decodeURIComponent(String(Qt.resolvedUrl("manifest.json")).replace(/^(qs|file):\/\//, ""))
+    // Not watched: the version this Service.qml came with, not the latest.
+    blockLoading: true
+    printErrors: false
+  }
+
+  function versionOf(text) {
+    try {
+      var manifest = JSON.parse(text)
+      return manifest && typeof manifest.version === "string" && /^[0-9A-Za-z.+-]{1,32}$/.test(manifest.version) ? manifest.version : ""
+    } catch (e) { return "" }
+  }
+
   Process {
     id: watcher
     command: root.watchCommand
-    running: true
+    // Started once the version is read, so its command carries it. text()
+    // blocks until the file is loaded, and is "" when it can't be.
+    Component.onCompleted: {
+      root.shellVersion = root.versionOf(manifestFile.text())
+      running = true
+    }
     stdout: SplitParser {
       onRead: line => {
         try { root.enqueue(JSON.parse(line)) } catch (e) { console.warn("omatrophy: bad line", line) }

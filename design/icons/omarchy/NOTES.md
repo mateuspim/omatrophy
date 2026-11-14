@@ -42,7 +42,8 @@ against the light sheet background; the darker face carries the silhouette.
   `(56, 44)` with size `16 × 16`, centred at `(64, 52)`. Place the app's
   engraving inside that opening. No glyph is included.
 - `trophy-frame.svg` is an original white square frame with an 8-unit rail,
-  stepped terminals and two breaks, on the left and lower edges. Tint it
+  closed all round (until 1.0.0 it had two breaks after the Omarchy mark,
+  on the left and lower edges, which read as glitches at card size). Tint it
   independently and overlay at the same origin for framed platinum.
 
 All six canvases are `128 × 128`, with viewBox `0 0 128 128`. Trophy bounds

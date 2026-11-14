@@ -150,11 +150,9 @@ var shownName = a => ({A: 'Keeper', B: 'Hidden achievement'})[a]
 assert.equal(needsLine([]), '')
 assert.equal(needsLine(['A']), 'needs Keeper')
 assert.equal(needsLine(['B', 'A']), 'needs Hidden achievement and 1 more')
-var lightTheme = false, metalColors = {gold: '#f3cf4a'}
-var Qt = {darker: (color, factor) => color + ':' + factor}
+// metalColors holds the darker inks on a light card; text takes them as is.
+var metalColors = {gold: '#f3cf4a'}
 assert.equal(metalText('gold', 'fallback'), '#f3cf4a')
-lightTheme = true
-assert.equal(metalText('gold', 'fallback'), '#f3cf4a:1.9')
 assert.equal(metalText('unknown', 'fallback'), 'fallback')
 ''')
 

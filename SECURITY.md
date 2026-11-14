@@ -17,15 +17,15 @@ Omarchy plugins run unsandboxed inside `omarchy-shell` as your user. This is
 what OmaTrophy does with that access:
 
 - Runs: `python3 omatrophy.py watch` for as long as the shell runs (restarted
-  10 s after it exits); `python3 omatrophy.py now|games|set|hide|unhide|test` when you use
-  the bar panel; `python3 omatrophy.py sync` only when you run it; `python3 omatrophy.py game` when the tracker opens; `python3 omatrophy.py share` when you press Save image, which runs a throwaway `quickshell` offscreen (its own temporary config folder, gone when it exits) to draw the image, and `notify-send` to say where it went; `pw-play` for the chime (a bundled WAV, or a freedesktop sound with the classic set).
+  10 s after it exits); `python3 omatrophy.py guide-key` when the shell starts, Hyprland reloads or you change the Guide key, which runs `hyprctl` to bind or unbind that one key at runtime (ADR 18); `python3 omatrophy.py now|games|set|hide|unhide|test|running` when you use
+  the bar panel; `python3 omatrophy.py hand` when you tick, count or note by hand in the tracker; `python3 omatrophy.py steam-load` when you press Load from Steam, which opens `steam://` links and moves Steam's window to a hidden workspace and back through `hyprctl` (ADR 13); `python3 omatrophy.py sync` only when you run it; `python3 omatrophy.py game` when the tracker opens; `python3 omatrophy.py share` when you press Save image, which runs a throwaway `quickshell` offscreen (its own temporary config folder, gone when it exits) to draw the image, and `notify-send` to say where it went (also when a guide make ends or the Guide key can't be bound); `pw-play` for the chime (a bundled WAV, or a freedesktop sound with the classic set).
 - Reads: Steam's local achievement cache
   (`<Steam>/appcache/stats/UserGameStats*_*.bin`) and library art
   (`<Steam>/appcache/librarycache/`), once a second for changed files; when
   the panel or tracker opens, Steam's last-played times
   (`<Steam>/userdata/<account>/config/localconfig.vdf`) and the command lines
   of running processes (`/proc/*/cmdline`, to find `SteamLaunch AppId=N`);
-  its own settings file; Omarchy's Do Not Disturb state
+  its own settings file; to tell whether the shell runs an older OmaTrophy after an update, its own `watcher.json` and, when that is missing, the command lines of running processes (`/proc/*/cmdline`, looking for `omatrophy.py watch`) (ADR 24); Omarchy's Do Not Disturb state
   (`~/.local/state/omarchy/notifications/quiet.json`, watched, never
   written). For GOG: Comet's per-game databases
   (`$XDG_DATA_HOME/comet/gameplay/*/*/gameplay.db`, opened read-only), once
@@ -37,7 +37,11 @@ what OmaTrophy does with that access:
 - Writes: `~/.config/omatrophy/config.json` (settings and hidden games,
   only when you change them),
   `~/.local/state/omatrophy/` (game-name cache, GOG client-to-product
-  pairs, test inbox),
+  pairs, test inbox, which games the launch reminders spoke for, pinned
+  walkthrough steps, the Guide key's last bind, the backfill's schedule,
+  the running watcher's version in `watcher.json`),
+  `~/.local/share/omatrophy/` (your guides and your ticks, counts and notes
+  by hand in `by-hand.json`, written only by `omatrophy.py hand`),
   `~/.cache/omatrophy/` (achievement icons, art, global rarity per game,
   refreshed daily, and with the backfill on, profile pages per game in
   `community/`); and, only when you press Save image or run
@@ -141,4 +145,6 @@ bundled tier chimes and queues at most 20 cards.
 The toast window takes no input or focus (an empty input mask). The tracker
 overlay takes the keyboard only while it is open, and closes on Escape or a
 click outside it. OmaTrophy
-never changes configuration outside its own files.
+never changes configuration outside its own files: the Guide key, once you
+install it, is a runtime Hyprland bind (`hyprctl`) that a Hyprland reload
+drops and the shell binds again, never a line in your Hyprland config.

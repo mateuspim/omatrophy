@@ -96,6 +96,12 @@
     "name": "Hidden achievement",
     "hidden": true,
     "note": "Talk to the keeper before the eclipse"
+   },
+   {
+    "api": "CHOIR",
+    "name": "Tide Choir",
+    "hidden": false,
+    "note": "Ring all three bells before you leave the observatory"
    }
   ]
  },

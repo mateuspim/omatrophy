@@ -11,6 +11,7 @@
 #   dev/render.sh tracker-loading out.png
 #   dev/render.sh settings out.png       its Settings tab (settings-toasts, -now, -guides, -stores: one section)
 #   dev/render.sh settings-monitors out.png  Toasts with many monitors and a long disconnected name
+#   dev/render.sh settings-restart out.png   Toasts after an update the shell hasn't loaded yet
 #   dev/render.sh tracker out.png        the achievement tracker (tracker-hand: ticks, a count and notes by hand;
 #                                        tracker-note: a note being written; tracker-done: a finished game,
 #                                        its Save image)
@@ -34,9 +35,9 @@
 #   dev/render.sh --theme flexoki-light guide-tree out.png  under another installed theme (approximate)
 #
 # Sample data is fake (dev/samples/) so captures are safe for the README;
-# --live output shows your own games and stays out of git. The software
-# renderer drops MultiEffect layers, so the omarchy set's accent inlay is
-# missing here; check it with dev/preview.sh.
+# --live output shows your own games and stays out of git. It draws on the
+# GPU when it can; the software fallback drops MultiEffect layers (card
+# banners, the omarchy set's accent inlay): check those with dev/preview.sh.
 set -euo pipefail
 repo=$(cd "$(dirname "$0")/.." && pwd)
 live=false
@@ -58,7 +59,7 @@ while [[ ${1:-} == --* ]]; do
 done
 [[ -z $font || $font =~ ^[0-9]+$ && $font -ge 6 && $font -le 40 ]] ||
   { echo "--font takes a theme base size in pixels, 6 to 40, not '$font'" >&2; exit 2; }
-[[ $# -eq 2 ]] || { sed -n '5,33p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+[[ $# -eq 2 ]] || { sed -n '5,34p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 target=$1
 out=$(realpath -m "$2")
 theme=$HOME/.local/state/omarchy/current/theme
@@ -148,6 +149,7 @@ case $target in
     w=$(( panel + 40 )) h=900 at=2500
     section=overview; [[ $target == settings-* ]] && { section=${target#settings-}; target=settings; }
     monitors=false; [[ $section == monitors ]] && { monitors=true; section=toasts; }
+    restart=false; [[ $section == restart ]] && { restart=true; section=toasts; }
     tab=now; [[ $target == settings || $target == games || $target == profile ]] && tab=$target
     data=now.json; [[ $target == idle || $target == empty ]] && data=$target.json; [[ $target == games ]] && data=games.json
     feed="item.cabinet = JSON.parse(sample.text())"
@@ -156,11 +158,13 @@ case $target in
     if [[ $target == now ]]; then
       extra="FileView { id: jobSample; path: \"$repo/dev/samples/guide-job.json\"; blockLoading: true }"
       # Two jobs at once: guides are made in parallel.
-      feed="$feed; var j = JSON.parse(jobSample.text()); item.guideJobs = [j, Object.assign({}, j, { app: \"2\", game: \"Ember Tide\", line: \"route: order and notes\", done: 4 })]"
+      feed="$feed; var j = JSON.parse(jobSample.text()); item.guideJobs = [j, Object.assign({}, j, { app: \"2\", game: \"Deep Signal\", header: \"dev/samples/art/deep-signal-header.svg\", line: \"route: order and notes\", done: 4 })]"
     fi
     if [[ $target == settings ]]; then
       extra="FileView { id: agentSample; path: \"$repo/dev/samples/agents.json\"; blockLoading: true }"
       feed="$feed; item.guideAgents = JSON.parse(agentSample.text()); item.guideModels = ({ claude: { model: \"sonnet\", effort: \"medium\" } }); item.guideJail = true; item.defaultKeyCheck = ({ key: \"SUPER + CTRL + G\", valid: true, taken: \"\" }); item.settingsSection = \"$section\""
+      # settings-restart: OmaTrophy updated, the shell still on 0.14.0.
+      $restart && feed="$feed; item.shellState = ({ installed: '1.0.0', running: true, stale: true, watcher: '0.14.0', shell: '0.14.0', cards: ['unlock', 'platinum', 'difficulty'] })"
       if $monitors; then
         feed="$feed; item.screenName = 'HEADLESS-' + 'LONG'.repeat(14); item.screenChoices = [{ value: 'focused', label: 'Focused' }].concat(['DP-1', 'DP-2', 'HDMI-A-1', 'HDMI-A-2', 'eDP-1', item.screenName].map(function(name) { return { value: name, label: name + (name === item.screenName ? ' (off)' : '') } }))"
       fi
@@ -312,6 +316,14 @@ ShellRoot {
   }
 }
 QML
-HOME=$qsHome QT_QPA_PLATFORM=offscreen timeout 30 quickshell -p "$dir" >"$dir/log" 2>&1 || true
+# On the GPU through OpenGL, as share.py draws: the offscreen platform's
+# default software renderer drops every MultiEffect (a card's banner and
+# rail, the omarchy set's accent inlay). Without a GPU, software it is.
+HOME=$qsHome QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=rhi QSG_RHI_BACKEND=opengl \
+  timeout 30 quickshell -p "$dir" >"$dir/log" 2>&1 || true
+if [[ ! -f $out ]]; then
+  echo "no GPU render; drawing in software (no MultiEffect layers)" >&2
+  HOME=$qsHome QT_QPA_PLATFORM=offscreen timeout 30 quickshell -p "$dir" >"$dir/log" 2>&1 || true
+fi
 grep -iE "error|warn" "$dir/log" | grep -v qmlscanner | sort -u | head -20 || true
 [[ -f $out ]] && echo "$out" || { echo "no image; log:" >&2; tail -20 "$dir/log" >&2; exit 1; }

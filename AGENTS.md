@@ -96,7 +96,8 @@ says how the parts fit, `docs/adr/` why, `docs/specs/` what the contracts are
 - Visual checks: `dev/preview.sh [bronze|silver|gold|platinum]` or
   `dev/preview.sh --picker` runs a throwaway Quickshell instance with sample
   events; it never touches the live shell. `dev/render.sh <view> out.png`
-  renders offscreen from the fake games in `dev/samples/`; hero captures for
+  renders offscreen from the fake games in `dev/samples/`, on the GPU
+  (software fallback drops MultiEffect layers); hero captures for
   the README come from it only, never with `--live`. `--theme <name>`
   renders under another installed theme (a light one: `flexoki-light`,
   `white`) without switching the desktop's; the README's captures use

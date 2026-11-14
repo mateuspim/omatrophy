@@ -80,20 +80,19 @@ Item {
     glitter.burst(40); dust.burst(24)
   }
 
-  // The Omarchy logo's corners: cut in two grid steps, never rounded. With
-  // `broken`, an open outline with the two breaks of the Omarchy mark (left
-  // middle, bottom right), for the border; otherwise a closed shape to fill.
-  function stepped(w, h, s, inset, broken) {
-    var x0 = inset, y0 = inset, x1 = w - inset, y1 = h - inset, m = (y0 + y1) / 2, g = 20
-    var pts = [[x0, m - g / 2], [x0, y0 + 2 * s], [x0 + s, y0 + 2 * s], [x0 + s, y0 + s], [x0 + 2 * s, y0 + s], [x0 + 2 * s, y0],
+  // The Omarchy logo's corners: cut in two grid steps, never rounded. A
+  // closed shape, for the mask and the border alike: the border once broke
+  // like the Omarchy mark (left middle, bottom right), which read as a
+  // rendering glitch at card size (1.0.0 image review).
+  function stepped(w, h, s, inset) {
+    var x0 = inset, y0 = inset, x1 = w - inset, y1 = h - inset
+    var pts = [[x0, y0 + 2 * s], [x0 + s, y0 + 2 * s], [x0 + s, y0 + s], [x0 + 2 * s, y0 + s], [x0 + 2 * s, y0],
                [x1 - 2 * s, y0], [x1 - 2 * s, y0 + s], [x1 - s, y0 + s], [x1 - s, y0 + 2 * s], [x1, y0 + 2 * s],
                [x1, y1 - 2 * s], [x1 - s, y1 - 2 * s], [x1 - s, y1 - s], [x1 - 2 * s, y1 - s], [x1 - 2 * s, y1]]
     var path = "M" + pts.map(function(p) { return p[0] + " " + p[1] }).join(" L")
-    // The bottom-right break sits a little in from the corner.
-    if (broken) path += " L" + (x1 - 2 * s - 22) + " " + y1 + " M" + (x1 - 2 * s - 46) + " " + y1
     path += " L" + (x0 + 2 * s) + " " + y1 + " L" + (x0 + 2 * s) + " " + (y1 - s) + " L" + (x0 + s) + " " + (y1 - s)
-          + " L" + (x0 + s) + " " + (y1 - 2 * s) + " L" + x0 + " " + (y1 - 2 * s) + " L" + x0 + " " + (m + g / 2)
-    return broken ? path : path + " Z"
+          + " L" + (x0 + s) + " " + (y1 - 2 * s) + " L" + x0 + " " + (y1 - 2 * s)
+    return path + " Z"
   }
 
   function span(ev) {
@@ -342,7 +341,7 @@ Item {
       ShapePath {
         fillColor: root.bg
         strokeColor: "transparent"
-        PathSvg { path: root.stepped(card.width, card.height, 6, 0, false) }
+        PathSvg { path: root.stepped(card.width, card.height, 6, 0) }
       }
     }
 
@@ -355,7 +354,7 @@ Item {
       ShapePath {
         fillColor: "white"
         strokeColor: "transparent"
-        PathSvg { path: root.stepped(card.width, card.height, 6, 0, false) }
+        PathSvg { path: root.stepped(card.width, card.height, 6, 0) }
       }
     }
 
@@ -420,7 +419,7 @@ Item {
     }
 
 
-    // The border, broken like the Omarchy mark.
+    // The border, stepped like the Omarchy mark's corners.
     Shape {
       anchors.fill: parent
       ShapePath {
@@ -429,7 +428,7 @@ Item {
         strokeWidth: 2
         joinStyle: ShapePath.MiterJoin
         capStyle: ShapePath.FlatCap
-        PathSvg { path: root.stepped(card.width, card.height, 6, 2 / 2, true) }
+        PathSvg { path: root.stepped(card.width, card.height, 6, 2 / 2) }
       }
     }
 
@@ -545,7 +544,7 @@ Item {
       }
 
       // Progress as a square with stepped corners, walked clockwise from the
-      // top centre; at 100% it hands over to the broken frame below.
+      // top centre; at 100% it hands over to the frame below.
       Canvas {
         id: ring
         property real fill: 0
@@ -584,8 +583,8 @@ Item {
         }
       }
 
-      // The frame the trophy earns: broken like the Omarchy mark, in the
-      // theme accent. Revealed on the burst, replacing the progress square.
+      // The frame the trophy earns: a closed square rail in the theme
+      // accent. Revealed on the burst, replacing the progress square.
       Item {
         id: frame
         anchors.centerIn: parent
@@ -684,14 +683,8 @@ Item {
         Item {
           width: parent.width
           height: count.height
-          // A clean exit: the game has nothing left to give.
-          Text {
-            textFormat: Text.PlainText
-            text: "exit 0"
-            color: Qt.alpha(root.fg, 0.5)
-            font.family: Commons.Style.font.family
-            font.pixelSize: Commons.Style.font.bodySmall
-          }
+          // No "exit 0" on the left any more: a 1.0.0 viewer of the shared
+          // image read the joke as a bug.
           Text {
             textFormat: Text.PlainText
             id: count

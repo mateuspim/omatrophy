@@ -35,6 +35,7 @@ made.
 | [21](0021-tick-and-note-by-hand.md) | Tick, count and take notes by hand, in a file of the player's own | Accepted |
 | [22](0022-hold-cards-during-do-not-disturb.md) | Hold cards while Omarchy's Do Not Disturb is on | Accepted |
 | [23](0023-draw-the-platinum-image-offscreen.md) | Draw the platinum image in a throwaway offscreen Quickshell | Accepted |
+| [24](0024-tell-the-panel-when-the-shell-is-older.md) | Tell the panel when the shell runs an older OmaTrophy | Accepted |
 
 ## Rules
 
