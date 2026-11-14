@@ -25,7 +25,9 @@ what OmaTrophy does with that access:
   the panel or tracker opens, Steam's last-played times
   (`<Steam>/userdata/<account>/config/localconfig.vdf`) and the command lines
   of running processes (`/proc/*/cmdline`, to find `SteamLaunch AppId=N`);
-  its own settings file. For GOG: Comet's per-game databases
+  its own settings file; Omarchy's Do Not Disturb state
+  (`~/.local/state/omarchy/notifications/quiet.json`, watched, never
+  written). For GOG: Comet's per-game databases
   (`$XDG_DATA_HOME/comet/gameplay/*/*/gameplay.db`, opened read-only), once
   a second for changed files; Heroic's `gog_store/installed.json`, each
   install folder's `goggame-<product>.info`, `store_cache/gog_library.json`

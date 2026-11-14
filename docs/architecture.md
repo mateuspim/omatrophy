@@ -8,7 +8,8 @@ turns those lines into cards on screen.
  launcher files ──▶ stores/<id>.py ──▶ omatrophy.py watch ──stdout──▶ Service.qml ──▶ TrophyToast.qml
  (Steam, Comet)      read + describe     diff, tier, events   JSON lines   queue, window      PlatinumCard.qml
                                               ▲                               ▲
-           omatrophy.py test ──▶ inbox.jsonl ─┘        config.json ───────────┘ (watched live)
+           omatrophy.py test ──▶ inbox.jsonl ─┘        config.json ───────────┤ (watched live)
+                                                                    Omarchy's quiet.json ┘ (Do Not Disturb)
                                                            ▲
                          Panel.qml ──▶ StylePicker.qml ──▶ omatrophy.py set
                                           │   ▲
@@ -32,7 +33,7 @@ turns those lines into cards on screen.
 | `stores/__init__.py` | The list of stores; `available()` keeps the installed ones. |
 | `difficulty.py` | Reads from an achievement's own text the difficulty setting it needs ("on Nightmare", "Normal or higher"), for the `difficulty` fields of `game` and `games`. Pure, no store or network. |
 | `omatrophy.py` | Watch loop (unlocks and counter milestones), launch watch (the difficulty and missable reminders, the session recap when a game stops), diffing, tiers, event shapes, test inbox, settings, the panel's and tracker's JSON (`now`, `games`, `game`), CLI. |
-| `Service.qml` | Runs the watcher, parses lines, queues events, plays the chime, shows one card at a time in an Overlay-layer window on the focused monitor. |
+| `Service.qml` | Runs the watcher, parses lines, queues events, plays the chime, shows one card at a time in an Overlay-layer window on the focused monitor (or the one in `screen`), holding cards while Omarchy's Do Not Disturb is on (ADR 22). |
 | `TrophyToast.qml` | One unlock: icon, trophy in the tier's metal, rarity, progress. |
 | `DifficultyCard.qml` | The difficulty reminder at a game's launch: the settings its achievements left need, and whether the guide says they stack. |
 | `MissableCard.qml` | The missable reminder at a game's launch: the guide's current step and what can be missed in it. |
@@ -61,7 +62,9 @@ turns those lines into cards on screen.
    reminders ahead of toasts), plays a chime for unlocks, and
    builds the matching card from its current text (ADR 10) into a click-through
    window on the Overlay layer (ADR 2). The card reports `finished`; the next
-   event shows.
+   event shows. While Omarchy's Do Not Disturb is on (its notification
+   service's `quiet.json`) and `dnd` is `hold`, cards wait in the queue
+   until it ends, except one queued by `test` (ADR 22).
 4. Settings live in `~/.config/omatrophy/config.json`; `Service.qml` and the
    picker watch it, so changes apply to the next card.
 5. The panel runs `omatrophy.py now` each time it opens. Clicking a game

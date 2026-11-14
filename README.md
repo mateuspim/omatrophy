@@ -22,6 +22,12 @@ achievement list.
 
 - Toasts on the shell's Overlay layer, so they land over fullscreen games
   even when Steam's own popup doesn't. Click-through; never takes focus.
+  On the focused monitor, or the one you pick in Settings > Toasts >
+  Screen (`omatrophy.py set screen DP-1`).
+- Do Not Disturb respected: while Omarchy's notifications are silenced (the
+  bar's bell), cards wait and show when you turn it back on, chimes and
+  all. **Show anyway** in Settings > Toasts > Do Not Disturb keeps them
+  coming (`omatrophy.py set dnd ignore`); **Try** shows a card either way.
 - About two seconds from unlock to toast: OmaTrophy reads the launcher's
   local achievement data (Steam's cache, the GOG database Heroic keeps),
   so no Web API key, no login and no public profile.
@@ -88,7 +94,7 @@ rm -rf ~/.config/omatrophy ~/.local/state/omatrophy ~/.cache/omatrophy
 ## Security and privileges
 
 OmaTrophy runs inside `omarchy-shell` as your user. It reads Steam's local
-achievement cache and, for GOG, the database Heroic's Comet service keeps, keeps its settings and a small cache in its own folders,
+achievement cache and, for GOG, the database Heroic's Comet service keeps, reads whether Omarchy's Do Not Disturb is on, keeps its settings and a small cache in its own folders,
 and calls Steam's public endpoints for rarity, game names and art when a
 toast shows, the bar panel opens or the watcher starts (game names, once
 each). GOG needs no network at all. No root, no API key, no login. Making a 100%
@@ -388,8 +394,10 @@ Format and stages: [docs/specs/guides.md](docs/specs/guides.md).
 
 The panel's **Settings** tab opens on an **Overview**: one line per
 section saying what it is set to; click one, or pick a section above it.
-**Toasts** holds the trophy style, then position, glass
-and sound as rows of choices, one row each for the difficulty and
+**Toasts** holds the trophy style, then position, glass, the monitor
+cards show on (Focused, or each connected monitor by name), what Do Not
+Disturb does to them (hold until it ends, or show anyway) and sound as
+rows of choices, one row each for the difficulty and
 missable reminders, the session recap and milestones (with **Try** to
 show one), and **Try it** tiles that show a toast of
 each tier with your settings. Each choice applies to the next toast.
@@ -415,6 +423,8 @@ omatrophy.py set position top-right     # top-center, top-left, top-right
 omatrophy.py set sound off              # on, off, omatrophy, classic
 omatrophy.py set icons vector           # omarchy, vector, painted
 omatrophy.py set glass clear            # clear, frosted, solid
+omatrophy.py set screen DP-1            # focused, or a monitor from `hyprctl monitors`
+omatrophy.py set dnd ignore             # hold (wait out Do Not Disturb), ignore
 omatrophy.py hide steam 20920           # out of "closest to platinum" and the shelf; unhide brings it back
 omatrophy.py test platinum              # bronze, silver, gold, platinum, difficulty, missable, recap, milestone
 omatrophy.py status                     # progress of every game

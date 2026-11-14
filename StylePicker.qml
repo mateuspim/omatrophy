@@ -43,6 +43,10 @@ Column {
   property bool sound: true
   property string chimes: "omatrophy"
   property string glass: "frosted"
+  // The monitor cards show on (config `screen`): "focused" or a name.
+  property string screenName: "focused"
+  // While Do Not Disturb is on (config `dnd`): "hold" or "ignore".
+  property string dndMode: "hold"
   property bool community: false
   // The difficulty reminder when a game starts (config `difficulty-reminder`).
   property bool difficultyReminder: true
@@ -198,6 +202,7 @@ Column {
       var style = styles.find(function(st) { return st.id === iconSet })
       return [(style ? style.name : iconSet) + " trophies",
               { "top-left": "top left", "top-center": "top centre", "top-right": "top right" }[position] || position,
+              screenName === "focused" ? "focused monitor" : screenName,
               glass + " glass", sound ? (chimes === "classic" ? "classic chimes" : "OmaTrophy chimes") : "silent"].join(" · ")
     }
     if (section === "now") {
@@ -395,6 +400,8 @@ Column {
     if (key === "icons") iconSet = value
     if (key === "position") position = value
     if (key === "glass") glass = value
+    if (key === "screen") screenName = value
+    if (key === "dnd") dndMode = value
     if (key === "community") community = value === "on"
     if (key === "difficulty-reminder") difficultyReminder = value === "on"
     if (key === "missable-reminder") missableReminder = value === "on"
@@ -414,6 +421,19 @@ Column {
       if (value !== "on" && value !== "off") chimes = value
     }
     runner.exec(["python3", helperPath, "set", key, value])
+  }
+
+  // Settings > Toasts > Screen: Focused, then each connected monitor by its
+  // Hyprland name, then the chosen one if it isn't connected now, so the
+  // choice stays visible (cards go to the focused monitor until it is back).
+  function screenOptions() {
+    var out = [{ value: "focused", label: "Focused" }]
+    var screens = Quickshell.screens
+    for (var i = 0; i < screens.length; i++)
+      if (screens[i].name) out.push({ value: screens[i].name, label: screens[i].name })
+    if (screenName !== "focused" && !out.some(function(o) { return o.value === screenName }))
+      out.push({ value: screenName, label: screenName + " (off)" })
+    return out
   }
 
   function isHidden(g) {
@@ -676,6 +696,8 @@ Column {
       if (typeof c.sound === "boolean") root.sound = c.sound
       if (c.chimes) root.chimes = c.chimes
       if (c.glass) root.glass = c.glass
+      root.screenName = typeof c.screen === "string" && c.screen !== "" ? c.screen : "focused"
+      root.dndMode = c.dnd === "ignore" ? "ignore" : "hold"
       root.community = c.community === true
       root.difficultyReminder = c["difficulty-reminder"] !== false
       root.missableReminder = c["missable-reminder"] !== false
@@ -4196,6 +4218,30 @@ Column {
           ]
           value: root.glass
           onPicked: value => root.set("glass", value)
+        }
+      }
+
+      // Which monitor cards show on; Focused follows you, as before.
+      SettingRow {
+        label: "SCREEN"
+        Chips {
+          options: root.screenOptions()
+          value: root.screenName
+          onPicked: value => root.set("screen", value)
+        }
+      }
+
+      // Omarchy's Do Not Disturb (the bar's bell): hold cards until it
+      // ends, or show them anyway. Try shows a card either way.
+      SettingRow {
+        label: "DO NOT DISTURB"
+        Chips {
+          options: [
+            { value: "hold", label: "Hold until it ends" },
+            { value: "ignore", label: "Show anyway" }
+          ]
+          value: root.dndMode
+          onPicked: value => root.set("dnd", value)
         }
       }
 

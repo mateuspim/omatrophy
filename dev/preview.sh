@@ -57,6 +57,7 @@ PICK
 else cat <<SERVICE
   Trophy.Service {
     bindsGuideKey: false
+    followsDnd: false
     watchCommand: ["python3", "$repo/omatrophy.py", "demo", ${args%, }]
   }
 SERVICE

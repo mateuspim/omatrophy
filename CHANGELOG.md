@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- **Pick the monitor** cards show on: Settings > Toasts > Screen lists
+  Focused (as before) and each connected monitor by name (`set screen
+  DP-1`, `set screen focused`). A monitor that isn't connected falls back
+  to the focused one until it is.
+- **Do Not Disturb**: while Omarchy's notifications are silenced, cards
+  wait and show, with their chimes, when it ends. Settings > Toasts >
+  Do Not Disturb, **Show anyway** to keep them coming (`set dnd ignore`).
+  A card from Try or `test` shows either way, and carries `"test": true`.
+  Read from Omarchy's notification state (ADR 22). Needs one
+  `omarchy restart shell`.
+
 ## 0.11.0 - 2026-11-14
 
 - Guide Tree from the keyboard: while the Tree shows, the arrows move a

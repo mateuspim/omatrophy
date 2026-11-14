@@ -29,6 +29,9 @@ Usage:
   omatrophy.py set guide-agent default|claude|...   set guide-web on|off   set guide-jail on|off
   omatrophy.py set position <where>   top-center, top-left or top-right (applies live)
   omatrophy.py set glass <look>       clear, frosted or solid toast background
+  omatrophy.py set screen focused|<monitor>
+                                      the monitor cards show on (a Hyprland name like DP-1)
+  omatrophy.py set dnd hold|ignore    while Do Not Disturb is on, hold cards until it ends, or show them anyway
   omatrophy.py set sound on|off|omatrophy|classic
   omatrophy.py set icons omarchy|vector|painted
   omatrophy.py set tracker-sort recent|rarity|name|game
@@ -53,7 +56,7 @@ Usage:
 Each store (stores/) reads its launcher's own files; this file diffs them and
 turns new unlocks into events. Steam and GOG (through Heroic) so far.
 """
-import hashlib, json, os, signal, sys, threading, time, urllib.parse
+import hashlib, json, os, re, signal, sys, threading, time, urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 
 import difficulty
@@ -843,7 +846,8 @@ def test(kind):
     # A typo used to queue a plain unlock, which looked like it worked.
     if kind not in TEST_KINDS:
         raise SystemExit(f'omatrophy: test: no "{kind}" event; try one of {", ".join(TEST_KINDS)}')
-    ev = sample_event(kind, *sample_game())
+    # Asked for, so the shell shows it even while Do Not Disturb holds the rest.
+    ev = dict(sample_event(kind, *sample_game()), test=True)
     os.makedirs(STATE, exist_ok=True)
     with open(INBOX, 'a') as f:
         f.write(json.dumps(ev) + '\n')
@@ -1604,6 +1608,9 @@ SETTINGS = {'position': ('top-center', 'top-left', 'top-right'),
             'sound': ('on', 'off', 'omatrophy', 'classic'),
             'icons': ('omarchy', 'vector', 'painted'),
             'glass': ('clear', 'frosted', 'solid'),
+            # While Omarchy's Do Not Disturb is on: hold cards until it ends,
+            # or show them anyway.
+            'dnd': ('hold', 'ignore'),
             'tracker-sort': ('recent', 'rarity', 'name', 'game'),
             # The panel's last picks, so the next open shows the same view.
             'games-sort': ('recent', 'closest', 'name'),
@@ -1631,6 +1638,17 @@ SWITCHES = {'community', 'guide-web', 'guide-jail', 'reveal-hidden', 'games-diff
             'missable-reminder', 'session-recap', 'milestones'} | {f'now-{name}' for name in NOW_SECTIONS}
 
 
+# A Hyprland monitor name: DP-1, HDMI-A-1, eDP-1, HEADLESS-2.
+MONITOR_NAME = re.compile(r'[A-Za-z0-9][A-Za-z0-9._-]{0,63}')
+
+
+def screen_setting(value):
+    """`focused`, or a monitor name as written; None for anything else. A
+    monitor not connected now is fine: the shell falls back to the focused
+    one until it is."""
+    return value if value == 'focused' or MONITOR_NAME.fullmatch(value) else None
+
+
 def set_option(key, value):
     """Write one setting to ~/.config/omatrophy/config.json; the shell picks it up live.
     `sound` takes on/off, or a chime set, which also turns sound on."""
@@ -1654,11 +1672,17 @@ def set_option(key, value):
         if value != 'default' and value not in guide_agents.BY_ID:
             raise SystemExit(f'usage: omatrophy.py set guide-agent default|{"|".join(guide_agents.BY_ID)}')
         value = '' if value == 'default' else value
+    elif key == 'screen':
+        if screen_setting(value) is None:
+            raise SystemExit(f'omatrophy: set screen: "{value}" is not a monitor name; '
+                             'write focused, or a name from `hyprctl monitors` like DP-1')
     elif value not in SETTINGS.get(key, ()):
         raise SystemExit(f'usage: omatrophy.py set position {"|".join(SETTINGS["position"])}\n'
                          f'       omatrophy.py set sound {"|".join(SETTINGS["sound"])}\n'
                          f'       omatrophy.py set icons {"|".join(SETTINGS["icons"])}\n'
                          f'       omatrophy.py set glass {"|".join(SETTINGS["glass"])}\n'
+                         f'       omatrophy.py set screen focused|<monitor>\n'
+                         f'       omatrophy.py set dnd {"|".join(SETTINGS["dnd"])}\n'
                          f'       omatrophy.py set tracker-sort {"|".join(SETTINGS["tracker-sort"])}\n'
                          f'       omatrophy.py set games-sort {"|".join(SETTINGS["games-sort"])}\n'
                          f'       omatrophy.py set games-difficulty on|off\n'

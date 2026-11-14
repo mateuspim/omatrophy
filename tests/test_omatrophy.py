@@ -1310,6 +1310,30 @@ class Settings(unittest.TestCase):
                 self.assertIs(json.load(f)['reveal-hidden'], True)
 
 
+    def test_screen_is_focused_or_a_monitor_name(self):
+        for good in ('focused', 'DP-1', 'HDMI-A-1', 'eDP-1', 'HEADLESS-2', 'WL-1'):
+            self.assertEqual(omatrophy.screen_setting(good), good)
+        for bad in ('', 'DP 1', '../x', '-DP-1', 'DP-1"', 'a' * 65):
+            self.assertIsNone(omatrophy.screen_setting(bad), bad)
+
+    def test_screen_and_dnd_are_written_as_given(self):
+        with tempfile.TemporaryDirectory() as home, mock.patch.dict(os.environ, {'HOME': home}):
+            with redirect_stdout(io.StringIO()):
+                omatrophy.set_option('screen', 'DP-2')
+                omatrophy.set_option('dnd', 'ignore')
+            with open(f'{home}/.config/omatrophy/config.json') as f:
+                self.assertEqual(json.load(f), {'screen': 'DP-2', 'dnd': 'ignore'})
+            with redirect_stdout(io.StringIO()):
+                omatrophy.set_option('screen', 'focused')
+                omatrophy.set_option('dnd', 'hold')
+            with open(f'{home}/.config/omatrophy/config.json') as f:
+                self.assertEqual(json.load(f), {'screen': 'focused', 'dnd': 'hold'})
+            with self.assertRaises(SystemExit) as caught:
+                omatrophy.set_option('screen', 'DP 2')
+            self.assertIn('hyprctl monitors', str(caught.exception))
+            with self.assertRaises(SystemExit):
+                omatrophy.set_option('dnd', 'drop')
+
     def test_now_sections_switch_on_and_off_as_booleans(self):
         with tempfile.TemporaryDirectory() as home, mock.patch.dict(os.environ, {'HOME': home}):
             with redirect_stdout(io.StringIO()):
@@ -2047,6 +2071,20 @@ class CardTable(unittest.TestCase):
 
 
 class TestCommand(unittest.TestCase):
+    def test_a_queued_test_card_says_so(self):
+        # The shell shows a card marked `test` even while Do Not Disturb
+        # holds the rest, so Settings' Try never looks broken.
+        game = (LaunchReminder.Fake(LaunchReminder.ACHS), '7', LaunchReminder.ACHS)
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(omatrophy, 'STATE', tmp), \
+                mock.patch.object(omatrophy, 'INBOX', f'{tmp}/inbox.jsonl'), \
+                mock.patch.object(omatrophy, 'sample_game', return_value=game):
+            with redirect_stdout(io.StringIO()):
+                omatrophy.test('gold')
+            with open(f'{tmp}/inbox.jsonl') as f:
+                line = f.read()
+        self.assertIs(json.loads(line)['test'], True)
+        self.assertIsNotNone(omatrophy.inbox_event(line))
+
     def test_an_unknown_kind_is_refused_before_anything_is_queued(self):
         with mock.patch.object(omatrophy, 'sample_game', side_effect=AssertionError('read a game')):
             with self.assertRaises(SystemExit) as caught:

@@ -24,6 +24,8 @@ installed.
 | `set sound on\|off\|omatrophy\|classic` | The chime: on, off, or which set (which also turns it on). |
 | `set icons omarchy\|vector\|painted` | Trophy art set. |
 | `set glass clear\|frosted\|solid` | How see-through toasts are. |
+| `set screen focused\|<monitor>` | The monitor cards show on: the focused one, or a name from `hyprctl monitors` (letters, digits, `.`, `_`, `-`). |
+| `set dnd hold\|ignore` | While Omarchy's Do Not Disturb is on, hold cards until it ends, or show them anyway ([ADR 22](../adr/0022-hold-cards-during-do-not-disturb.md)). |
 | `set tracker-sort recent\|rarity\|name\|game` | The tracker's sort; the tracker writes it when you change it. |
 | `guide-key <key>` | Binds the Guide key (`""` unbinds) through `hyprctl`, refusing a key in use; prints and saves `{key, bound, error}` to `~/.local/state/omatrophy/guide-key.json` ([ADR 18](../adr/0018-bind-the-guide-key-at-runtime.md)). `Service.qml` runs it with config.json's `guide-key`. |
 | `guide-key free` | Up to six keys no Hyprland bind uses (ours counts as free), as a JSON list; the recorder offers them, as a bound key never reaches it. |
