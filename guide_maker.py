@@ -10,7 +10,8 @@ Only the owner starts a job (`guide make` or the tracker's button), never
 the watcher. Nothing is written until the last stage passes, so a stopped
 or failed job leaves the old guide as it was.
 """
-import html, html.parser, json, os, re, signal, subprocess, sys, tempfile, time, urllib.error, urllib.parse, urllib.request
+import html, html.parser, http.client, ipaddress, json, os, re, signal, socket, subprocess, sys, tempfile, time, \
+    urllib.error, urllib.parse, urllib.request
 
 import difficulty, guide_agents, guides
 from stores.base import read_json, write_json
@@ -323,14 +324,75 @@ class HttpsOnly(urllib.request.HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
-def fetch_page(url):
-    """A page's text, or None when it isn't fetchable: not https, an error,
-    a 403/429, or a bot check. Never retried with another client (ADR 14)."""
-    if urllib.parse.urlsplit(str(url)).scheme != 'https':
+def public_address(address):
+    """True for an IP address on the public internet: not loopback, the
+    LAN, link-local (cloud metadata), CGNAT, multicast or reserved."""
+    try:
+        ip = ipaddress.ip_address(str(address).split('%', 1)[0])
+    except ValueError:
+        return False
+    ip = getattr(ip, 'ipv4_mapped', None) or ip
+    return ip.is_global and not ip.is_multicast
+
+
+class PublicHTTPSConnection(http.client.HTTPSConnection):
+    """An HTTPS connection that refuses a peer off the public internet.
+    The URLs come from the agent, which reads web pages that can tell it
+    what to cite, so a page could otherwise make OmaTrophy request the
+    owner's router or a service on 127.0.0.1. The address checked
+    is the one the socket connected to, after DNS, so a name that
+    resolves (or re-resolves) to a private address and a redirect there
+    are refused too. Through a proxy only the host name can be checked."""
+
+    def __init__(self, *args, **kw):
+        super().__init__(*args, **kw)
+        self._create_connection = self._public_connection
+
+    def _public_connection(self, address, *args, **kw):
+        if self._tunnel_host:
+            if not public_host_name(self._tunnel_host):
+                raise OSError(f'refused {self._tunnel_host}: not a public host')
+            return socket.create_connection(address, *args, **kw)
+        sock = socket.create_connection(address, *args, **kw)
+        peer = sock.getpeername()[0]
+        if not public_address(peer):
+            sock.close()
+            raise OSError(f'refused {self.host} at {peer}: not a public address')
+        return sock
+
+
+def public_host_name(host):
+    """A host name, or an IP literal on the public internet; never localhost."""
+    host = str(host or '').strip('[]').rstrip('.').lower()
+    if not host or host == 'localhost' or host.endswith('.localhost'):
+        return False
+    try:
+        ipaddress.ip_address(host.split('%', 1)[0])
+    except ValueError:
+        return True
+    return public_address(host)
+
+
+class PublicHTTPS(urllib.request.HTTPSHandler):
+    def https_open(self, req):
+        return self.do_open(PublicHTTPSConnection, req, context=self._context)
+
+
+def page_opener():
+    """https only, public hosts only, redirects included."""
+    return urllib.request.build_opener(HttpsOnly, PublicHTTPS)
+
+
+def fetch_page(url, opener=None):
+    """A page's text, or None when it isn't fetchable: not https, a host
+    off the public internet, an error, a 403/429, or a bot check. Never
+    retried with another client (ADR 14)."""
+    parts = urllib.parse.urlsplit(str(url))
+    if parts.scheme != 'https' or not public_host_name(parts.hostname):
         return None
     req = urllib.request.Request(url, headers={'User-Agent': f'omatrophy-guide/{version()}'})
     try:
-        with urllib.request.build_opener(HttpsOnly).open(req, timeout=FETCH_SECONDS) as r:
+        with (opener or page_opener()).open(req, timeout=FETCH_SECONDS) as r:
             body = r.read(FETCH_BYTES).decode(r.headers.get_content_charset() or 'utf-8', 'replace')
             kind = r.headers.get_content_type()
     except Exception:
@@ -360,7 +422,7 @@ def steam_guide_urls(app, get=None):
 def raw_page(url):
     req = urllib.request.Request(url, headers={'User-Agent': f'omatrophy-guide/{version()}'})
     try:
-        with urllib.request.build_opener(HttpsOnly).open(req, timeout=FETCH_SECONDS) as r:
+        with page_opener().open(req, timeout=FETCH_SECONDS) as r:
             return r.read(FETCH_BYTES).decode('utf-8', 'replace')
     except Exception:
         return None

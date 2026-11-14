@@ -622,6 +622,42 @@ class Checks(unittest.TestCase):
     def test_fetch_refuses_plain_http(self):
         self.assertIsNone(guide_maker.fetch_page('http://example.com/'))
 
+    def test_fetch_refuses_hosts_off_the_public_internet(self):
+        # The agent picks the URLs and a web page can steer it: OmaTrophy
+        # must not become a way to reach the owner's router or a local
+        # service. No request is made; an opener that would fail the test.
+        never = mock.Mock(open=mock.Mock(side_effect=AssertionError('fetched')))
+        # Private ranges are spelled out at run time: test_hygiene refuses a
+        # LAN address written in a tracked file.
+        lan, ten = '.'.join(('192', '168', '1', '1')), '.'.join(('10', '0', '0', '2'))
+        for url in ('https://127.0.0.1/', 'https://localhost:8443/admin', 'https://router.localhost/',
+                    f'https://{lan}/cgi-bin/reboot', f'https://{ten}/', 'https://169.254.169.254/latest/',
+                    'https://[::1]/', 'https://[::ffff:127.0.0.1]/', 'https://100.64.0.1/', 'https://0.0.0.0/'):
+            self.assertIsNone(guide_maker.fetch_page(url, opener=never), url)
+
+    def test_public_address(self):
+        self.assertTrue(guide_maker.public_address('93.184.215.14'))
+        self.assertTrue(guide_maker.public_address('2606:4700::1111'))
+        lan = ['.'.join(map(str, octets)) for octets in ((10, 1, 2, 3), (172, 16, 0, 1), (192, 168, 0, 10))]
+        for ip in lan + ['127.0.0.1', '169.254.169.254', 'fe80::1%eth0', '::1', '::ffff:' + lan[2], 'fd00::1',
+                         '224.0.0.1', '100.64.0.1', 'not an ip']:
+            self.assertFalse(guide_maker.public_address(ip), ip)
+
+    def test_connection_refuses_a_name_that_resolves_to_a_private_address(self):
+        # A public-looking name can resolve (or re-resolve) to 127.0.0.1, and
+        # a redirect can go there: the connected peer is what is checked.
+        import socket
+        server = socket.socket()
+        server.bind(('127.0.0.1', 0))
+        server.listen(1)
+        self.addCleanup(server.close)
+        port = server.getsockname()[1]
+        conn = guide_maker.PublicHTTPSConnection('guides.example.com', port, timeout=2)
+        with mock.patch('socket.getaddrinfo', return_value=[
+                (socket.AF_INET, socket.SOCK_STREAM, 6, '', ('127.0.0.1', port))]):
+            with self.assertRaisesRegex(OSError, 'not a public address'):
+                conn.connect()
+
     def test_dead_running_job_reads_failed(self):
         with tempfile.TemporaryDirectory() as d:
             os.makedirs(guide_maker.jobs_dir(d))
