@@ -1586,7 +1586,8 @@ class Qml(unittest.TestCase):
         # Cards are built from their text (FreshObject.qml, ADR 10) and stay
         # standalone so each reads on its own.
         siblings = {n[:-4] for n, _ in self.qml()}
-        for name in ('TrophyToast.qml', 'PlatinumCard.qml', 'DifficultyCard.qml', 'StylePicker.qml', 'TrackerView.qml'):
+        for name in ('TrophyToast.qml', 'PlatinumCard.qml', 'DifficultyCard.qml', 'MissableCard.qml', 'StylePicker.qml',
+                     'TrackerView.qml'):
             text = dict(self.qml())[name]
             for other in siblings - {name[:-4]}:
                 self.assertNotRegex(text, rf'\b{other}\s*\{{', f'{name} uses {other}')
@@ -1756,6 +1757,125 @@ class LaunchReminder(unittest.TestCase):
         ev = omatrophy.sample_event('difficulty', self.Fake([ach('d')]), '7', [ach('d')])
         self.assertEqual((ev['type'], ev['game']), ('difficulty', 'G'))
         self.assertTrue(ev['settings'])
+
+
+def write_guide(plan, app='7'):
+    """A guide for game `app` in the test's own data folder (XDG_DATA_HOME)."""
+    folder = os.path.join(os.environ['XDG_DATA_HOME'], 'omatrophy', 'guides')
+    os.makedirs(folder, exist_ok=True)
+    with open(os.path.join(folder, f'g-{app}.md'), 'w') as f:
+        f.write('# G\n\n## Achievements\n')
+    with open(os.path.join(folder, f'g-{app}.plan.json'), 'w') as f:
+        json.dump(plan, f)
+
+
+class MissableReminder(unittest.TestCase):
+    # Step 1 is finished (A got); step 2 has B (a missable item), C and a
+    # hidden D named in its `missables`; step 3 has E.
+    ACHS = [ach('a', True, 5), ach('b'), ach('c'), ach('d', hidden=True), ach('e')]
+    PLAN = {'items': {'B': {'name': 'B', 'api': 'b', 'missable': True, 'missable_note': 'Before the bridge'},
+                      'C': {'name': 'C', 'api': 'c'},
+                      'D': {'name': 'D', 'api': 'd', 'missable_note': 'Talk to the keeper'},
+                      'E': {'name': 'E', 'api': 'e', 'missable': True}},
+            'walkthrough': [{'title': 'Prologue', 'achievements': ['A']},
+                            {'title': 'The Archive', 'achievements': ['B', 'C', 'D'], 'missables': ['D']},
+                            {'title': 'The Dome', 'achievements': ['E']}]}
+
+    def setUp(self):
+        d = tempfile.TemporaryDirectory()
+        self.addCleanup(d.cleanup)
+        patch = mock.patch.object(omatrophy, 'missable_reminded_path',
+                                  return_value=os.path.join(d.name, 'missable-reminded.json'))
+        patch.start()
+        self.addCleanup(patch.stop)
+        env = mock.patch.dict(os.environ, {'XDG_DATA_HOME': d.name})
+        env.start()
+        self.addCleanup(env.stop)
+
+    def store(self, achs=None):
+        return LaunchReminder.Fake(self.ACHS if achs is None else achs)
+
+    def test_the_event_names_the_step_and_its_open_missables(self):
+        write_guide(self.PLAN)
+        ev = omatrophy.missable_event(self.store(), '7', self.ACHS)
+        self.assertEqual(ev, {'type': 'missable', 'store': 'steam', 'app': '7', 'game': 'G', 'header': 'h.jpg',
+                              'step': 2, 'steps': 3, 'title': 'The Archive',
+                              'missables': [{'api': 'd', 'name': 'Hidden achievement', 'hidden': True,
+                                             'note': 'Talk to the keeper'},
+                                            {'api': 'b', 'name': 'B', 'hidden': False, 'note': 'Before the bridge'}]})
+        shown = omatrophy.missable_event(self.store(), '7', self.ACHS, reveal=True)['missables']
+        self.assertEqual((shown[0]['name'], shown[0]['hidden']), ('D', False))
+
+    def test_nothing_to_say_without_a_guide_or_an_open_missable(self):
+        self.assertIsNone(omatrophy.missable_event(self.store(), '7', self.ACHS))
+        write_guide(self.PLAN)
+        got = [ach('a', True, 5), ach('b', True, 6), ach('c'), ach('d', True, 7), ach('e')]
+        self.assertIsNone(omatrophy.missable_event(self.store(got), '7', got))
+
+    def test_once_per_step_and_set(self):
+        write_guide(self.PLAN)
+        self.assertEqual(omatrophy.missable_reminder(self.store(), '7', {})['step'], 2)
+        self.assertIsNone(omatrophy.missable_reminder(self.store(), '7', {}))
+        # B got: the set changed, so the next launch says what is left.
+        fewer = [ach('a', True, 5), ach('b', True, 6), ach('c'), ach('d', hidden=True), ach('e')]
+        self.assertEqual([r['api'] for r in omatrophy.missable_reminder(self.store(fewer), '7', {})['missables']], ['d'])
+        self.assertIsNone(omatrophy.missable_reminder(self.store(fewer), '7', {}))
+        # Another game is its own.
+        write_guide(self.PLAN, '8')
+        self.assertIsNotNone(omatrophy.missable_reminder(self.store(), '8', {}))
+
+    def test_switched_off_stays_quiet_and_unrecorded(self):
+        write_guide(self.PLAN)
+        self.assertIsNone(omatrophy.missable_reminder(self.store(), '7', {'missable-reminder': False}))
+        self.assertIsNotNone(omatrophy.missable_reminder(self.store(), '7', {}))
+
+    def test_a_launch_tries_each_reminder_until_it_speaks(self):
+        # The difficulty reminder speaks at once, the missable one only
+        # once the guide appears two polls later; both come, each once.
+        write_guide(self.PLAN)
+        achs = self.ACHS + [dict(ach('n'), desc='Finish on Nightmare.')]
+        store = LaunchReminder.Fake(achs, runs=[None] + [{'game': '7', 'since': 1}] * 5)
+        calls = []
+        real = omatrophy.missable_reminder
+        def late(s, game, cfg):
+            calls.append(1)
+            return real(s, game, cfg) if len(calls) >= 3 else None
+        with mock.patch.object(omatrophy, 'missable_reminder', late), \
+                mock.patch.object(omatrophy, 'reminded_path',
+                                  return_value=os.path.join(os.environ['XDG_DATA_HOME'], 'reminded.json')):
+            events = LaunchReminder.run_launches(self, store, 5)
+        self.assertEqual([e['type'] for e in events], ['difficulty', 'missable'])
+        self.assertEqual(len(calls), 3)
+
+    def test_the_sample_works_for_a_game_without_a_guide(self):
+        ev = omatrophy.sample_event('missable', self.store(), '7', self.ACHS)
+        self.assertEqual((ev['type'], ev['step']), ('missable', 3))
+        self.assertEqual([r['api'] for r in ev['missables']], ['b', 'c'])
+
+
+class CardTable(unittest.TestCase):
+    """cards.json is the one table of cards: Service.qml shows these and the
+    test inbox lets these through."""
+
+    root = os.path.join(os.path.dirname(__file__), '..')
+
+    def test_every_card_has_its_file_and_every_test_kind_a_card(self):
+        with open(os.path.join(self.root, 'cards.json')) as f:
+            cards = json.load(f)
+        for kind, card in cards.items():
+            self.assertTrue(os.path.exists(os.path.join(self.root, card['file'])), kind)
+            self.assertIsInstance(card.get('rank', 0), int, kind)
+        self.assertEqual(omatrophy.INBOX_TYPES, tuple(cards))
+        for kind in omatrophy.TEST_KINDS:
+            ev = omatrophy.sample_event(kind, LaunchReminder.Fake(LaunchReminder.ACHS), '7', LaunchReminder.ACHS)
+            self.assertIn(ev['type'], cards, kind)
+
+    def test_the_reminders_are_kept_and_ranked_in_launch_order(self):
+        with open(os.path.join(self.root, 'cards.json')) as f:
+            cards = json.load(f)
+        ranks = [cards[k]['rank'] for k in omatrophy.LAUNCH_KINDS]
+        self.assertEqual(ranks, sorted(ranks, reverse=True))
+        self.assertTrue(all(cards[k].get('keep') for k in omatrophy.LAUNCH_KINDS))
 
 
 class TestCommand(unittest.TestCase):

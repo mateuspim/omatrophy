@@ -4,7 +4,11 @@
 `Service.qml` reads them; `omatrophy.py test` queues the same shapes through
 the inbox (`~/.local/state/omatrophy/inbox.jsonl`), and `demo` prints them
 directly. Unknown `type`s are ignored by the shell, so new types are safe to
-add; changing a field is a breaking change.
+add; changing a field is a breaking change. `cards.json` lists the types
+the shell has a card for: each type's QML file, whether it plays the tier's
+chime (`chime`), whether it goes ahead of queued cards of a lower `rank`,
+and whether a full queue (20) may drop it (`keep`). The test inbox lets
+through these types only.
 
 ## `ready`
 
@@ -68,3 +72,27 @@ drops it, and plays no chime.
 | `header` | string | Banner URL, or `""`. |
 | `stacks` | bool or null | The guide's word, as `guide` gives it: `true` when a harder run also counts for the easier settings, `false` when a setting needs its own run, `null` with no guide or no word. |
 | `stacks_verified` | bool | A quote backs `stacks`. |
+
+## `missable`
+
+A game started (as for `difficulty`) whose guide's current step (`guide`'s
+`step`: the pinned one, else the guess) has achievements still open that
+can be missed there: the step's `missables` and the items marked
+`missable` it places, the ones the tracker's Do now puts first. Tried at
+each check for two minutes, each launch reminder on its own. Once per
+step and set: the watcher keeps `{"store:app": "<step>:<title>:<apis>"}`
+in `~/.local/state/omatrophy/missable-reminded.json` and stays quiet while
+the next launch would say the same; a new step, a missable got or a new
+one placed sends it again. Not sent with `missable-reminder` off, for a
+game without a guide, or for a game already running when the watcher
+started. The shell shows it right after any `difficulty` card, before
+queued toasts, never drops it, and plays no chime.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `type` | `"missable"` | |
+| `store`, `app`, `game` | string | As above. |
+| `header` | string | Banner URL, or `""`. |
+| `step`, `steps` | number | The step, 1-based, and how many the walkthrough has. |
+| `title` | string | The step's title. |
+| `missables` | object[] | `{api, name, hidden, note}` per open missable, the step's `missables` first. `name` is `"Hidden achievement"` and `hidden` `true` for a hidden achievement unless `reveal-hidden` is on; `note` is the guide's `missable_note` (when it is lost), or `""`. |

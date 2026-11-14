@@ -18,8 +18,8 @@ kinds=("$@")
 # can't end a QML string or add code to it.
 [[ $secs =~ ^[0-9]+$ ]] || { echo "-t takes whole seconds, not '$secs'" >&2; exit 2; }
 for kind in "${kinds[@]}"; do
-  [[ $kind =~ ^(unlock|rare|bronze|silver|gold|platinum|difficulty)$ ]] ||
-    { echo "unknown card: $kind (unlock, rare, bronze, silver, gold, platinum or difficulty)" >&2; exit 2; }
+  [[ $kind =~ ^(unlock|rare|bronze|silver|gold|platinum|difficulty|missable)$ ]] ||
+    { echo "unknown card: $kind (unlock, rare, bronze, silver, gold, platinum, difficulty or missable)" >&2; exit 2; }
 done
 theme=$HOME/.local/state/omarchy/current/theme
 for path in "$repo" "$theme"; do

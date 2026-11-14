@@ -239,6 +239,17 @@ its tip, what it needs and what it opens show under that part. Up next
 leaves out a trophy until what it needs is done. Guides made before
 0.7.0 have no actions or chains; **Make again** adds them.
 
+When a game starts whose guide puts you on a step with missables still
+open, a card names the step ("Step 4 of 12 · The Drowned Observatory")
+and each trophy you lose by moving on, with the guide's note on when
+("Before the lift up to the dome"). A hidden one says "Hidden
+achievement" unless you reveal hidden ones. It comes once per step: the
+next launch on the same step with the same trophies open stays quiet,
+and a new step, or one of them got, brings it back. It shows right after
+the difficulty reminder, without a chime. Turn it off in Settings >
+Toasts > Missable, where **Try** shows one (`omatrophy.py set
+missable-reminder off`, `omatrophy.py test missable`).
+
 ### The guide over your game
 
 Like Steam's Shift+Tab overlay: a key opens the guide of the game you're
@@ -383,7 +394,7 @@ omatrophy.py set sound off              # on, off, omatrophy, classic
 omatrophy.py set icons vector           # omarchy, vector, painted
 omatrophy.py set glass clear            # clear, frosted, solid
 omatrophy.py hide steam 20920           # out of "closest to platinum" and the shelf; unhide brings it back
-omatrophy.py test platinum              # bronze, silver, gold, platinum
+omatrophy.py test platinum              # bronze, silver, gold, platinum, difficulty, missable
 omatrophy.py status                     # progress of every game
 omatrophy.py now                        # the panel's Now tab, as JSON
 omatrophy.py game                       # every achievement of the running game

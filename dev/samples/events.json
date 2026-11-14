@@ -68,5 +68,35 @@
   "header": "dev/samples/art/starfall-odyssey-header.svg",
   "stacks": true,
   "stacks_verified": true
+ },
+ "missable": {
+  "type": "missable",
+  "store": "steam",
+  "app": "1",
+  "game": "Starfall Odyssey",
+  "header": "dev/samples/art/starfall-odyssey-header.svg",
+  "step": 4,
+  "steps": 12,
+  "title": "The Drowned Observatory",
+  "missables": [
+   {
+    "api": "LENS",
+    "name": "Eye of the Deep",
+    "hidden": false,
+    "note": "Before the lift up to the dome: it seals behind you"
+   },
+   {
+    "api": "LOG7",
+    "name": "Keeper's Last Log",
+    "hidden": false,
+    "note": "In the flooded archive, only until the water rises"
+   },
+   {
+    "api": "SECRET",
+    "name": "Hidden achievement",
+    "hidden": true,
+    "note": "Talk to the keeper before the eclipse"
+   }
+  ]
  }
 }

@@ -26,11 +26,14 @@ says how the parts fit, `docs/adr/` why, `docs/specs/` what the contracts are
   `import qs.Commons as Commons` and `Commons.Color.x`; never a bare `Color.`
   (`tests/` enforces it).
 - `TrophyToast.qml`, `PlatinumCard.qml`, `DifficultyCard.qml`,
-  `StylePicker.qml` and `TrackerView.qml` are built from their current text by `FreshObject.qml`
+  `MissableCard.qml`, `StylePicker.qml` and `TrackerView.qml` are built from their current text by `FreshObject.qml`
   so edits show without a shell restart (ADR 10; Omarchy's Quickshell caches
   plugin files, so a `?v=` URL no longer works). They must not use other QML types from this folder; the `Trophy`
   component is repeated on purpose. `Service.qml`, `Panel.qml`, `Tracker.qml`,
   `FreshObject.qml` and `manifest.json` need `omarchy restart shell`.
+  A new card is a QML file plus a row in `cards.json` (file, chime, rank,
+  keep), which `Service.qml` and the test inbox both read; no
+  `Service.qml` edit. Add it to `tests/test_qml.py`'s `VIEWS` too.
 - Popup text uses `Commons.Color.popups.text`, never the bar's foreground:
   the bar's colour is meant for the bar's background.
 - Stores read the launcher's local data and need no account keys (ADR 1,

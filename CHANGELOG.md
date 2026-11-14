@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- A **missable reminder** when a game starts whose guide puts you on a
+  step with missables still open: a card names the step and each trophy
+  you lose by moving on, with the guide's note on when. Once per step and
+  set of missables; right after the difficulty reminder, silent. Off in
+  Settings > Toasts > Missable, where Try shows one (`set
+  missable-reminder off`, `test missable`).
+- The shell's cards come from one table, `cards.json` (each event type's
+  QML file, chime, queue rank and whether a full queue may drop it), so a
+  new card needs no `Service.qml` edit. This change itself needs
+  `omarchy restart shell`.
+
 ## 0.9.0 - 2026-11-14
 
 - Guides: **missable** now means lost for that save. Classify marks one

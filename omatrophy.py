@@ -3,7 +3,8 @@
 
 Usage:
   omatrophy.py watch                  print one JSON event per new unlock (the shell service runs this)
-  omatrophy.py test [kind]            queue a fake event for a running watcher: bronze, silver, gold, platinum, difficulty
+  omatrophy.py test [kind]            queue a fake event for a running watcher: bronze, silver, gold, platinum, difficulty,
+                                      missable
   omatrophy.py status                 progress of every game with achievements, as JSON
   omatrophy.py cabinet                trophy totals and the games nearest platinum, as JSON
   omatrophy.py now                    what is playing, recent games, platinums and totals, as JSON (the bar panel)
@@ -162,6 +163,100 @@ def launch_reminder(store, game, cfg):
     return ev
 
 
+def guide_or_empty(store_id, game, achs):
+    """The game's guide as `guide` gives it; {} with none, or a broken one."""
+    import guides
+    try:
+        return guides.guide_answer(store_id, game, achs)
+    except Exception:
+        return {}
+
+
+def step_missables(answer, achs):
+    """(step index, open missable apis) of the guide's current step: the
+    step's `missables` and the items marked `missable` it places, as the
+    tracker's Do now puts first (guides.frontier). (-1, []) with no step."""
+    steps = answer.get('walkthrough') or []
+    at = answer.get('step', -1)
+    if not isinstance(at, int) or isinstance(at, bool) or not 0 <= at < len(steps):
+        return -1, []
+    items = answer.get('items') or {}
+    step = steps[at]
+    wanted = list(step.get('missables') or []) + \
+        [api for api in step.get('achievements') or [] if (items.get(api) or {}).get('missable')]
+    done = {a['api'] for a in achs if a['unlocked']} | set(answer.get('ticks') or [])
+    known = {a['api'] for a in achs}
+    return at, [api for api in dict.fromkeys(wanted) if api in known and api not in done]
+
+
+def missable_event(store, game, achs, reveal=False):
+    """The reminder the shell shows when a game whose guide's current step
+    has missables still open starts: the step and what can be missed in
+    it, each with the guide's note on when. None when nothing is open.
+    A hidden achievement's name stays secret, as the tracker keeps it,
+    unless `reveal`; its note says when, not what, so it stays."""
+    answer = guide_or_empty(store.id, game, achs)
+    at, open_apis = step_missables(answer, achs)
+    if not open_apis:
+        return None
+    items = answer.get('items') or {}
+    by_api = {a['api']: a for a in achs}
+    rows = []
+    for api in open_apis:
+        a = by_api[api]
+        secret = bool(a.get('hidden')) and not reveal
+        rows.append({'api': api, 'name': 'Hidden achievement' if secret else a['name'], 'hidden': secret,
+                     'note': (items.get(api) or {}).get('missable_note') or ''})
+    step = answer['walkthrough'][at]
+    return {'type': 'missable', 'store': store.id, 'app': game, 'game': store.game_name(game),
+            'header': store.art(game)['header'], 'step': at + 1, 'steps': len(answer['walkthrough']),
+            'title': step['title'], 'missables': rows}
+
+
+def missable_signature(ev):
+    """What the missable reminder said: its step and the achievements it
+    named. The same again at the next launch is noise; a new step, or one
+    of them got (or a new one placed), is news."""
+    return f"{ev['step']}:{ev['title']}:" + ','.join(sorted(r['api'] for r in ev['missables']))
+
+
+def missable_reminded_path():
+    return f'{STATE}/missable-reminded.json'
+
+
+def missable_reminder(store, game, cfg):
+    """The missable reminder for a game that just started, once per step
+    and set of open missables. None when switched off, with nothing to
+    say, or when it would say what it said last time."""
+    if cfg.get('missable-reminder') is False:
+        return None
+    achs, _ = unlocked_set(store, game)
+    ev = missable_event(store, game, achs, cfg.get('reveal-hidden') is True)
+    if not ev:
+        return None
+    key = game_key(store.id, game)
+    shown = read_json(missable_reminded_path(), {})
+    shown = shown if isinstance(shown, dict) else {}
+    signature = missable_signature(ev)
+    if shown.get(key) == signature:
+        return None
+    write_json(missable_reminded_path(), dict(shown, **{key: signature}))
+    return ev
+
+
+# The reminders a launch can bring, in the order the shell shows them
+# (cards.json ranks them the same way). Each is tried on its own until it
+# has spoken or the retry ends: the missable one needs no difficulty
+# achievement, and a game reminded of difficulty long ago still moves on
+# through its guide's steps.
+LAUNCH_KINDS = ('difficulty', 'missable')
+
+
+def launch_reminder_for(kind):
+    # Looked up per call, so tests can patch one reminder.
+    return {'difficulty': launch_reminder, 'missable': missable_reminder}[kind]
+
+
 def new_launch(previous, run):
     """The game id that just started, given the one running before (or
     None) and `running()` now; None when nothing new started."""
@@ -187,34 +282,39 @@ def running_game_id(store):
 
 
 def watch_launches(found, sleep=time.sleep, clock=time.time):
-    """Shows the difficulty reminder when a game starts. A game already
-    running when the watcher starts (a shell restart mid-game) is no
-    launch. A launch is tried every poll while the game runs, for
-    LAUNCH_RETRY seconds, until it has something to say. In a thread of its
-    own: reading achievements and names can take a while and must never
-    hold up an unlock."""
+    """Shows the launch reminders (LAUNCH_KINDS) when a game starts. A
+    game already running when the watcher starts (a shell restart
+    mid-game) is no launch. Each reminder is tried every poll while the
+    game runs, for LAUNCH_RETRY seconds, until it has something to say. In
+    a thread of its own: reading achievements, guides and names can take a
+    while and must never hold up an unlock."""
     playing = {s.id: running_game_id(s) for s in found}
-    pending = {}  # store id: (game, give up at)
+    pending = {}  # store id: (game, give up at, kinds not yet spoken)
     while True:
         sleep(LAUNCH_POLL)
         for s in found:
             game = running_game_id(s)
             if new_launch(playing[s.id], {'game': game} if game else None):
-                pending[s.id] = (game, clock() + LAUNCH_RETRY)
+                pending[s.id] = (game, clock() + LAUNCH_RETRY, list(LAUNCH_KINDS))
             playing[s.id] = game
-            wanted, until = pending.get(s.id, (None, 0))
+            wanted, until, kinds = pending.get(s.id, (None, 0, []))
             if not wanted or wanted != game or clock() > until:
                 pending.pop(s.id, None)
                 continue
-            try:
-                ev = launch_reminder(s, game, read_json(config_path(), {}))
-            except Exception as e:
-                print(f'omatrophy: launch reminder failed: {e}', file=sys.stderr, flush=True)
+            cfg = read_json(config_path(), {})
+            cfg = cfg if isinstance(cfg, dict) else {}
+            for kind in list(kinds):
+                try:
+                    ev = launch_reminder_for(kind)(s, game, cfg)
+                except Exception as e:
+                    print(f'omatrophy: {kind} reminder failed: {e}', file=sys.stderr, flush=True)
+                    kinds.remove(kind)
+                    continue
+                if ev:
+                    kinds.remove(kind)
+                    emit(ev)
+            if not kinds:
                 pending.pop(s.id, None)
-                continue
-            if ev:
-                pending.pop(s.id, None)
-                emit(ev)
 
 
 def unlocked_set(store, game):
@@ -267,16 +367,23 @@ def drain_inbox(offset):
         return f.tell()
 
 
+def card_types():
+    """The event types the shell has a card for, from cards.json, the one
+    table Service.qml reads too: a new card is a QML file and a row there."""
+    found = read_json(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cards.json'), {})
+    return tuple(found) if isinstance(found, dict) else ()
+
+
 # What `test` can queue: every card the shell shows (`difficulty` was
 # missing at first, so `test difficulty` and Settings' Try showed nothing).
-INBOX_TYPES = ('unlock', 'platinum', 'difficulty')
+INBOX_TYPES = card_types()
 # A real event line is a few hundred bytes; the shell parses every line.
 MAX_INBOX_LINE = 64 * 1024
 
 
 def inbox_event(line):
-    """The line itself when it is one card event (`unlock`, `platinum` or
-    `difficulty`), else None: the inbox is a file any of the user's
+    """The line itself when it is one card event (a type in cards.json),
+    else None: the inbox is a file any of the user's
     processes can append to."""
     line = line.strip()
     if not line or len(line) > MAX_INBOX_LINE:
@@ -519,6 +626,8 @@ def sample_event(kind, store, game, achs):
             'type': 'difficulty', 'store': store.id, 'app': game, 'game': store.game_name(game),
             'settings': ['Nightmare', 'Hard+'], 'count': 3, 'header': store.art(game)['header'],
             'stacks': True, 'stacks_verified': True}
+    if kind == 'missable':
+        return missable_event(store, game, achs) or sample_missable(store, game, achs)
     ach = next((a for a in achs if a['unlocked']), achs[0])
     ev = unlock_event(store, game, ach, achs)
     if kind in ('rare', 'gold'):
@@ -528,7 +637,18 @@ def sample_event(kind, store, game, achs):
     return ev
 
 
-TEST_KINDS = ('unlock', 'bronze', 'silver', 'gold', 'rare', 'platinum', 'difficulty')
+def sample_missable(store, game, achs):
+    """A made-up missable reminder from the game's first locked achievements
+    (any achievements when all are done), for a game without a guide."""
+    picks = ([a for a in achs if not a['unlocked']] or achs)[:2]
+    notes = ['Before you leave the first town', 'Only during the night chapter']
+    return {'type': 'missable', 'store': store.id, 'app': game, 'game': store.game_name(game),
+            'header': store.art(game)['header'], 'step': 3, 'steps': 12, 'title': 'The Sunken Archive',
+            'missables': [{'api': a['api'], 'name': a['name'], 'hidden': False, 'note': note}
+                          for a, note in zip(picks, notes)]}
+
+
+TEST_KINDS = ('unlock', 'bronze', 'silver', 'gold', 'rare', 'platinum', 'difficulty', 'missable')
 
 
 def test(kind):
@@ -1302,6 +1422,8 @@ SETTINGS = {'position': ('top-center', 'top-left', 'top-right'),
             'games-difficulty': ('on', 'off'),
             # The difficulty reminder when a game starts; on unless switched off.
             'difficulty-reminder': ('on', 'off'),
+            # The missable reminder when a game starts; on unless switched off.
+            'missable-reminder': ('on', 'off'),
             'rarest': ('ever', 'month', 'platinum'),
             'settings-section': ('overview', 'toasts', 'now', 'guides', 'stores'),
             'community': ('on', 'off'),
@@ -1313,7 +1435,8 @@ SETTINGS = {'position': ('top-center', 'top-left', 'top-right'),
 NOW_SECTIONS = ('metals', 'recent', 'rarest', 'shelf')
 SETTINGS.update({f'now-{name}': ('on', 'off') for name in NOW_SECTIONS})
 # Settings stored as true/false rather than the word given.
-SWITCHES = {'community', 'guide-web', 'guide-jail', 'reveal-hidden', 'games-difficulty', 'difficulty-reminder'} | {f'now-{name}' for name in NOW_SECTIONS}
+SWITCHES = {'community', 'guide-web', 'guide-jail', 'reveal-hidden', 'games-difficulty', 'difficulty-reminder',
+            'missable-reminder'} | {f'now-{name}' for name in NOW_SECTIONS}
 
 
 def set_option(key, value):
@@ -1348,6 +1471,7 @@ def set_option(key, value):
                          f'       omatrophy.py set games-sort {"|".join(SETTINGS["games-sort"])}\n'
                          f'       omatrophy.py set games-difficulty on|off\n'
                          f'       omatrophy.py set difficulty-reminder on|off\n'
+                         f'       omatrophy.py set missable-reminder on|off\n'
                          f'       omatrophy.py set rarest {"|".join(SETTINGS["rarest"])}\n'
                          f'       omatrophy.py set community on|off\n'
                          f'       omatrophy.py set reveal-hidden on|off\n'

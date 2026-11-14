@@ -46,6 +46,8 @@ Column {
   property bool community: false
   // The difficulty reminder when a game starts (config `difficulty-reminder`).
   property bool difficultyReminder: true
+  // The missable reminder when a game starts (config `missable-reminder`).
+  property bool missableReminder: true
   // The Steam profile backfill's latest line, from its status.json
   // (stores/steam_community.py); {} before the first run.
   property var backfill: ({})
@@ -391,6 +393,7 @@ Column {
     if (key === "glass") glass = value
     if (key === "community") community = value === "on"
     if (key === "difficulty-reminder") difficultyReminder = value === "on"
+    if (key === "missable-reminder") missableReminder = value === "on"
     if (key === "guide-web") guideWeb = value === "on"
     if (key === "guide-jail") guideJail = value === "on"
     if (key === "guide-agent") guideAgent = value === "default" ? "" : value
@@ -669,6 +672,7 @@ Column {
       if (c.glass) root.glass = c.glass
       root.community = c.community === true
       root.difficultyReminder = c["difficulty-reminder"] !== false
+      root.missableReminder = c["missable-reminder"] !== false
       root.guideAgent = typeof c["guide-agent"] === "string" ? c["guide-agent"] : ""
       root.guideModels = c["guide-models"] && typeof c["guide-models"] === "object" ? c["guide-models"] : {}
       root.guideWeb = c["guide-web"] !== false
@@ -4214,6 +4218,21 @@ Column {
           ]
           value: root.difficultyReminder ? "on" : "off"
           onPicked: value => value === "try" ? root.preview("difficulty") : root.set("difficulty-reminder", value)
+        }
+      }
+
+      // A card when a game starts whose guide's current step has
+      // missables still open, once per step, naming what can be missed.
+      SettingRow {
+        label: "MISSABLE"
+        Chips {
+          options: [
+            { value: "on", label: "At launch" },
+            { value: "off", label: "Off" },
+            { value: "try", label: "Try" }
+          ]
+          value: root.missableReminder ? "on" : "off"
+          onPicked: value => value === "try" ? root.preview("missable") : root.set("missable-reminder", value)
         }
       }
 
