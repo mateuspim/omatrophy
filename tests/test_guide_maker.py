@@ -802,8 +802,54 @@ class Bench(unittest.TestCase):
         self.assertEqual((m['coverage'], m['verified'], m['complete'], m['route'], m['sections']),
                          (0.5, 0.5, 0.625, 0.5, 0.5))
         self.assertEqual(m['walkthrough'], 0.0)
-        self.assertEqual(guide_bench.score(m), round(35 * 0.5 + 25 * 0.5 + 15 * 0.625 + 10 * 0.5 + 5 * 0.5, 1))
+        # No actions scores 0; no prerequisites and no markers to get wrong, 1.
+        self.assertEqual((m['useful_actions'], m['prerequisites'], m['story_markers']), (0.0, 1.0, 1.0))
+        self.assertEqual(guide_bench.score(m), round(30 * 0.5 + 20 * 0.5 + 10 * 0.625 + 10 * 0.5 + 5 * 0.5 + 5 + 5, 1))
         self.assertEqual(sum(guide_bench.WEIGHTS.values()), 100)
+
+    def test_filler_actions_only_say_to_play_on(self):
+        import guide_bench
+        # Regression: 15 of the RE5 bench's 65 actions (2026-11-10) were
+        # "Play through to the end of the chapter".
+        for what in ('Play through to the end of the chapter', 'Finish the chapter.', 'Complete Chapter 3-2',
+                     'Continue the story to unlock Hero', 'Play through the chapter for the Completed 1-1 trophy'):
+            self.assertTrue(guide_bench.filler(what), what)
+        for what in ('Complete the mission without being spotted', 'Beat Uroboros with the flame jets',
+                     'Clear the area and get the Survivor trophy', 'Finish the game on Veteran', ''):
+            self.assertFalse(guide_bench.filler(what), what)
+        plan = {'walkthrough': [{'actions': [{'what': 'Finish the chapter'}, {'what': 'Shoot the lamp'}]},
+                                {'actions': [{'what': 'Open the gate'}, {'what': 'Take the key'}]}]}
+        self.assertEqual(guide_bench.useful_measure(plan), 0.75)
+        self.assertEqual(guide_bench.useful_measure({'walkthrough': [{'title': 'x'}]}), 0.0)
+
+    def test_prerequisites_score_the_quoted_ones_and_the_cited_ones(self):
+        import guide_bench
+        achs = [{'name': 'War Hero', 'desc': 'Complete all chapters on Professional'},
+                {'name': 'Pro Shot', 'desc': 'Clear chapter 1-1 on Professional'},
+                {'name': 'Veteran Soldier', 'desc': 'Complete all chapters on Veteran'}]
+        said = {'quote': 'Professional difficulty is unlocked after beating the game on Veteran.', 'verified': True}
+        items = {'War Hero': {'name': 'War Hero', 'requires': ['Veteran Soldier'], 'cites': [said]},
+                 'Pro Shot': {'name': 'Pro Shot', 'requires': [], 'cites': [said]},
+                 'Veteran Soldier': {'name': 'Veteran Soldier', 'cites': [dict(said, verified=False)]}}
+        # One of two quoted prerequisites landed; the one requires is cited.
+        self.assertEqual(guide_bench.prerequisite_measure(items, achs), 0.5 * 0.5 + 0.5 * 1)
+        items['War Hero']['unverified'] = ['requires']
+        self.assertEqual(guide_bench.prerequisite_measure(items, achs), 0.25)
+        # Nothing stated and nothing claimed: nothing to get wrong.
+        self.assertEqual(guide_bench.prerequisite_measure({'A': {'name': 'A'}}, ()), 1.0)
+
+    def test_markers_score_story_markers_and_marked_story_steps(self):
+        import guide_bench
+        plan = {'items': {'C1': {'name': 'C1', 'phase': 'story'}, 'C2': {'name': 'C2', 'phase': 'story'},
+                          'Flash': {'name': 'Flash', 'phase': 'quick'}},
+                'walkthrough': [{'achievements': ['C1', 'Flash'], 'marker': 'C1'},
+                                {'achievements': ['C2'], 'marker': ''},
+                                {'achievements': ['Flash'], 'marker': 'Flash'},
+                                {'achievements': ['Old'], 'marker': 'Old'}]}
+        # Of the markers C1 and Flash (Old is no item), one is story; of the
+        # two story steps, one names a marker.
+        self.assertEqual(guide_bench.marker_measure(plan), 0.5 * 0.5 + 0.5 * 0.5)
+        self.assertEqual(guide_bench.marker_measure({'items': {}, 'walkthrough': [{'achievements': []}]}), 1.0)
 
     def test_walkthrough_measure_places_open_ones_and_counts_grounded_steps(self):
         import guide_bench

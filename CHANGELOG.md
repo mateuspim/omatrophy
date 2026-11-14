@@ -14,6 +14,13 @@
   need the Veteran clear). Classify asks again when an excerpt, quote
   or tip says an achievement opens only after another and its
   `requires` is empty.
+- `guide bench` scores the walkthrough's actions (those that say more
+  than "play through the chapter"), prerequisites (quoted ones in
+  `requires`, every `requires` quoted) and markers (story clears, story
+  steps marked), 5 points each, instead of only counting them; verified
+  goes to 30, coverage to 20, fields to 10. The table shows them as
+  `acts`, `needs` and `marker`. Scores from earlier benches, the
+  README's results table included, used the old weights.
 ## 0.8.1 - 2026-11-14
 
 - `test difficulty` and Settings > Toasts > Difficulty > Try show the

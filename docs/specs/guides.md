@@ -299,21 +299,31 @@ metrics, seconds, cost_usd, tokens, calls, folder, name}]}`, best first;
 `requires`), `needs_cited` (those whose `requires` a verified quote
 backs), `actions` (all steps' actions), `where` (0..1, the share of
 actions naming a place) and `markers` (0..1, the share of steps naming a
-marker); the table shows them as `needs` (cited/all), `where` and
-`marker`. They stay out of the score: a game may have no prerequisites,
-so more `requires` isn't better, a place is easy to fill with words no
-check reads, and a game may have no chapter-clear achievements, so a
-step without a marker can be right.
+marker). The table shows `acts` (useful_actions), `needs`
+(prerequisites, then cited/all), `marker` (story_markers) and `where`.
 
-The score (0-100) uses only what OmaTrophy checks: `verified` (share of
-covered items with a verified quote) 35, `coverage` (share of open
-achievements classified) 25, `complete` (phase, difficulty, time and tip
-filled) 15, `route` (open achievements placed in the order) 10,
-`walkthrough` (half the open achievements placed in a step, half the
-steps with a verified quote) 10, `sections` (overview, route, missables,
-combos written) 5. The play order of the steps isn't checked, so it
-isn't scored. Benches before 0.6.4 had no `walkthrough` measure and gave
-`complete` 20 and `sections` 10. Ties go to
+The score (0-100) uses only what OmaTrophy checks:
+
+| Measure | Weight | What it is |
+| --- | --- | --- |
+| `verified` | 30 | share of covered items with a verified quote |
+| `coverage` | 20 | share of open achievements classified |
+| `complete` | 10 | phase, difficulty, time and tip filled |
+| `route` | 10 | open achievements placed in the order |
+| `walkthrough` | 10 | half the open achievements placed in a step, half the steps with a verified quote |
+| `sections` | 5 | overview, route, missables, combos written |
+| `useful_actions` | 5 | share of the steps' actions that say more than "play on": an action whose `what`, with a trailing "to unlock X" or "for the X trophy" taken off, is only "play through / finish / complete / continue / beat / clear the chapter, mission, level, story, game, episode, act, stage or campaign" (one more word allowed: "Complete Chapter 3-2") is filler; 0 when the walkthrough has no actions |
+| `prerequisites` | 5 | half the covered items whose verified quotes state a prerequisite (the classify check, `guide_maker.prerequisite_said`, with the store's descriptions naming the settings) that have a `requires`, half the items with a `requires` that a verified quote backs; each half 1 when it has nothing to count, so a game with no prerequisites scores 1 |
+| `story_markers` | 5 | half the markers that are `story` items (a marker that is no classified item is left out), half the steps holding a `story` item that name a marker; each half 1 when it has nothing to count |
+
+The play order of the steps isn't checked, so it isn't scored, and nor
+is the number of `requires`, markers or places: more isn't better. The
+weights changed in 0.10.0 (actions, prerequisites and markers were
+counted, unscored: `verified` 35, `coverage` 25, `complete` 15, `route`
+10, `walkthrough` 10, `sections` 5), so scores before it don't compare
+one to one; `results.json` keeps the `weights` it used. Benches before
+0.6.4 had no `walkthrough` measure and gave `complete` 20 and
+`sections` 10. Ties go to
 the cheaper (unknown cost last), then the faster. A failed or stopped
 entry scores 0. `--pick` saves the best as `guide-agent` and its
 `guide-models` pick (endpoint included); `--keep` copies its guide over
