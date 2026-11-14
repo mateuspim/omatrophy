@@ -34,6 +34,9 @@ Item {
   // Which trophy art: assets/omarchy (flat pixel grid, theme-tinted inlay),
   // assets/vector (SVG) or assets/painted (PNG).
   property string iconSet: "omarchy"
+  // Still: no timeline, straight to the opened card as it holds, for the
+  // saved image (`omatrophy.py share`, PlatinumShare.qml).
+  property bool still: false
   signal finished()
   signal chime()
 
@@ -45,6 +48,10 @@ Item {
   readonly property color accent: Commons.Color.accent
   readonly property color bg: Commons.Color.notifications.background
   readonly property color metal: "#e2eaff"
+  // The metal as ink: the pale platinum vanishes on a light theme's
+  // background, so text and the bar take it darker there (TrackerView's
+  // metalText does the same).
+  readonly property color ink: bg.hslLightness > 0.5 ? Qt.darker(metal, 1.9) : metal
   readonly property real startFill: event && event.total ? Math.max(0, event.total - 1) / event.total : 0.9
   readonly property real outX: edge === "top-left" ? -(badge + pad + 20) : (edge === "top-right" ? badge + pad + 20 : 0)
   readonly property real outY: edge === "top-center" ? -(card.height + pad) : 0
@@ -57,7 +64,21 @@ Item {
   height: card.height + pad * 2
   clip: true
 
-  onEventChanged: if (event) show.restart()
+  onEventChanged: if (event) still ? hold() : show.restart()
+
+  // Every beat's end state at once: the card open over its art, the text
+  // written, the count full, the light on and a glint across the metal.
+  function hold() {
+    show.stop()
+    card.width = root.full; card.opacity = 1; card.slideX = 0; card.slideY = 0
+    ring.fill = 1; ring.opacity = 0; trophy.spin = 0; trophy.scale = 1; trophy.opacity = 1; trophy.shine = 0.32
+    flash.opacity = 0; glow.opacity = 0.55; glow.scale = 1; rays.opacity = 1; rays.rotation = 6
+    art.opacity = 1; root.reveal = 16; root.counted = event ? event.total : 0; title.opacity = 1; title.y = 0
+    stats.opacity = 1; sweep.x = -sweep.width; frame.opacity = 1; frame.scale = 1
+    twinkle.enabled = true
+    // Glitter caught mid-flight, as on landing.
+    glitter.burst(40); dust.burst(24)
+  }
 
   // The Omarchy logo's corners: cut in two grid steps, never rounded. With
   // `broken`, an open outline with the two breaks of the Omarchy mark (left
@@ -282,7 +303,7 @@ Item {
       x: badgeSlot.x + badgeSlot.width / 2
       y: card.height / 2
       opacity: 0
-      RotationAnimation on rotation { from: 0; to: 360; duration: 30000; loops: Animation.Infinite; running: rays.opacity > 0 }
+      RotationAnimation on rotation { from: 0; to: 360; duration: 30000; loops: Animation.Infinite; running: rays.opacity > 0 && !root.still }
       Repeater {
         model: 14
         Shape {
@@ -394,7 +415,7 @@ Item {
       Rectangle {
         width: 3
         height: card.height
-        color: root.metal
+        color: root.ink
       }
     }
 
@@ -616,7 +637,7 @@ Item {
             required property int index
             readonly property real shown: Math.max(0, Math.min(1, root.reveal - index))
             text: modelData
-            color: root.metal
+            color: root.ink
             opacity: shown
             transform: Translate { y: (1 - shown) * 10 }
             font.family: Commons.Style.font.family
@@ -692,7 +713,7 @@ Item {
           Rectangle {
             width: root.event && root.event.total ? parent.width * root.counted / root.event.total : 0
             height: parent.height
-            color: root.metal
+            color: root.ink
           }
         }
       }
