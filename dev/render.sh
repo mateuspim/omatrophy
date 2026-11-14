@@ -14,10 +14,14 @@
 #   dev/render.sh guide out.png          its Guide view (guide-making: a make running; guide-empty: none yet;
 #                                        guide-failed: the last make failed; guide-steps: a guide with
 #                                        step actions; guide-tree: its Tree; guide-tree-done, -locked,
-#                                        -bare (no steps, no chains), -narrow, -pick: its edge states;
+#                                        -bare (no steps, no chains), -narrow, -pick, -wide (a chain wider
+#                                        than its card): its edge states;
 #                                        guide-tree-pinned: the player pinned step 3 (I'm here);
+#                                        guide-tree-keys: arrow keys pressed, the focus ring on a node;
 #                                        guide-tree-pinnable: step 4 shown, its I'm here button;
-#                                        guide-steps-pinned: the Steps view with step 3 pinned)
+#                                        guide-steps-pinned: the Steps view with step 3 pinned;
+#                                        guide-tree-narrow-pinned, -narrow-pinnable, ...: a state on
+#                                        the narrow card, its track down the side)
 #   dev/render.sh gold out.png           a toast: bronze, silver, gold, platinum; difficulty, missable: the launch reminders; recap: a session; milestone: a counter
 #   dev/render.sh --live tracker out.png the views read your real stores
 #   dev/render.sh --font 16 now out.png  at another theme font size (the base is 12)
@@ -42,7 +46,7 @@ while [[ ${1:-} == --* ]]; do
 done
 [[ -z $font || $font =~ ^[0-9]+$ && $font -ge 6 && $font -le 40 ]] ||
   { echo "--font takes a theme base size in pixels, 6 to 40, not '$font'" >&2; exit 2; }
-[[ $# -eq 2 ]] || { sed -n '5,24p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+[[ $# -eq 2 ]] || { sed -n '5,28p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 target=$1
 out=$(realpath -m "$2")
 theme=$HOME/.local/state/omarchy/current/theme
@@ -140,12 +144,21 @@ case $target in
     # everything left waiting on something; no steps and no chains (the
     # track falls back to the story trophies); a narrow card; a chain
     # node picked.
-    tweak="" width=1260
-    case $target in
+    tweak="" later="" width=1260
+    # -narrow-<state>: that state on a narrow card, where the track runs
+    # down the side.
+    state=$target
+    if [[ $target == guide-tree-narrow-* ]]; then width=820; state=guide-tree-${target#guide-tree-narrow-}; fi
+    case $state in
       guide-tree-done) tweak="item.game = Object.assign({}, item.game, { achievements: item.game.achievements.map(function(a) { return Object.assign({}, a, { unlocked: true, time: a.time || 1793060000 }) }), unlocked: item.game.total }); g.step = -1; g.frontier = []; g.walkthrough.forEach(function(s) { s.done = true })" ;;
       guide-tree-locked) tweak="Object.keys(g.items).forEach(function(k) { if (!item.byApi[k].unlocked) g.items[k].requires = [k === 'L9' ? 'L8' : 'L9'] }); g.frontier = []" ;;
       guide-tree-bare) tweak="g.walkthrough = []; g.step = -1; g.tree.chains = []; g.tree.alone = g.tree.alone.concat(['L5', 'L6', 'L7', 'L8', 'L9', 'L15'])" ;;
       guide-tree-narrow) width=820 ;;
+      # A goal that needs seven trophies: wider than the card, it scrolls.
+      guide-tree-wide) tweak="var more = ['L10', 'L11', 'L12', 'L13', 'L14']; g.items.L9.requires = g.items.L9.requires.concat(more); g.tree.chains = g.tree.chains.slice(0, 4).concat(more.map(function(a) { return { api: a, depth: 1 } }), g.tree.chains.slice(4)); g.tree.alone = []" ;;
+      # Arrow keys pressed once it has drawn: the focus ring on a track
+      # node (each press is one arrow; the first only shows the ring).
+      guide-tree-keys) later="['down', 'down', 'down', 'right', 'right'].forEach(function(k) { item.treeMove(k === 'right' ? 1 : 0, k === 'down' ? 1 : 0) })" ;;
       guide-tree-pick) tweak="item.treePick = 'L8'; item.treePickIn = 'chains'" ;;
       guide-tree-pinned|guide-steps-pinned) tweak="g.step = 2; g.step_pinned = true" ;;
       # After the guide is set: its onGuideChanged can still see no steps.
@@ -165,6 +178,7 @@ case $target in
         // --tall: set again after the font reload, which put the card's
         // own height back.
         Timer { id: tallTimer; interval: 1200; onTriggered: view.item.height = $h - 40 }
+        Timer { id: laterTimer; interval: 1600; onTriggered: { var item = view.item; ${later:-} } }
         source: \"file:$repo/TrackerView.qml\"
         onLoaded: {
           item.maxWidth = ${width:-1260}; item.maxHeight = 920
@@ -179,6 +193,7 @@ case $target in
           item.filter = \"guide\"
           item.treeShown = $tree
           if ($tall) tallTimer.start()
+          laterTimer.start()
         }
       }" ;;
   bronze|silver|gold|platinum|difficulty|missable|recap|milestone)
