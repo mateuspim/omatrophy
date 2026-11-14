@@ -164,7 +164,7 @@ difficulties"; `"Normal+"` for a floor, "Normal or higher"), else `null`;
 "on any difficulty" is `null` (`difficulty.py`). It is there for hidden
 achievements too; the tracker keeps a secret one's to itself.
 
-`hand` holds with the game's ticks, counts and notes by hand
+`hand` holds the game's ticks, counts and notes by hand
 ([by hand](by-hand.md#in-game-and-guide), [ADR 21](../adr/0021-tick-and-note-by-hand.md)); `unlocked`, `total`
 and each achievement's `unlocked` stay the store's.
 

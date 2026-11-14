@@ -90,7 +90,7 @@ Trophies tab (every game, with a guide or without):
   under its description.
 - A counter row whose store gives no count gets − and + beside its bar
   (**Ctrl+Up** / **Ctrl+Down** on the highlighted row).
-- The header's progress reads "47 / 58 · 1 by hand" while any locked
+- The header's progress reads "47 / 58 unlocked · 1 by hand" while any locked
   achievement is ticked. Filters are unchanged: a ticked one is still
   Locked, as the store says.
 
