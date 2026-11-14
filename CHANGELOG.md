@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- The panel opens fast again: the views built from their text
+  (`FreshObject.qml`) compile once per edit instead of on every open.
+  Reopening the panel went from about 250-330 ms to about 20 ms, the
+  tracker's first open after a start and each toast are quicker too.
+  Edits still show on the next open. Needs `omarchy restart shell`.
+
 ## 0.7.0 - 2026-11-11
 
 - Guides know hard prerequisites: an achievement the game locks until
