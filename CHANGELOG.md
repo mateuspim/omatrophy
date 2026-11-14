@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## 1.0.0 - 2026-11-14
+
+OmaTrophy 1.0: everything from 0.9 to 0.14 (guide quality, launch
+reminders, session recap and milestones, Tree keys, toast monitor and Do
+Not Disturb, ticks and notes by hand, platinum images), a security
+review, light-theme fixes, a notice when the shell runs an older copy,
+and refreshed docs and images. Needs `omarchy restart shell`.
+
 
 - **Security review before 1.0.0**
   ([docs/security-review-1.0.md](docs/security-review-1.0.md)):
