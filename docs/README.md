@@ -17,7 +17,7 @@
 - [Specs](specs/): [event lines](specs/events.md),
   [command line](specs/cli.md), [settings and manifest](specs/settings.md),
   [100% guides](specs/guides.md) (design),
-  [by hand](specs/by-hand.md) (proposed: ticks, counts and notes).
+  [by hand](specs/by-hand.md) (ticks, counts and notes).
 - [Development runbook](runbooks/development.md): setup, tests, previews,
   offscreen renders, releases.
 - [Branding](branding.md): the mark, colours and the README hero.

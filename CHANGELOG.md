@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- **By hand** ([ADR 21](docs/adr/0021-tick-and-note-by-hand.md)): tick an
+  achievement the store missed, count a guide counter the store doesn't
+  track, and keep notes on an achievement or a game, in
+  `~/.local/share/omatrophy/by-hand.json` (`omatrophy.py hand ...`). A
+  tick is never an unlock: no toast, no platinum, progress stays the
+  store's; the guide counts it as done (Up next, steps, Do now, the
+  missable reminder), and it can overrule a hand tick in a guide's `.md`.
+- The settings spec lists every state file (`guide-here.json`,
+  `guide-key.json`, `reminded.json`, `missable-reminded.json`).
+
 ## 0.12.0 - 2026-11-14
 
 - **Pick the monitor** cards show on: Settings > Toasts > Screen lists

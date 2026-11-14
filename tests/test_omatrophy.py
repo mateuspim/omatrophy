@@ -27,7 +27,8 @@ def setUpModule():
     # folder of the tests' own, never the owner's.
     state = tempfile.TemporaryDirectory()
     unittest.addModuleCleanup(state.cleanup)
-    patch = mock.patch.dict(os.environ, {'XDG_STATE_HOME': state.name})
+    # by-hand.json (ADR 21) is read from the data folder: the tests' own too.
+    patch = mock.patch.dict(os.environ, {'XDG_STATE_HOME': state.name, 'XDG_DATA_HOME': state.name})
     patch.start()
     unittest.addModuleCleanup(patch.stop)
 
@@ -931,6 +932,70 @@ class PanelJson(unittest.TestCase):
             with self.assertRaises(SystemExit) as e, redirect_stdout(io.StringIO()):
                 omatrophy.guide(['here', 'steam', '30', '1'])
             self.assertIn('make one first', str(e.exception))
+
+    def hand(self, *args):
+        out = io.StringIO()
+        with redirect_stdout(out):
+            omatrophy.hand(list(args))
+        return json.loads(out.getvalue())
+
+    def test_hand_ticks_notes_and_reads_back(self):
+        # Half Game: ACH_0 and ACH_1 unlocked, ACH_2 and ACH_3 locked.
+        with tempfile.TemporaryDirectory() as data, FakeLibrary(), \
+                mock.patch.dict(os.environ, {'XDG_DATA_HOME': data}), \
+                mock.patch.object(omatrophy, 'save_images_later', lambda urls: None):
+            out = self.hand('tick', 'steam', '20', 'ACH_2')
+            self.assertEqual(out['hand']['ticks'], ['ACH_2'])
+            self.assertEqual(out['guide'], {})
+            self.hand('note', 'steam', '20', 'ACH_3', 'Code\x1b 4521')
+            self.hand('note', 'steam', '20', 'game', 'Hard first')
+            self.assertEqual(self.hand('steam', '20'),
+                             {'ticks': ['ACH_2'], 'unticks': [], 'counts': {}, 'notes': {'ACH_3': 'Code 4521'},
+                              'note': 'Hard first'})
+            # `game` carries it, and a tick is never an unlock.
+            game = io.StringIO()
+            with redirect_stdout(game):
+                omatrophy.game(['steam', '20'])
+            game = json.loads(game.getvalue())
+            self.assertEqual(game['hand']['ticks'], ['ACH_2'])
+            self.assertEqual((game['unlocked'], game['total']), (2, 4))
+            self.hand('untick', 'steam', '20', 'ACH_2')
+            self.assertEqual(self.hand('steam', '20')['unticks'], ['ACH_2'])
+            self.hand('clear', 'steam', '20')
+            self.assertEqual(self.hand('steam', '20')['note'], '')
+
+    def test_hand_refuses_what_it_cant_do(self):
+        with tempfile.TemporaryDirectory() as data, FakeLibrary(), \
+                mock.patch.dict(os.environ, {'XDG_DATA_HOME': data}):
+            cases = [(('tick', 'steam', '20', 'ACH_0'), 'already unlocked'),
+                     (('tick', 'steam', '20', 'NOPE'), 'no achievement NOPE'),
+                     (('count', 'steam', '20', 'ACH_2', '+1'), 'no counter'),
+                     (('note', 'steam', '20', 'ACH_2', 'x' * 1001), 'at most 1000'),
+                     (('tick', 'steam', '999', 'ACH_0'), 'launch it once'),
+                     (('tick', 'steam', '20'), 'usage'),
+                     (('poke', 'steam', '20', 'ACH_2'), 'usage')]
+            for args, says in cases:
+                with self.subTest(args=args[:2]), self.assertRaises(SystemExit) as e, redirect_stdout(io.StringIO()):
+                    omatrophy.hand(list(args))
+                self.assertIn(says, str(e.exception))
+            self.assertFalse(os.path.exists(os.path.join(data, 'omatrophy', 'by-hand.json')))
+
+    def test_hand_counts_a_guide_counter(self):
+        plan = {'items': {'Half Game 2': {'api': 'ACH_2', 'counter': {'target': 10, 'label': 'eggs'}}}}
+        with tempfile.TemporaryDirectory() as data, FakeLibrary(), \
+                mock.patch.dict(os.environ, {'XDG_DATA_HOME': data}):
+            folder = os.path.join(data, 'omatrophy', 'guides')
+            os.makedirs(folder)
+            with open(os.path.join(folder, 'half-game-20.md'), 'w') as f:
+                f.write('## Achievements\n')
+            with open(os.path.join(folder, 'half-game-20.plan.json'), 'w') as f:
+                json.dump(plan, f)
+            self.hand('count', 'steam', '20', 'ACH_2', '8')
+            out = self.hand('count', 'steam', '20', 'ACH_2', '+5')
+            self.assertEqual(out['hand']['counts'], {'ACH_2': 10})
+            self.assertEqual(out['guide']['ticks'], [])  # a full count is not a tick
+            self.hand('count', 'steam', '20', 'ACH_2', 'clear')
+            self.assertEqual(self.hand('steam', '20')['counts'], {})
 
     def test_game_detail_without_cached_achievements_says_what_to_do(self):
         with FakeLibrary():

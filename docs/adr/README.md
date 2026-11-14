@@ -32,7 +32,7 @@ made.
 | [18](0018-bind-the-guide-key-at-runtime.md) | Bind the Guide key at runtime, once the owner installs it | Accepted |
 | [19](0019-keep-the-tracker-built-between-opens.md) | Keep the tracker built between opens | Accepted |
 | [20](0020-requires-and-the-guide-tree.md) | Hard prerequisites (`requires`) and the guide as a tree | Accepted |
-| [21](0021-tick-and-note-by-hand.md) | Tick, count and take notes by hand, in a file of the player's own | Proposed |
+| [21](0021-tick-and-note-by-hand.md) | Tick, count and take notes by hand, in a file of the player's own | Accepted |
 | [22](0022-hold-cards-during-do-not-disturb.md) | Hold cards while Omarchy's Do Not Disturb is on | Accepted |
 
 ## Rules

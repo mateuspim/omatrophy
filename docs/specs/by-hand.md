@@ -1,16 +1,16 @@
 # By hand: ticks, counts and notes
 
-Status: **Proposed** ([ADR 21](../adr/0021-tick-and-note-by-hand.md)).
-Nothing here is built yet; the owner's answers to the ADR's open choices
-may change it. Once built, this page describes the code, and the rows
-marked *proposed* in [cli](cli.md), [guides](guides.md) and
-[settings](settings.md) lose that mark.
+Why: [ADR 21](../adr/0021-tick-and-note-by-hand.md). The code is
+`by_hand.py` (the file), `omatrophy.py hand` (the CLI) and `guides.py`
+(which counts by-hand ticks as done).
 
 ## File
 
 `~/.local/share/omatrophy/by-hand.json` (`$XDG_DATA_HOME` respected).
-Written only by `omatrophy.py hand ...`; missing or broken reads as
-empty (a broken one is kept as `by-hand.json.bad` on the next write).
+Written only by `omatrophy.py hand ...`, under an `fcntl` lock on
+`by-hand.json.lock`, by a fresh file renamed over the old one. Missing or
+broken reads as empty; a broken one is kept as `by-hand.json.bad` on the
+next write. A game left with nothing by hand is removed from it.
 
 ```json
 {"format": 1,
@@ -27,7 +27,7 @@ empty (a broken one is kept as `by-hand.json.bad` on the next write).
 | --- | --- |
 | `ticks[api].done` | `true`: done by hand. `false`: not done, overruling a hand tick in the guide's `.md`. |
 | `counts[api].value` | Count by hand, an integer from 0 to the guide's `counter.target`. Only for an achievement whose store gives no `progress`. |
-| `notes[api].text` | The player's note on one achievement: plain text, newlines kept, other control characters dropped, at most 1000 characters. |
+| `notes[api].text` | The player's note on one achievement: plain text, newlines kept, tabs made spaces, other control characters (C0, DEL, C1) dropped, ends trimmed, at most 1000 characters. |
 | `note.text` | The player's note on the game, at most 4000 characters. |
 | `time` | Unix seconds of the last change. |
 
@@ -36,7 +36,9 @@ the game no longer has is kept and ignored.
 
 ## Command line
 
-All under `hand`, as `guide` groups its own. `<api>` is an achievement's
+All under `hand`, as `guide` groups its own. Every command exits
+non-zero, with what to do, for a store not found here or a game with no
+cached achievements; a refused write leaves the file as it was. `<api>` is an achievement's
 id from [`game`](cli.md#game). Writes print `{"hand": ..., "guide": ...}`:
 the game's state as `game` gives it and its guide as `guide <store> <app>`
 prints it (`{}` with none), so the tracker reads both at once, as after
@@ -47,8 +49,8 @@ prints it (`{}` with none), so the tracker reads both at once, as after
 | `hand <store> <app>` | Prints the game's [`hand`](#in-game-and-guide) block. |
 | `hand tick <store> <app> <api>` | Ticks it. Exits non-zero, with what to do, when the game has no such achievement or the store already says it is unlocked. |
 | `hand untick <store> <app> <api>` | Unticks it; also overrules a hand tick in the guide's `.md` (`done: false`). |
-| `hand count <store> <app> <api> <n\|+n\|-n\|clear>` | Sets, raises or lowers the count, clamped to `0..target`; `clear` removes it. Exits non-zero when the guide has no `counter` for it or the store tracks its progress. |
-| `hand note <store> <app> <api\|game> <text>` | Saves a note on the achievement, or with `game` on the game; `""` removes it. Longer text exits non-zero, saying the limit. |
+| `hand count <store> <app> <api> <n\|+n\|-n\|clear>` | Sets, raises or lowers the count, clamped to `0..target`; `clear` removes it. A full count is not a tick. Exits non-zero when the guide has no `counter` (target 2 or more) for it, the store tracks its progress, or it is already unlocked. |
+| `hand note <store> <app> <api\|game> <text>` | Saves a note on the achievement, or with `game` on the game (at most 4000 characters); `""` removes it. Longer text exits non-zero, saying the limit. |
 | `hand clear <store> <app>` | Removes everything the file holds for the game. |
 
 ## In `game` and `guide`

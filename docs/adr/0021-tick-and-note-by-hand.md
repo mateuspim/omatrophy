@@ -1,6 +1,6 @@
 # 21. Tick, count and take notes by hand, in a file of the player's own
 
-- Status: Proposed
+- Status: Accepted (2026-11-14)
 - Date: 2026-11-14
 - Answers the open question of [ADR 9](0009-tracker-is-an-overlay.md)
   and [ADR 14](0014-generate-guides-through-the-users-agent.md) ("slice f")
@@ -29,7 +29,7 @@ reader never writes a guide (ADR 14). The "I'm here" pin (ADR 17's
 file keyed `store:app`, written only through a CLI command the tracker
 runs, never inside the guide files.
 
-## Decision (proposed; see Open choices below)
+## Decision
 
 - **One file, the player's own.** Ticks, counts and notes live in
   `~/.local/share/omatrophy/by-hand.json` (`$XDG_DATA_HOME` respected),
@@ -87,7 +87,10 @@ Shapes: [by hand](../specs/by-hand.md).
 - Notes are text the player typed, shown back in the overlay; showing
   them as plain text keeps a pasted link or tag inert.
 
-## Open choices (the owner's; recommendation first)
+## Owner's answers (2026-11-14)
+
+The owner accepted the recommended answer to each open choice (the
+first option named in each):
 
 1. Where the file lives: `~/.local/share/omatrophy/by-hand.json`
    (recommended: notes are the player's writing, kept with the guides),

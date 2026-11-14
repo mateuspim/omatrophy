@@ -16,6 +16,12 @@ Usage:
                                       copy guide files in from another folder (read-only on it)
   omatrophy.py guide here <store> <app> <step|clear>
                                       pin the walkthrough step you are at (1-based), or clear it
+  omatrophy.py hand <store> <app>     your ticks, counts and notes by hand for one game, as JSON (ADR 21)
+  omatrophy.py hand tick|untick <store> <app> <api>
+  omatrophy.py hand count <store> <app> <api> <n|+n|-n|clear>
+  omatrophy.py hand note <store> <app> <api|game> <text>    ("" removes it)
+  omatrophy.py hand clear <store> <app>
+                                      tick, count or note by hand; never an unlock, done for the guide only
   omatrophy.py guide make <store> <app> [--no-web] [--agent a] [--model m] [--effort e]
                                       make a guide through your agent (ADR 14); guide stop|status|agents
   omatrophy.py guide model <agent> <model> [effort] [@http://endpoint]|default
@@ -61,6 +67,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import difficulty
 import stores
+import by_hand
 from stores.base import CACHE, STATE, cached, read_json, trusted_url, write_json
 
 INBOX = f'{STATE}/inbox.jsonl'
@@ -1291,7 +1298,7 @@ def game_detail(store, game):
     run = store.running()
     return dict(progress_row(store, game, achs), game=store.game_name(game), header=art['header'], hero=art['hero'],
                 platinum=platinum_time(achs), playing=bool(run and run['game'] == game),
-                achievements=[detail(a, pcts) for a in achs])
+                achievements=[detail(a, pcts) for a in achs], hand=by_hand.game_hand(store.id, game, achs))
 
 
 def game(args):
@@ -1361,6 +1368,95 @@ def guide_here(store_id, app, where):
             raise SystemExit(f'omatrophy: guide here: give a step number from 1 to {len(steps)}, or clear')
         guides.save_pin(store.id, app, guides.make_pin(steps, int(where) - 1))
     print(json.dumps(guides.guide_answer(store.id, app, achs)))
+
+
+HAND_USAGE = ('usage: omatrophy.py hand <store> <app>\n'
+              '       omatrophy.py hand tick|untick <store> <app> <api>\n'
+              '       omatrophy.py hand count <store> <app> <api> <n|+n|-n|clear>\n'
+              '       omatrophy.py hand note <store> <app> <api|game> <text>\n'
+              '       omatrophy.py hand clear <store> <app>')
+HAND_ARGS = {'tick': 4, 'untick': 4, 'count': 5, 'note': 5, 'clear': 3}
+
+
+def hand(args):
+    """`hand ...`: ticks, counts and notes by hand (ADR 21). A write prints
+    `{hand, guide}`, so the tracker reads both in one go."""
+    import guides
+    if len(args) == 2 and args[0] not in HAND_ARGS:
+        store, app, achs = hand_game(*args)
+        print(json.dumps(by_hand.game_hand(store.id, app, achs)))
+        return
+    if not args or HAND_ARGS.get(args[0]) != len(args):
+        raise SystemExit(HAND_USAGE)
+    verb, store_id, app, rest = args[0], args[1], args[2], args[3:]
+    store, app, achs = hand_game(store_id, app)
+    change = hand_change(verb, store, app, achs, rest)
+    try:
+        by_hand.update(store.id, app, change)
+    except OSError as e:
+        raise SystemExit(f'omatrophy: hand: could not save {by_hand.hand_path()}: {e.strerror}; check the folder is writable')
+    print(json.dumps({'hand': by_hand.game_hand(store.id, app, achs),
+                      'guide': guides.guide_answer(store.id, app, achs)}))
+
+
+def hand_game(store_id, app):
+    """(store, app, achievements) for a `hand` command, or exit saying why."""
+    store = next((s for s in found_stores() if s.id == store_id), None)
+    if store is None:
+        raise SystemExit(f'omatrophy: hand: no {store_id} store found on this machine')
+    achs = store.achievements(app)
+    if not achs:
+        raise SystemExit(f'omatrophy: hand: {store.name} has no achievements cached for {app}; launch it once in {store.name}')
+    return store, app, achs
+
+
+def hand_change(verb, store, app, achs, rest):
+    """The edit one `hand` command makes, as `change(entry, now)`; checks
+    first, so a refused command writes nothing."""
+    if verb == 'clear':
+        return lambda entry, now: entry.clear()
+    api = rest[0]
+    by_api = {a['api']: a for a in achs}
+    if verb == 'note' and api == by_hand.GAME_NOTE_KEY:
+        return note_change(api, rest[1], by_hand.GAME_NOTE_MAX)
+    if api not in by_api:
+        raise SystemExit(f'omatrophy: hand: {store.name} game {app} has no achievement {api}; '
+                         'use an api from `omatrophy.py game`')
+    if verb == 'note':
+        return note_change(api, rest[1], by_hand.NOTE_MAX)
+    if by_api[api]['unlocked'] and verb in ('tick', 'count'):
+        raise SystemExit(f'omatrophy: hand: {by_api[api]["name"]} is already unlocked in {store.name}; nothing to {verb}')
+    if verb in ('tick', 'untick'):
+        return lambda entry, now: by_hand.set_tick(entry, api, verb == 'tick', now)
+    return count_change(store, app, achs, by_api[api], rest[1])
+
+
+def note_change(api, text, limit):
+    try:
+        text = by_hand.clean_note(text, limit)
+    except ValueError as e:
+        raise SystemExit(f'omatrophy: hand note: {e}; shorten it')
+    return lambda entry, now: by_hand.set_note(entry, api, text, now)
+
+
+def count_change(store, app, achs, ach, word):
+    """Counts by hand only where the guide gives a target and the store
+    no count: a store count would be overruled by a stale hand one."""
+    import guides
+    if ach.get('progress'):
+        raise SystemExit(f'omatrophy: hand count: {store.name} counts {ach["name"]} itself; nothing to count by hand')
+    item = (guides.guide_answer(store.id, app, achs).get('items') or {}).get(ach['api']) or {}
+    counter = item.get('counter') if isinstance(item.get('counter'), dict) else {}
+    target = counter.get('target')
+    if not isinstance(target, int) or isinstance(target, bool) or target < 2:
+        raise SystemExit(f'omatrophy: hand count: the guide gives no counter for {ach["name"]}; '
+                         'only a guide counter can be counted by hand')
+    current = by_hand.game_hand(store.id, app, achs)['counts'].get(ach['api'], 0)
+    try:
+        value = by_hand.parse_count(word, current, target)
+    except ValueError as e:
+        raise SystemExit(f'omatrophy: hand count: {e}')
+    return lambda entry, now: by_hand.set_count(entry, ach['api'], value, now)
 
 
 def guide_job(args):
@@ -1903,6 +1999,8 @@ def main(argv):
         game(argv[2:])
     elif cmd == 'guide':
         guide(argv[2:])
+    elif cmd == 'hand':
+        hand(argv[2:])
     elif cmd == 'demo':
         demo(argv[2:] or ['unlock', 'rare', 'platinum'])
     elif cmd == 'set' and len(argv) == 4:

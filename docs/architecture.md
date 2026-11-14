@@ -28,6 +28,7 @@ turns those lines into cards on screen.
 | `stores/steam_community.py` | The opt-in backfill for games that never ran here: reads the JSON embedded in a public profile's achievement pages, cached under `~/.cache/omatrophy/community/` (ADR 11). |
 | `stores/steam_loader.py` | Load from Steam: opens played games' library pages through `steam://` links so the client caches their stats, on request only (`omatrophy.py steam-load`, ADR 13). |
 | `guides.py` | Reads 100% guides: finds a game's `.md` by its trailing id, parses notes, checklist and `.plan.json`, matches items to achievements (`omatrophy.py guide`), and imports guide files. |
+| `by_hand.py` | The player's ticks, counts and notes by hand in `~/.local/share/omatrophy/by-hand.json` (ADR 21): reads them for `game` and `guide`, writes them for `omatrophy.py hand` only, under a lock. A tick is done for the guide, never an unlock. |
 | `guide_maker.py` | Makes a guide on request (ADR 14): gather sources, research, classify, route, verify quotes, write the files; status and stop like Load from Steam. Prompts in `prompts/guide/`. |
 | `guide_agents.py` | One adapter per coding agent: its locked headless command, model list and answer parsing; only adapters whose lock was checked run. |
 | `stores/__init__.py` | The list of stores; `available()` keeps the installed ones. |

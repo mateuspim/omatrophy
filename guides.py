@@ -7,6 +7,7 @@ writes into the source folder, and never changes a guide it already holds.
 """
 import json, os, re, shutil
 
+import by_hand
 import difficulty
 
 PHASES = ('missable', 'story', 'quick', 'challenge', 'grind', 'collect', 'online')
@@ -159,6 +160,8 @@ def guide_answer(store, app, achievements, folder=None):
             ticks.append(apis.pop(0))
         elif apis:
             apis.pop(0)
+    # The player's own ticks (ADR 21) join the .md's and can overrule them.
+    ticks = by_hand.merged_ticks(ticks, by_hand.game_hand(store, app, achievements), achievements)
     done = {a['api'] for a in achievements if a.get('unlocked')} | set(ticks)
     name_to_api = {i['name']: api for api, i in items.items()}
     order = [name_to_api[n] for n in plan.get('order', []) if n in name_to_api]
