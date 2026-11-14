@@ -22,14 +22,21 @@ ON_SETTING = re.compile(rf'\b(?:on|in|at|using)\s+(?:the\s+)?({SETTINGS})'
 # "on Death March difficulty": any name, as the word "difficulty" says what
 # it is; up to three words, each capitalised so "on the same difficulty"
 # doesn't name a setting called "same".
-NAMED_DIFFICULTY = re.compile(r"\b(?i:on|in|at|using)\s+(?i:the\s+)?((?:[A-Z][\w'+-]*\s+){0,2}[A-Z][\w'+-]*)"
-                              r'\s+difficult(?:y|ies)\b')
+# Names with a small word in them are spelled out: allowing "on" inside a
+# name would read "Win on Offices on Hell on Earth" as a setting called
+# "Offices on Hell on Earth".
+WITH_SMALL_WORDS = r'Hell\s+on\s+Earth|Heaven\s+or\s+Hell|Hell\s+or\s+High\s+Water'
+NAMED_DIFFICULTY = re.compile(r"\b(?i:on|in|at|using)\s+(?i:the\s+)?"
+                              rf"({WITH_SMALL_WORDS}|(?:[A-Z][\w'+-]*\s+){{0,2}}[A-Z][\w'+-]*)"
+                              r'\s+(?i:difficult(?:y|ies))\b')
 SETTING_DIFFICULTY = re.compile(rf'\b({SETTINGS})\s+(?:difficulty|mode)\b', re.I)
 DIFFICULTY_SETTING = re.compile(rf'\bdifficulty\s+(?:level\s+|setting\s+|set\s+to\s+|of\s+)?({SETTINGS})\b', re.I)
 TOP = re.compile(r'\b(?:the\s+)?(highest|hardest|maximum|max|top)\s+difficulty\b', re.I)
 EVERY = re.compile(r'\b(?:all|every|each)\s+(?:the\s+)?difficult(?:y|ies)(?:\s+(?:levels?|settings?))?\b', re.I)
 # "on any difficulty" says the setting doesn't matter.
 ANY = re.compile(r'\b(?:any|regardless\s+of(?:\s+the)?)\s+difficult', re.I)
+
+SMALL_WORDS = {'on', 'or', 'of', 'the', 'and'}
 
 
 def setting(name, desc):
@@ -50,5 +57,6 @@ def setting(name, desc):
 
 
 def tidy(word):
-    """"very  hard" -> "Very Hard"; "NIGHTMARE" -> "Nightmare"."""
-    return ' '.join(w[:1].upper() + w[1:].lower() for w in word.split())
+    """"very  hard" -> "Very Hard"; "hell ON earth" -> "Hell on Earth"."""
+    words = word.lower().split()
+    return ' '.join(w if i and w in SMALL_WORDS else w[:1].upper() + w[1:] for i, w in enumerate(words))

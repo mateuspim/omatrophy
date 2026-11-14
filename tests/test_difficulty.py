@@ -19,6 +19,8 @@ class SettingTest(unittest.TestCase):
             ('Complete the game on Legendary', 'Legendary'),
             ('Complete the game in Hardcore mode', 'Hardcore'),
             ('On Death March difficulty, beat the game', 'Death March'),
+            ('Complete the entire game on Duelist Difficulty preset.', 'Duelist'),
+            ('Win a Long Game on Offices on Hell on Earth Difficulty.', 'Hell on Earth'),
             ('Clear every chapter with the difficulty set to Expert', 'Expert'),
             ('Clear every chapter at difficulty level Expert', 'Expert'),
             ('Finish on the highest difficulty', 'Highest'),
