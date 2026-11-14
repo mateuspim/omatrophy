@@ -74,7 +74,9 @@ Item {
     if (cached && cached.hash === sum) return cached.component
     var live = String(url).replace(/\.qml$/, ".live-" + sum + ".qml")
     try {
-      var component = Qt.createQmlObject(asComponent(text), root, live)
+      // The holder stays parented here and keeps its Component alive.
+      var holder = Qt.createQmlObject(asComponent(text), root, live)
+      var component = holder.made
       root.compiled[name] = { hash: sum, component: component }
       return component
     } catch (e) {
@@ -83,13 +85,16 @@ Item {
     }
   }
 
-  // Wraps a file's root object in `Component { }`, on the root's own line,
-  // so the line numbers in errors still match the file. Empty text, which
+  // Wraps a file's root object in a `Component` held by a `QtObject`, all
+  // on the root's own line, so the line numbers in errors still match the
+  // file. Not a bare `Component { }` root: Qt 6 warns on every build that
+  // a Component as a document's root is deprecated. Empty text, which
   // fails to compile, when no line starts a root object.
   function asComponent(text) {
     var start = /^[A-Za-z][\w.]*\s*\{/m.exec(text)
     if (!start) return ""
-    return text.slice(0, start.index) + "Component { " + text.slice(start.index) + "\n}\n"
+    return text.slice(0, start.index) + "QtObject { property Component made: Component { "
+      + text.slice(start.index) + "\n} }\n"
   }
 
   // A short hex hash of a file's text (djb2), enough to tell edits apart.
