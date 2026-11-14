@@ -25,8 +25,8 @@ says how the parts fit, `docs/adr/` why, `docs/specs/` what the contracts are
 - Qt 6.12: QtQuick exports its own `Color`. Write
   `import qs.Commons as Commons` and `Commons.Color.x`; never a bare `Color.`
   (`tests/` enforces it).
-- `TrophyToast.qml`, `PlatinumCard.qml`, `StylePicker.qml` and
-  `TrackerView.qml` are built from their current text by `FreshObject.qml`
+- `TrophyToast.qml`, `PlatinumCard.qml`, `DifficultyCard.qml`,
+  `StylePicker.qml` and `TrackerView.qml` are built from their current text by `FreshObject.qml`
   so edits show without a shell restart (ADR 10; Omarchy's Quickshell caches
   plugin files, so a `?v=` URL no longer works). They must not use other QML types from this folder; the `Trophy`
   component is repeated on purpose. `Service.qml`, `Panel.qml`, `Tracker.qml`,

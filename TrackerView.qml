@@ -474,6 +474,15 @@ Item {
     return !!a.difficulty && !isSecret(a.api)
   }
 
+  // The guide's word on whether a harder run counts for the easier
+  // settings' achievements; "" when there's no guide or it doesn't say.
+  function stackText() {
+    if (!guide || guide.stacks === null || guide.stacks === undefined) return ""
+    return "◆ " + (guide.stacks ? "Guide: a run on a harder setting also counts for the easier ones"
+                                : "Guide: each setting needs a run of its own")
+           + (guide.stacks_verified ? "" : " (unverified)")
+  }
+
   // Unlocked achievements per metal, for the header's tally.
   function tierCount(metal) {
     if (!game) return 0
@@ -2797,11 +2806,29 @@ Item {
       }
     }
 
+    // Under the Difficulty filter: whether one run on a harder setting
+    // also earns the easier ones, when the guide says (maker 6).
+    Text {
+      textFormat: Text.PlainText
+      id: stackNote
+      anchors.top: toolbar.bottom
+      anchors.topMargin: Commons.Style.space(10)
+      x: toolbar.x
+      width: toolbar.width
+      visible: root.filter === "difficulty" && text !== ""
+      text: root.stackText()
+      color: root.foreground
+      opacity: 0.7
+      font.family: Commons.Style.font.family
+      font.pixelSize: Commons.Style.font.bodySmall
+      wrapMode: Text.Wrap
+    }
+
     // ------------------------------------------------------------ list
 
     ListView {
       id: list
-      anchors.top: toolbar.bottom
+      anchors.top: stackNote.visible ? stackNote.bottom : toolbar.bottom
       anchors.topMargin: Commons.Style.space(10)
       anchors.bottom: footer.top
       anchors.bottomMargin: Commons.Style.space(6)

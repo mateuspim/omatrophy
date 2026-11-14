@@ -5,7 +5,7 @@ and the tracker stopped opening, while offscreen renders still drew it."""
 import os, re, unittest
 
 HERE = os.path.join(os.path.dirname(__file__), '..')
-VIEWS = ('TrackerView.qml', 'StylePicker.qml', 'TrophyToast.qml', 'PlatinumCard.qml')
+VIEWS = ('TrackerView.qml', 'StylePicker.qml', 'TrophyToast.qml', 'PlatinumCard.qml', 'DifficultyCard.qml')
 
 
 def text(name):

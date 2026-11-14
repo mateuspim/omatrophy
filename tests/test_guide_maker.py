@@ -291,6 +291,18 @@ class Checks(unittest.TestCase):
         self.assertEqual(guide_maker.verify_cites(item, {}, [])['unverified'], ['requires'])
         self.assertIn('needs first B', guide_maker.table_line('A', item, False))
 
+    def test_stacks_is_a_yes_or_no_claim_and_reaches_the_route_table(self):
+        item, _ = guide_maker.check_item({'name': 'A', 'phase': 'challenge', 'stacks': False}, {'A'})
+        self.assertIs(item['stacks'], False)
+        # A "no" is a claim too: unquoted, it is unverified.
+        self.assertEqual(guide_maker.verify_cites(item, {}, [])['unverified'], ['stacks'])
+        self.assertIn('needs a run on this setting itself', guide_maker.table_line('A', item, False))
+        yes, _ = guide_maker.check_item({'name': 'A', 'stacks': True}, {'A'})
+        self.assertIn('a harder setting counts too', guide_maker.table_line('A', yes, False))
+        for unsure in ('yes', None, 1):
+            self.assertIsNone(guide_maker.check_item({'name': 'A', 'stacks': unsure}, {'A'})[0]['stacks'])
+        self.assertIsNone(guide_maker.check_item({'name': 'A'}, {'A'})[0]['stacks'])
+
     def test_an_estimated_time_stays_unverified_beside_a_verified_quote(self):
         raw = {'name': 'A', 'phase': 'quick', 'time': '~5 min', 'time_estimate': True, 'tips': 'Open the door twice.',
                'cites': [{'source': 'https://x', 'quote': 'open the red door twice in chapter one'}]}

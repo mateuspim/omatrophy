@@ -7,6 +7,8 @@ writes into the source folder, and never changes a guide it already holds.
 """
 import json, os, re, shutil
 
+import difficulty
+
 PHASES = ('missable', 'story', 'quick', 'challenge', 'grind', 'collect', 'online')
 NEXT_COUNT = 3
 # A hand tick is "[x]" with no "_(unlocked ...)_" note: OmaTrophy writes that
@@ -22,7 +24,8 @@ TICK = re.compile(r'^- \[(?P<mark>[ xX])\] \*\*(?P<name>.+?)\*\*(?P<rest>.*)$')
 # tips, full pages instead of the agent's summaries (2026-11-06). 4:
 # `requires` per item and `actions` per walkthrough step (ADR 20). 5: a
 # `marker` per step, the chapter clear the tracker places the player by.
-MAKER = 5
+# 6: `stacks` per difficulty achievement, whether a harder run counts too.
+MAKER = 6
 
 
 def outdated(plan):
@@ -174,7 +177,33 @@ def guide_answer(store, app, achievements, folder=None):
             'agent': plan.get('agent') if isinstance(plan.get('agent'), dict) else {},
             'cost_usd': plan_cost(plan), 'outdated': outdated(plan),
             'walkthrough': steps, 'step': at, 'step_pinned': pinned >= 0, 'tree': tree(order, items, steps),
-            'frontier': frontier(order, items, done, steps, at)}
+            'frontier': frontier(order, items, done, steps, at),
+            **difficulty_stacking(stacking_items(items, achievements, done))}
+
+
+def stacking_items(items, achievements, done):
+    """The items whose `stacks` counts: achievements still open that need
+    a difficulty setting, and not hidden. A stray answer on any other item
+    would decide the game's line, and a hidden one's would hint at what it
+    asks (the tracker keeps it secret)."""
+    return {a['api']: items[a['api']] for a in achievements
+            if a['api'] in items and a['api'] not in done and not a.get('hidden')
+            and difficulty.setting(a.get('name'), a.get('desc'))}
+
+
+def difficulty_stacking(items):
+    """{'stacks', 'stacks_verified'}: whether the guide says a run on a
+    harder setting also unlocks the easier settings' achievements (True),
+    that each setting needs its own run (False), or nothing (None). One
+    "needs its own run" is enough for False: planning one run on the
+    hardest setting would then miss it. Verified when a quote backs an
+    answer that agrees."""
+    said = [(i['stacks'], 'stacks' not in (i.get('unverified') or [])) for i in items.values()
+            if isinstance(i.get('stacks'), bool)]
+    if not said:
+        return {'stacks': None, 'stacks_verified': False}
+    stacks = all(v for v, _ in said)
+    return {'stacks': stacks, 'stacks_verified': any(ok for v, ok in said if v == stacks)}
 
 
 def play_order(order, items, steps=()):

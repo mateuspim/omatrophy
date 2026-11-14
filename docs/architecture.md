@@ -31,9 +31,10 @@ turns those lines into cards on screen.
 | `guide_agents.py` | One adapter per coding agent: its locked headless command, model list and answer parsing; only adapters whose lock was checked run. |
 | `stores/__init__.py` | The list of stores; `available()` keeps the installed ones. |
 | `difficulty.py` | Reads from an achievement's own text the difficulty setting it needs ("on Nightmare", "Normal or higher"), for the `difficulty` fields of `game` and `games`. Pure, no store or network. |
-| `omatrophy.py` | Watch loop, diffing, tiers, event shapes, test inbox, settings, the panel's and tracker's JSON (`now`, `games`, `game`), CLI. |
+| `omatrophy.py` | Watch loop, launch watch (the difficulty reminder), diffing, tiers, event shapes, test inbox, settings, the panel's and tracker's JSON (`now`, `games`, `game`), CLI. |
 | `Service.qml` | Runs the watcher, parses lines, queues events, plays the chime, shows one card at a time in an Overlay-layer window on the focused monitor. |
 | `TrophyToast.qml` | One unlock: icon, trophy in the tier's metal, rarity, progress. |
+| `DifficultyCard.qml` | The difficulty reminder at a game's launch: the settings its achievements left need, and whether the guide says they stack. |
 | `PlatinumCard.qml` | 100% of a game: badge, ring, trophy, then a wide card over the hero art. |
 | `Panel.qml` | Bar button; opens a `KeyboardPanel` that loads `StylePicker.qml`, and turns its `track` signal into a summon of the tracker. |
 | `StylePicker.qml` | Three tabs. Now: totals, the running game (or the last three) and the platinum shelf, from `omatrophy.py now`. Games: every game, sortable, from `omatrophy.py games` on first open. Settings: trophy style, previews, position and sound, through `omatrophy.py set`. |

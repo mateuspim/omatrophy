@@ -140,7 +140,17 @@ Normal+), which a harder run also meets; **Hardest** stands for "the
 hardest difficulty" and **All** for "on every difficulty". OmaTrophy
 reads this from each achievement's own text, so it can miss one the text
 doesn't spell out. "On any difficulty" doesn't count, and a hidden
-achievement stays out of the filter until you reveal it.
+achievement stays out of the filter until you reveal it. With a guide
+(made again since this was added: older ones say "older maker"), a line over the list says whether a run
+on a harder setting also counts for the easier ones, or each setting needs
+a run of its own.
+
+When a game with such achievements left starts, a card names the settings
+they need ("Start on Nightmare") and what the guide says about stacking,
+once per game, so the first save starts on the right one. It comes
+without a chime. Turn it off in Settings > Toasts > Difficulty, where
+**Try** shows one (`omatrophy.py set difficulty-reminder off`,
+`omatrophy.py test difficulty`).
 
 Its keys:
 
