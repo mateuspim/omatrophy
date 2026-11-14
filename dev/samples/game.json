@@ -75,7 +75,8 @@
    "time": 0,
    "percent": 41.0,
    "tier": "bronze",
-   "progress": null
+   "progress": null,
+   "difficulty": "Nightmare"
   },
   {
    "api": "A5",
@@ -93,7 +94,7 @@
   {
    "api": "A6",
    "name": "Collector",
-   "desc": "Find all 80 relics",
+   "desc": "Find all 80 relics on Hard or higher",
    "icon": "dev/samples/art/icon-collector.svg",
    "icon_locked": "dev/samples/art/icon-collector-locked.svg",
    "hidden": false,
@@ -104,7 +105,8 @@
    "progress": {
     "value": 52,
     "max": 80
-   }
+   },
+   "difficulty": "Hard+"
   },
   {
    "api": "A7",
@@ -123,6 +125,7 @@
    "api": "A8",
    "name": "Starfall",
    "desc": "Finish on Nightmare",
+   "difficulty": "Nightmare",
    "icon": "dev/samples/art/icon-starfall.svg",
    "icon_locked": "dev/samples/art/icon-starfall-locked.svg",
    "hidden": false,

@@ -30,7 +30,7 @@ installed.
 | `guide-key check <key>` | `{key, valid, taken}`: whether the key parses and what else uses it (`""` when free), without binding. Settings > Guides asks before Install. |
 | `set guide-key <key>\|none` | Installs or removes the Guide key. |
 | `set reveal-hidden on\|off` | The tracker's Reveal all; the tracker writes it when you change it. |
-| `set games-sort recent\|closest\|name`, `set rarest ever\|month\|platinum`, `set settings-section overview\|toasts\|now\|guides\|stores` | The panel's last Games sort and rarest list; the panel writes them when you pick one, so the next open shows the same view. |
+| `set games-sort recent\|closest\|name`, `set games-difficulty on\|off`, `set rarest ever\|month\|platinum`, `set settings-section overview\|toasts\|now\|guides\|stores` | The panel's last Games sort, its Difficulty toggle and rarest list; the panel writes them when you pick one, so the next open shows the same view. |
 | `set now-metals\|now-recent\|now-rarest\|now-shelf on\|off` | Shows or hides that section of the panel's Now tab. |
 | `set community on\|off` | The opt-in backfill of games that never ran on this machine from your public Steam profile ([ADR 11](../adr/0011-backfill-from-the-community-profile.md)). With it on, the watcher fetches in the background after `ready`. |
 | `sync` | Runs that backfill now, one line per game (`steam: 3/444 1903340: 55 achievements`), at most the run's page budget (15 to start; halved after a 429, five more after a run that used it all, between 5 and 30), ending `paused: N fetched, M left for later runs` when more are due, `done: N fetched` when it got them all; `stopped at <app>: <error>` after any error (a 429 rate limit, offline, private profile), and the next run picks up where it stopped. Ends `next automatic run in N min` (`stopped early; ...` after an error): the watcher runs the same backfill every hour, after a failed run (here or in the watcher) 4 h then 8 h, and keeps that time across restarts. Exits non-zero while `community` is off. |
@@ -119,10 +119,16 @@ the next read names them locally. The command itself exits at once.
 
 ## games
 
-`[{store, app, game, header, unlocked, total, platinum, played, hidden}]`,
+`[{store, app, game, header, unlocked, total, platinum, played, hidden, difficulty}]`,
 one per game with achievements, in no set order: the panel sorts them
 (recent, closest to platinum, name). `played` is `0` when the store doesn't
-say; `hidden` is `true` for games set aside with `hide`.
+say; `hidden` is `true` for games set aside with `hide`. `difficulty` lists
+the settings the game's locked achievements need (`["Nightmare", "Hard+"]`),
+each once, exact settings first, then floors in the game's order;
+`[]` when none does. A `+` marks a floor ("Normal or higher", "at least
+Casual"), in `game`'s `difficulty` too. A locked hidden achievement's
+setting is left out unless `reveal-hidden` is on, as the tracker keeps it
+secret.
 
 ## game
 
@@ -132,7 +138,7 @@ say; `hidden` is `true` for games set aside with `hide`.
  "achievements": [{"api": "...", "name": "...", "desc": "...", "icon": "...",
                    "icon_locked": "...", "hidden": false, "unlocked": true,
                    "time": 1793059700, "percent": 82.4, "tier": "bronze",
-                   "progress": null}]}
+                   "progress": null, "difficulty": null}]}
 ```
 
 Achievements come in the store's order; the tracker sorts them. `percent` is
@@ -143,6 +149,12 @@ tracks the count (Steam: the schema's progress stat, once the game has
 written it; an unwritten stat is unknown, not 0), else `null`; `value`
 is already clamped to `0..max`, and `max` is at least 2 (a one-step
 "counter" is a plain flag, so it gets `null`).
+`difficulty` is the setting the achievement's description (its name, when
+the description is empty) says it needs (`"Nightmare"`, `"Death March"`;
+`"Hardest"` for "the hardest difficulty", `"All"` for "on all
+difficulties"; `"Normal+"` for a floor, "Normal or higher"), else `null`;
+"on any difficulty" is `null` (`difficulty.py`). It is there for hidden
+achievements too; the tracker keeps a secret one's to itself.
 
 ## Overlay
 

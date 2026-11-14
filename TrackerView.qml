@@ -260,6 +260,7 @@ Item {
     var index = {}
     if (game) game.achievements.forEach(function(a) { index[a.api] = a })
     byApi = index
+    if (filter === "difficulty" && !count("difficulty")) filter = "all"
     rowModel.clear()
     shownApis = []
     cascading = true
@@ -314,6 +315,7 @@ Item {
     if (filter === "locked" && a.unlocked) return false
     if (filter === "unlocked" && !a.unlocked) return false
     if (filter === "rare" && !(a.percent !== null && a.percent <= rarePercent)) return false
+    if (filter === "difficulty" && !hasDifficulty(a)) return false
     if (!appliedSearch) return true
     var q = appliedSearch.toLowerCase()
     var desc = a.hidden && !a.unlocked ? "" : a.desc
@@ -459,9 +461,17 @@ Item {
     for (var i = 0; i < game.achievements.length; i++) {
       var a = game.achievements[i]
       if (kind === "all" || (kind === "locked" && !a.unlocked) || (kind === "unlocked" && a.unlocked)
-          || (kind === "rare" && a.percent !== null && a.percent <= rarePercent)) n++
+          || (kind === "rare" && a.percent !== null && a.percent <= rarePercent)
+          || (kind === "difficulty" && hasDifficulty(a))) n++
     }
     return n
+  }
+
+  // A secret achievement's setting would say what it asks, so it stays
+  // out of the Difficulty filter and its count until revealed, as search
+  // leaves its description out.
+  function hasDifficulty(a) {
+    return !!a.difficulty && !isSecret(a.api)
   }
 
   // Unlocked achievements per metal, for the header's tally.
@@ -475,7 +485,8 @@ Item {
   }
 
   function cycleFilter(step) {
-    var all = ["all", "locked", "unlocked", "rare", "guide"]
+    // Difficulty only shows on a game that has such achievements.
+    var all = ["all", "locked", "unlocked", "rare"].concat(count("difficulty") ? ["difficulty"] : [], ["guide"])
     filter = all[(all.indexOf(filter) + step + all.length) % all.length]
   }
 
@@ -2704,10 +2715,14 @@ Item {
             { value: "locked", label: "Locked", kind: "locked" },
             { value: "unlocked", label: "Unlocked", kind: "unlocked" },
             { value: "rare", label: "Rare", kind: "rare" },
+            { value: "difficulty", label: "Difficulty", kind: "difficulty" },
             { value: "guide", label: "Guide", kind: "guide" }
           ]
           delegate: Chip {
             required property var modelData
+            // Achievements that need a setting, so a new save starts on
+            // the right one; hidden on games without any.
+            visible: modelData.kind !== "difficulty" || root.count("difficulty") > 0
             text: root.label(modelData.label, modelData.kind)
             chosen: root.filter === modelData.value
             onClicked: root.filter = modelData.value
@@ -2953,7 +2968,9 @@ Item {
           anchors.right: parent.right
           anchors.rightMargin: Commons.Style.space(8)
           anchors.verticalCenter: parent.verticalCenter
-          width: Commons.Style.space(130)
+          // Grows past its usual width for a difficulty tag beside a
+          // counter, rather than running into the name.
+          width: Math.max(Commons.Style.space(130), implicitWidth)
           spacing: Commons.Style.space(3)
           Row {
             anchors.right: parent.right
@@ -2994,6 +3011,16 @@ Item {
                 radius: parent.radius
                 color: Commons.Color.accent
               }
+            }
+            // The setting it needs, read from its text, beside its state so
+            // the row keeps one height; a secret row keeps even that.
+            Caption {
+              anchors.verticalCenter: parent.verticalCenter
+              width: Math.min(implicitWidth, Commons.Style.space(90))
+              visible: !!row.ach.difficulty && !row.secret
+              text: "◆ " + (row.ach.difficulty || "")
+              color: Commons.Color.accent
+              opacity: 0.9
             }
             Caption {
               text: row.ach.unlocked ? (row.ach.time ? root.day(row.ach.time) : "Unlocked")

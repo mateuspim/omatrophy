@@ -590,6 +590,27 @@ class NowTab(unittest.TestCase):
         self.assertEqual((d['percent'], d['tier'], d['hidden'], d['icon_locked']), (4.0, 'gold', True, 'g.jpg'))
         self.assertEqual(omatrophy.detail(ach('b'), {})['tier'], 'bronze')
 
+    def test_open_difficulties_lists_each_setting_still_to_do_once(self):
+        achs = [dict(ach('a'), desc='Finish on Hard.'), dict(ach('b'), desc='Finish on Nightmare.'),
+                dict(ach('c'), desc='Beat the boss on Hard.'), dict(ach('d', unlocked=True), desc='Finish on Easy.'),
+                ach('e')]
+        self.assertEqual(omatrophy.open_difficulties(achs), ['Hard', 'Nightmare'])
+        self.assertEqual(omatrophy.open_difficulties([ach('e')]), [])
+
+    def test_open_difficulties_keep_a_hidden_achievements_setting_secret(self):
+        achs = [dict(ach('a', hidden=True), desc='Finish on Nightmare.'), dict(ach('b'), desc='Finish on Hard.')]
+        self.assertEqual(omatrophy.open_difficulties(achs), ['Hard'])
+        self.assertEqual(omatrophy.open_difficulties(achs, reveal=True), ['Nightmare', 'Hard'])
+
+    def test_open_difficulties_put_exact_settings_before_floors(self):
+        achs = [dict(ach('a'), desc='Finish on Normal or higher.'), dict(ach('b'), desc='Finish on Insanity.')]
+        self.assertEqual(omatrophy.open_difficulties(achs), ['Insanity', 'Normal+'])
+
+    def test_tracker_detail_names_the_difficulty_an_achievement_needs(self):
+        hard = dict(ach('a'), desc='Finish the game on Nightmare difficulty.')
+        self.assertEqual(omatrophy.detail(hard, {})['difficulty'], 'Nightmare')
+        self.assertIsNone(omatrophy.detail(ach('b'), {})['difficulty'])
+
     def test_store_rows_count_games_and_keep_found_stores_with_none(self):
         class Steamish:
             id, name = 'steam', 'Steam'
@@ -770,6 +791,7 @@ class PanelJson(unittest.TestCase):
         self.assertEqual(rows['30']['played'], 0)
         self.assertEqual([a for a, r in rows.items() if r['hidden']], ['30'])
         self.assertTrue(rows['10']['header'].startswith('https://'))
+        self.assertTrue(all(r['difficulty'] == [] for r in rows.values()))
 
     def test_now_while_playing(self):
         with FakeLibrary(running={'game': '20', 'since': 350}):
@@ -1300,8 +1322,9 @@ class Settings(unittest.TestCase):
             with redirect_stdout(io.StringIO()):
                 omatrophy.set_option('games-sort', 'closest')
                 omatrophy.set_option('rarest', 'platinum')
+                omatrophy.set_option('games-difficulty', 'on')
             with open(f'{home}/.config/omatrophy/config.json') as f:
-                self.assertEqual(json.load(f), {'games-sort': 'closest', 'rarest': 'platinum'})
+                self.assertEqual(json.load(f), {'games-sort': 'closest', 'rarest': 'platinum', 'games-difficulty': True})
             with self.assertRaises(SystemExit):
                 omatrophy.set_option('rarest', 'yesterday')
 

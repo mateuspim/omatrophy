@@ -55,6 +55,7 @@ turns new unlocks into events. Steam and GOG (through Heroic) so far.
 import hashlib, json, os, signal, sys, threading, time, urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 
+import difficulty
 import stores
 from stores.base import CACHE, STATE, cached, read_json, trusted_url, write_json
 
@@ -710,13 +711,27 @@ def games():
     lib = library(found)
     played = {(s.id, g): t for s in found for t, g in s.recent()}
     hidden = hidden_games()
+    reveal = read_json(config_path(), {}).get('reveal-hidden') is True
     with ThreadPoolExecutor(8) as pool:
         names = list(pool.map(lambda item: item[0].game_name(item[1]), lib))
         headers = list(pool.map(lambda item: item[0].art(item[1])['header'], lib))
     return [dict(progress_row(s, g, achs), game=name, header=header,
                  platinum=platinum_time(achs), played=played.get((s.id, g), 0),
-                 hidden=game_key(s.id, g) in hidden)
+                 hidden=game_key(s.id, g) in hidden, difficulty=open_difficulties(achs, reveal))
             for (s, g, achs), name, header in zip(lib, names, headers)]
+
+
+def open_difficulties(achs, reveal=False):
+    """The settings a game's locked achievements need, each once, in the
+    game's order: what to pick before the next save. Done ones are left out,
+    as they no longer decide anything. Exact settings lead and floors
+    ("Normal+") follow, as a run on the exact one usually meets them; a
+    row cut short then still shows the one that decides. A hidden
+    achievement's setting stays out, as the tracker keeps it secret, unless
+    `reveal` (the owner's reveal-hidden setting) shows them all."""
+    found = (difficulty.setting(a['name'], a['desc']) for a in achs
+             if not a['unlocked'] and (reveal or not a.get('hidden')))
+    return sorted(dict.fromkeys(d for d in found if d), key=lambda d: d.endswith('+'))
 
 
 # Fields of a panel or tracker answer that hold an image URL.
@@ -805,7 +820,7 @@ def detail(a, pcts):
     return {'api': a['api'], 'name': a['name'], 'desc': a['desc'], 'icon': a['icon'],
             'icon_locked': a.get('icon_locked', ''), 'hidden': bool(a.get('hidden')),
             'unlocked': a['unlocked'], 'time': a['time'], 'percent': pct, 'tier': tier(pct),
-            'progress': a.get('progress')}
+            'progress': a.get('progress'), 'difficulty': difficulty.setting(a['name'], a['desc'])}
 
 
 def pick_game(found):
@@ -1150,6 +1165,7 @@ SETTINGS = {'position': ('top-center', 'top-left', 'top-right'),
             'tracker-sort': ('recent', 'rarity', 'name', 'game'),
             # The panel's last picks, so the next open shows the same view.
             'games-sort': ('recent', 'closest', 'name'),
+            'games-difficulty': ('on', 'off'),
             'rarest': ('ever', 'month', 'platinum'),
             'settings-section': ('overview', 'toasts', 'now', 'guides', 'stores'),
             'community': ('on', 'off'),
@@ -1161,7 +1177,7 @@ SETTINGS = {'position': ('top-center', 'top-left', 'top-right'),
 NOW_SECTIONS = ('metals', 'recent', 'rarest', 'shelf')
 SETTINGS.update({f'now-{name}': ('on', 'off') for name in NOW_SECTIONS})
 # Settings stored as true/false rather than the word given.
-SWITCHES = {'community', 'guide-web', 'guide-jail', 'reveal-hidden'} | {f'now-{name}' for name in NOW_SECTIONS}
+SWITCHES = {'community', 'guide-web', 'guide-jail', 'reveal-hidden', 'games-difficulty'} | {f'now-{name}' for name in NOW_SECTIONS}
 
 
 def set_option(key, value):
@@ -1194,6 +1210,7 @@ def set_option(key, value):
                          f'       omatrophy.py set glass {"|".join(SETTINGS["glass"])}\n'
                          f'       omatrophy.py set tracker-sort {"|".join(SETTINGS["tracker-sort"])}\n'
                          f'       omatrophy.py set games-sort {"|".join(SETTINGS["games-sort"])}\n'
+                         f'       omatrophy.py set games-difficulty on|off\n'
                          f'       omatrophy.py set rarest {"|".join(SETTINGS["rarest"])}\n'
                          f'       omatrophy.py set community on|off\n'
                          f'       omatrophy.py set reveal-hidden on|off\n'

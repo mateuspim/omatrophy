@@ -96,7 +96,13 @@ whose empty slots tease the games you're closest to finishing ("2 left"). Before
 achievements, the tab says where they come from and points to the Steam
 profile switch. The **Games** tab lists every
 game with its count, sorted by last played, closest to platinum or name.
-Type (or press `/`) to filter by name; Enter opens the first match. Hover a
+Type (or press `/`) to filter by name; Enter opens the first match.
+**Difficulty** keeps only the games with a locked achievement that needs a
+difficulty setting, and each of those rows names the settings ("Difficulty:
+Insanity, Normal+") so you can pick one before you start (see the tracker's
+Difficulty filter below). A hidden achievement's setting stays out unless
+you reveal hidden achievements in the tracker. The toggle is remembered.
+Hover a
 game and click **Hide** to set aside one you won't finish: it leaves
 Closest and dims in the other sorts until you click **Show**.
 
@@ -124,14 +130,26 @@ panel on the first screen in Quickshell's screen list.
 Click any game for the **tracker**, a card over the screen with every
 achievement: rarity, the trophy it would earn, and the date you got it.
 Locked counter achievements show how far along you are ("52 / 80") when
-the game tracks the count. Its keys:
+the game tracks the count.
+
+**Difficulty** (shown only when the game has any) lists the achievements
+that need a difficulty setting ("Finish the game on Nightmare"), each
+tagged with the one it names (◆ Nightmare), so you can check before
+starting a new save. A `+` marks a minimum ("on Normal or higher" is
+Normal+), which a harder run also meets; **Hardest** stands for "the
+hardest difficulty" and **All** for "on every difficulty". OmaTrophy
+reads this from each achievement's own text, so it can miss one the text
+doesn't spell out. "On any difficulty" doesn't count, and a hidden
+achievement stays out of the filter until you reveal it.
+
+Its keys:
 
 | Key | Does |
 | --- | --- |
 | Up, Down, Page Up/Down, Home, End | Move the highlight |
 | Enter (or Space, when not searching) | Reveal a hidden achievement |
 | Shift+Enter | Reveal all hidden achievements, or hide them again (remembered) |
-| Tab, Shift+Tab | All, Locked, Unlocked, Rare, Guide |
+| Tab, Shift+Tab | All, Locked, Unlocked, Rare, Difficulty, Guide |
 | Left, Right | Sort: recent, rarest, A–Z, the game's own order (remembered) |
 | Any letter | Search; Backspace edits |
 | Escape | Clear the search, then close |

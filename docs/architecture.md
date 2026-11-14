@@ -30,6 +30,7 @@ turns those lines into cards on screen.
 | `guide_maker.py` | Makes a guide on request (ADR 14): gather sources, research, classify, route, verify quotes, write the files; status and stop like Load from Steam. Prompts in `prompts/guide/`. |
 | `guide_agents.py` | One adapter per coding agent: its locked headless command, model list and answer parsing; only adapters whose lock was checked run. |
 | `stores/__init__.py` | The list of stores; `available()` keeps the installed ones. |
+| `difficulty.py` | Reads from an achievement's own text the difficulty setting it needs ("on Nightmare", "Normal or higher"), for the `difficulty` fields of `game` and `games`. Pure, no store or network. |
 | `omatrophy.py` | Watch loop, diffing, tiers, event shapes, test inbox, settings, the panel's and tracker's JSON (`now`, `games`, `game`), CLI. |
 | `Service.qml` | Runs the watcher, parses lines, queues events, plays the chime, shows one card at a time in an Overlay-layer window on the focused monitor. |
 | `TrophyToast.qml` | One unlock: icon, trophy in the tier's metal, rarity, progress. |

@@ -14,7 +14,8 @@ says how the parts fit, `docs/adr/` why, `docs/specs/` what the contracts are
   points: `Service.qml` (the watcher process and the toast window),
   `Panel.qml` (the bar button) and `Tracker.qml` (the achievement tracker
   overlay). Don't add QML subfolders. `omatrophy.py` is
-  the watcher and CLI; `stores/` holds one module per game store; trophy art
+  the watcher and CLI; `difficulty.py` reads difficulty settings from
+  achievement text; `stores/` holds one module per game store; trophy art
   in `assets/<set>/`; design sources in `design/`; dev tools in `dev/` and
   `tools/`; tests in `tests/`.
 - Naming: plugin id, `moduleName` and IPC target `pym.omatrophy`; layer
