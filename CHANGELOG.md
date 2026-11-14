@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- No more "Using a Component as the root of a QML document is
+  deprecated" warning each time a view is built from its text
+  (`FreshObject.qml`). Needs `omarchy restart shell`.
+
 ## 0.7.1 - 2026-11-14
 
 - Toasts: the trophy is bigger and centred in its tile, drawn on an even
