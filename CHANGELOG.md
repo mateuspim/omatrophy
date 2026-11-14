@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.0 - 2026-11-14
 
 - **Pick the monitor** cards show on: Settings > Toasts > Screen lists
   Focused (as before) and each connected monitor by name (`set screen
