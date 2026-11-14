@@ -597,6 +597,11 @@ class NowTab(unittest.TestCase):
         self.assertEqual(omatrophy.open_difficulties(achs), ['Hard', 'Nightmare'])
         self.assertEqual(omatrophy.open_difficulties([ach('e')]), [])
 
+    def test_open_difficulties_keep_a_hidden_achievements_setting_secret(self):
+        achs = [dict(ach('a', hidden=True), desc='Finish on Nightmare.'), dict(ach('b'), desc='Finish on Hard.')]
+        self.assertEqual(omatrophy.open_difficulties(achs), ['Hard'])
+        self.assertEqual(omatrophy.open_difficulties(achs, reveal=True), ['Nightmare', 'Hard'])
+
     def test_open_difficulties_put_exact_settings_before_floors(self):
         achs = [dict(ach('a'), desc='Finish on Normal or higher.'), dict(ach('b'), desc='Finish on Insanity.')]
         self.assertEqual(omatrophy.open_difficulties(achs), ['Insanity', 'Normal+'])
@@ -786,6 +791,7 @@ class PanelJson(unittest.TestCase):
         self.assertEqual(rows['30']['played'], 0)
         self.assertEqual([a for a, r in rows.items() if r['hidden']], ['30'])
         self.assertTrue(rows['10']['header'].startswith('https://'))
+        self.assertTrue(all(r['difficulty'] == [] for r in rows.values()))
 
     def test_now_while_playing(self):
         with FakeLibrary(running={'game': '20', 'since': 350}):

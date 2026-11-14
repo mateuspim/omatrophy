@@ -34,8 +34,8 @@ class SettingTest(unittest.TestCase):
             ('Complete the game in Tactician mode.', 'Tactician'),
             ('Feel like taking the plunge into Survival Mode on extreme? Come back alive', 'Extreme'),
             ('Deliver 2,000 Alien shapes in Classic - Insane', 'Insane'),
-            ('Finish on the highest difficulty', 'Highest'),
-            ('Complete the campaign on all difficulties', 'Every'),
+            ('Finish on the highest difficulty', 'Hardest'),
+            ('Complete the campaign on all difficulties', 'All'),
         ])
 
     def test_a_floor_is_marked_with_a_plus(self):
@@ -43,11 +43,52 @@ class SettingTest(unittest.TestCase):
             ('Finish the game on Normal difficulty or higher.', 'Normal+'),
             ('Finish the story on at least Casual difficulty.', 'Casual+'),
             ('Complete Rock The Cradle on Very Hard or above.', 'Very Hard+'),
-            ('Finish on the highest difficulty or higher', 'Highest'),
+            ('Finish on the highest difficulty or higher', 'Hardest'),
         ])
 
-    def test_reads_the_name_too(self):
-        self.assertEqual(difficulty.setting('Insane difficulty', 'Beat the final boss'), 'Insane')
+    def test_a_floor_is_read_next_to_the_setting_only(self):
+        self.check([
+            ('Kill at least 100 enemies on Hard', 'Hard'),
+            ('Beat it at least 3 times on Normal.', 'Normal'),
+            ('Win with at least 50 percent HQ integrity on General difficulty', 'General'),
+            ('Complete Lotus Towers on Hardened, Veteran, or Realistic.', 'Hardened+'),
+            ('Beat the game on Easy or Normal.', 'Easy+'),
+            ('Complete an Extreme difficulty mission or higher without anyone dying.', 'Extreme+'),
+            ('Finish the story on Medium difficulty level or higher', 'Medium+'),
+        ])
+
+    def test_words_that_mean_something_else_alone_need_more(self):
+        self.check([
+            ('Craft a sword using iron and wood', None),
+            ('Complete the game using the Ranger', None),
+            ('Win a match on Standard.', None),
+            ('Cook a steak on medium.', None),
+            ('Complete the game on Standard or higher.', 'Standard+'),
+            ('Complete the game in Iron Mode.', 'Iron'),
+        ])
+
+    def test_modes_that_are_what_is_played_are_not_settings(self):
+        self.check([
+            ('Reach wave 50 on Horde Mode', None),
+            ('Take a photo on Photo Mode', None),
+            ('Win a match in Casual mode', None),
+            ('Finish the story on at least Casual difficulty.', 'Casual+'),
+        ])
+
+    def test_two_settings_are_not_one_name(self):
+        self.assertEqual(difficulty.setting('X', 'Win on Hard and Nightmare difficulty'), 'Nightmare')
+        self.assertIsNone(difficulty.setting('X', 'Beat it in New Game+ with Higher Difficulty'))
+        self.assertEqual(difficulty.setting('X', 'Complete the game on Hell and Hell mode.'), 'Hell and Hell')
+
+    def test_all_needs_to_be_about_the_settings(self):
+        self.assertIsNone(difficulty.setting('X', 'Complete all difficulty challenges'))
+
+    def test_the_description_decides_over_a_joke_name(self):
+        self.assertIsNone(difficulty.setting('With Extreme Difficulty', 'Destroy 50 tanks'))
+        self.assertIsNone(difficulty.setting('Nightmare Mode', 'Head into Undermountain with a plethora of bosses!'))
+
+    def test_reads_the_name_when_there_is_no_description(self):
+        self.assertEqual(difficulty.setting('Insane difficulty', ''), 'Insane')
 
     def test_leaves_text_that_only_sounds_hard(self):
         self.check([

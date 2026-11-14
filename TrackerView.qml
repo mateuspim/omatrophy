@@ -315,7 +315,7 @@ Item {
     if (filter === "locked" && a.unlocked) return false
     if (filter === "unlocked" && !a.unlocked) return false
     if (filter === "rare" && !(a.percent !== null && a.percent <= rarePercent)) return false
-    if (filter === "difficulty" && !a.difficulty) return false
+    if (filter === "difficulty" && !hasDifficulty(a)) return false
     if (!appliedSearch) return true
     var q = appliedSearch.toLowerCase()
     var desc = a.hidden && !a.unlocked ? "" : a.desc
@@ -462,9 +462,16 @@ Item {
       var a = game.achievements[i]
       if (kind === "all" || (kind === "locked" && !a.unlocked) || (kind === "unlocked" && a.unlocked)
           || (kind === "rare" && a.percent !== null && a.percent <= rarePercent)
-          || (kind === "difficulty" && a.difficulty)) n++
+          || (kind === "difficulty" && hasDifficulty(a))) n++
     }
     return n
+  }
+
+  // A secret achievement's setting would say what it asks, so it stays
+  // out of the Difficulty filter and its count until revealed, as search
+  // leaves its description out.
+  function hasDifficulty(a) {
+    return !!a.difficulty && !isSecret(a.api)
   }
 
   // Unlocked achievements per metal, for the header's tally.
@@ -2941,15 +2948,6 @@ Item {
             text: row.secret ? "Hover or press Enter to reveal" : row.ach.desc
             visible: text !== ""
           }
-          // The setting it needs, read from its text; a secret row keeps
-          // even that to itself.
-          Caption {
-            width: parent.width
-            visible: !!row.ach.difficulty && !row.secret
-            text: "Difficulty: " + (row.ach.difficulty || "")
-            color: Commons.Color.accent
-            opacity: 0.9
-          }
         }
 
         // Only an earned trophy can go on the showcase; the star shows on
@@ -2970,7 +2968,9 @@ Item {
           anchors.right: parent.right
           anchors.rightMargin: Commons.Style.space(8)
           anchors.verticalCenter: parent.verticalCenter
-          width: Commons.Style.space(130)
+          // Grows past its usual width for a difficulty tag beside a
+          // counter, rather than running into the name.
+          width: Math.max(Commons.Style.space(130), implicitWidth)
           spacing: Commons.Style.space(3)
           Row {
             anchors.right: parent.right
@@ -3011,6 +3011,16 @@ Item {
                 radius: parent.radius
                 color: Commons.Color.accent
               }
+            }
+            // The setting it needs, read from its text, beside its state so
+            // the row keeps one height; a secret row keeps even that.
+            Caption {
+              anchors.verticalCenter: parent.verticalCenter
+              width: Math.min(implicitWidth, Commons.Style.space(90))
+              visible: !!row.ach.difficulty && !row.secret
+              text: "◆ " + (row.ach.difficulty || "")
+              color: Commons.Color.accent
+              opacity: 0.9
             }
             Caption {
               text: row.ach.unlocked ? (row.ach.time ? root.day(row.ach.time) : "Unlocked")

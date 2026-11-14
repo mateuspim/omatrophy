@@ -711,22 +711,26 @@ def games():
     lib = library(found)
     played = {(s.id, g): t for s in found for t, g in s.recent()}
     hidden = hidden_games()
+    reveal = read_json(config_path(), {}).get('reveal-hidden') is True
     with ThreadPoolExecutor(8) as pool:
         names = list(pool.map(lambda item: item[0].game_name(item[1]), lib))
         headers = list(pool.map(lambda item: item[0].art(item[1])['header'], lib))
     return [dict(progress_row(s, g, achs), game=name, header=header,
                  platinum=platinum_time(achs), played=played.get((s.id, g), 0),
-                 hidden=game_key(s.id, g) in hidden, difficulty=open_difficulties(achs))
+                 hidden=game_key(s.id, g) in hidden, difficulty=open_difficulties(achs, reveal))
             for (s, g, achs), name, header in zip(lib, names, headers)]
 
 
-def open_difficulties(achs):
+def open_difficulties(achs, reveal=False):
     """The settings a game's locked achievements need, each once, in the
     game's order: what to pick before the next save. Done ones are left out,
     as they no longer decide anything. Exact settings lead and floors
     ("Normal+") follow, as a run on the exact one usually meets them; a
-    row cut short then still shows the one that decides."""
-    found = (difficulty.setting(a['name'], a['desc']) for a in achs if not a['unlocked'])
+    row cut short then still shows the one that decides. A hidden
+    achievement's setting stays out, as the tracker keeps it secret, unless
+    `reveal` (the owner's reveal-hidden setting) shows them all."""
+    found = (difficulty.setting(a['name'], a['desc']) for a in achs
+             if not a['unlocked'] and (reveal or not a.get('hidden')))
     return sorted(dict.fromkeys(d for d in found if d), key=lambda d: d.endswith('+'))
 
 

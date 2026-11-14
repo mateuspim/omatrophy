@@ -3631,14 +3631,26 @@ Column {
       }
       // A toggle of one chip; it shows once some game has a difficulty
       // achievement still to do.
+      // A filter, not a fourth sort: a rule keeps it apart from the sorts.
       Chips {
-        anchors.right: sortGroup.left
-        anchors.rightMargin: Commons.Style.space(10)
+        id: difficultyToggle
+        anchors.right: sortRule.left
+        anchors.rightMargin: Commons.Style.space(8)
         anchors.verticalCenter: parent.verticalCenter
         visible: root.difficultyGames > 0 || root.difficultyOnly
         options: [{ value: "difficulty", label: "Difficulty " + root.difficultyGames }]
         value: root.difficultyOnly ? "difficulty" : ""
         onPicked: root.difficultyOnly = !root.difficultyOnly
+      }
+      Rectangle {
+        id: sortRule
+        anchors.right: sortGroup.left
+        anchors.rightMargin: Commons.Style.space(8)
+        anchors.verticalCenter: parent.verticalCenter
+        visible: difficultyToggle.visible
+        width: 1
+        height: Commons.Style.space(14)
+        color: Qt.alpha(root.foreground, 0.2)
       }
       Chips {
         id: sortGroup

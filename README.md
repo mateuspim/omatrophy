@@ -99,8 +99,9 @@ game with its count, sorted by last played, closest to platinum or name.
 Type (or press `/`) to filter by name; Enter opens the first match.
 **Difficulty** keeps only the games with a locked achievement that needs a
 difficulty setting, and each of those rows names the settings ("Difficulty:
-Hard, Nightmare") so you can pick one before you start (see the tracker's
-Difficulty filter below). Hover a
+Insanity, Normal+") so you can pick one before you start (see the tracker's
+Difficulty filter below). A hidden achievement's setting stays out unless
+you reveal hidden achievements in the tracker. Hover a
 game and click **Hide** to set aside one you won't finish: it leaves
 Closest and dims in the other sorts until you click **Show**.
 
@@ -132,10 +133,13 @@ the game tracks the count.
 
 **Difficulty** (shown only when the game has any) lists the achievements
 that need a difficulty setting ("Finish the game on Nightmare"), each
-tagged with the one it names, so you can check before starting a new save.
-OmaTrophy reads this from each achievement's own text, so it can miss
-one the text doesn't spell out. "On any difficulty" doesn't count, and a
-hidden achievement keeps its tag hidden too.
+tagged with the one it names (◆ Nightmare), so you can check before
+starting a new save. A `+` marks a minimum ("on Normal or higher" is
+Normal+), which a harder run also meets; **Hardest** stands for "the
+hardest difficulty" and **All** for "on every difficulty". OmaTrophy
+reads this from each achievement's own text, so it can miss one the text
+doesn't spell out. "On any difficulty" doesn't count, and a hidden
+achievement stays out of the filter until you reveal it.
 
 Its keys:
 

@@ -126,7 +126,9 @@ say; `hidden` is `true` for games set aside with `hide`. `difficulty` lists
 the settings the game's locked achievements need (`["Nightmare", "Hard+"]`),
 each once, exact settings first, then floors in the game's order;
 `[]` when none does. A `+` marks a floor ("Normal or higher", "at least
-Casual"), in `game`'s `difficulty` too.
+Casual"), in `game`'s `difficulty` too. A locked hidden achievement's
+setting is left out unless `reveal-hidden` is on, as the tracker keeps it
+secret.
 
 ## game
 
@@ -147,10 +149,12 @@ tracks the count (Steam: the schema's progress stat, once the game has
 written it; an unwritten stat is unknown, not 0), else `null`; `value`
 is already clamped to `0..max`, and `max` is at least 2 (a one-step
 "counter" is a plain flag, so it gets `null`).
-`difficulty` is the setting the achievement's name or description says it
-needs (`"Nightmare"`, `"Death March"`; `"Highest"` for "the hardest
-difficulty", `"Every"` for "on all difficulties"), else `null`; "on any
-difficulty" is `null` (`difficulty.py`).
+`difficulty` is the setting the achievement's description (its name, when
+the description is empty) says it needs (`"Nightmare"`, `"Death March"`;
+`"Hardest"` for "the hardest difficulty", `"All"` for "on all
+difficulties"; `"Normal+"` for a floor, "Normal or higher"), else `null`;
+"on any difficulty" is `null` (`difficulty.py`). It is there for hidden
+achievements too; the tracker keeps a secret one's to itself.
 
 ## Overlay
 
