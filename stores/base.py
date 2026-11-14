@@ -168,8 +168,21 @@ def http_json(url):
     return json.loads(fetch_bytes(url)[0])
 
 
+def shown_image(value):
+    """An image the shell may load: a local file:// one or an https URL on a
+    store's host; '' for anything else. The shell's Image fetches any URL it
+    is given (plain http too), and some come from files other programs
+    write (Comet's database, Heroic's library cache)."""
+    value = value if isinstance(value, str) else ''
+    return value if value.startswith('file://') or trusted_url(value) else ''
+
+
 def cached(url, name):
-    """A local file:// copy of an image, so a card shows complete the moment it slides in; the URL if offline."""
+    """A local file:// copy of an image, so a card shows complete the moment
+    it slides in; the URL if offline; '' for a URL off the stores' hosts,
+    which the shell would otherwise load itself."""
+    if not trusted_url(url):
+        return ''
     path = f'{CACHE}/{name}'
     if not os.path.exists(path):
         try:

@@ -5,10 +5,11 @@ Guides are the owner's data in ~/.local/share/omatrophy/guides/. This module
 reads them and copies them in from another folder (`guide import`); it never
 writes into the source folder, and never changes a guide it already holds.
 """
-import json, os, re, shutil
+import json, os, re, shutil, stat, tempfile
 
 import by_hand
 import difficulty
+from stores.base import write_json
 
 PHASES = ('missable', 'story', 'quick', 'challenge', 'grind', 'collect', 'online')
 NEXT_COUNT = 3
@@ -138,6 +139,29 @@ def open_order(order, items, done):
     return open_[:NEXT_COUNT]
 
 
+# Markdown images and HTML <img>: Qt's MarkdownText fetches an image's
+# URL (plain http too) as soon as the prose shows, and the prose is the
+# agent's text, steered by the pages it read, or a guide file someone
+# shared. A beacon would tell its owner when and from where the guide is
+# read. `![x](url)` becomes the link `[x](url)`, which opens only on a
+# click and only when it is https; reference images (`![x][r]`) too.
+IMG_TAG = re.compile(r'<img\b[^>]*>?', re.I)
+BANG = re.compile(r'!+(?=\[)')
+
+
+def no_images(text):
+    """Markdown prose with every image turned into a plain link."""
+    # Every `!` run before a `[` goes: `!![x](u)` would leave `![x](u)`.
+    return BANG.sub('', IMG_TAG.sub('', str(text)))
+
+
+def prose_sections(sections):
+    """The plan's prose sections, text only and with no images."""
+    if not isinstance(sections, dict):
+        return {}
+    return {k: no_images(v) for k, v in sections.items() if isinstance(k, str) and isinstance(v, str)}
+
+
 def guide_answer(store, app, achievements, folder=None):
     """The guide for one game as the tracker reads it, or {} when none."""
     path = find_guide(store, app, folder)
@@ -178,7 +202,7 @@ def guide_answer(store, app, achievements, folder=None):
     at = pinned if pinned >= 0 else current_step(steps)
     return {'store': store, 'app': str(app), 'file': os.path.basename(path),
             'generated': plan.get('generated', 0), 'order': order, 'items': items,
-            'sections': plan.get('sections') or {}, 'notes': notes, 'ticks': ticks,
+            'sections': prose_sections(plan.get('sections')), 'notes': no_images(notes), 'ticks': ticks,
             'next': open_order(order, items, done),
             'agent': plan.get('agent') if isinstance(plan.get('agent'), dict) else {},
             'cost_usd': plan_cost(plan), 'outdated': outdated(plan),
@@ -280,7 +304,7 @@ def walkthrough_steps(plan, name_to_api, done, items=None):
         apis = [name_to_api[n] for n in s.get('achievements') or [] if n in name_to_api]
         marker = name_to_api.get(s.get('marker'), '') if isinstance(s.get('marker'), str) else ''
         marker = marker if marker in apis and story_marker(marker, items) else ''
-        steps.append({'title': s['title'], 'text': s.get('text') if isinstance(s.get('text'), str) else '',
+        steps.append({'title': s['title'], 'text': no_images(s['text']) if isinstance(s.get('text'), str) else '',
                       'achievements': apis, 'actions': step_actions(s.get('actions'), name_to_api),
                       'missables': [name_to_api[n] for n in s.get('missables') or [] if n in name_to_api],
                       'unverified': s.get('unverified') is True,
@@ -381,11 +405,9 @@ def save_pin(store, app, pin):
         pins.pop(key, None)
     else:
         pins[key] = pin
-    path = here_path()
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path + '.tmp', 'w', encoding='utf-8') as f:
-        json.dump(pins, f, indent=1, sort_keys=True)
-    os.replace(path + '.tmp', path)
+    # A fresh temporary file, not a fixed `.tmp` name: open() would write
+    # through a link left at that name.
+    write_json(here_path(), pins, indent=1, sort_keys=True)
 
 
 def make_pin(steps, index):
@@ -421,16 +443,46 @@ def plan_cost(plan):
                      if isinstance(u, dict) and isinstance(u.get('cost_usd'), (int, float))), 4)
 
 
+# A guide is a few hundred KB with its sources; a bigger file is not one.
+IMPORT_MAX_BYTES = 16 * 1024 * 1024
+
+
+def importable(path):
+    """A plain file of guide size: a shared folder (an unpacked archive)
+    may hold a link named like a guide that points at one of the owner's
+    files, which would land in the guides folder and in the agent's next
+    prompt."""
+    try:
+        st = os.lstat(path)
+    except OSError:
+        return False
+    return stat.S_ISREG(st.st_mode) and st.st_size <= IMPORT_MAX_BYTES
+
+
+def copy_in(src, target):
+    """Copy through a temporary file and a rename, so a link already at
+    `target` is replaced, not written through."""
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(target), prefix='.' + os.path.basename(target), suffix='.tmp')
+    try:
+        with os.fdopen(fd, 'wb') as out, open(src, 'rb') as f:
+            shutil.copyfileobj(f, out)
+        os.replace(tmp, target)
+    except BaseException:
+        os.unlink(tmp)
+        raise
+
+
 def import_guides(source, replace=False, folder=None):
     """Copy every guide .md with its .plan.json and .sources.json from
-    `source`. Returns (imported, skipped); `source` is only read."""
+    `source`. Returns (imported, skipped); `source` is only read, and only
+    its plain files (no links) are."""
     folder = folder or guides_dir()
     if not os.path.isdir(source):
         raise SystemExit(f'omatrophy: guide import: {source} is not a folder; give the folder that holds the guide files')
     os.makedirs(folder, exist_ok=True)
     imported = skipped = 0
     for name in sorted(os.listdir(source)):
-        if not name.endswith('.md') or not os.path.isfile(os.path.join(source, name)):
+        if not name.endswith('.md') or not importable(os.path.join(source, name)):
             continue
         target = os.path.join(folder, name)
         if os.path.exists(target) and not replace:
@@ -439,7 +491,7 @@ def import_guides(source, replace=False, folder=None):
         base = name[:-3]
         for extra in (name, base + '.plan.json', base + '.sources.json'):
             src = os.path.join(source, extra)
-            if os.path.isfile(src):
-                shutil.copyfile(src, os.path.join(folder, extra))
+            if importable(src):
+                copy_in(src, os.path.join(folder, extra))
         imported += 1
     return imported, skipped

@@ -16,7 +16,7 @@ and Heroic's GOG login (gog_store/auth.json) is never read.
 import os, sqlite3, time
 from datetime import datetime, timezone
 
-from .base import STATE, Store, boot_time, cached, read_json, started_at, write_json
+from .base import STATE, Store, boot_time, cached, read_json, shown_image, started_at, write_json
 
 CLIENTS = f'{STATE}/gog-clients.json'
 FLATPAK = '~/.var/app/com.heroicgameslauncher.hgl'
@@ -335,7 +335,9 @@ class Gog(Store):
         g = self.entry(game)
         cover, wide = str(g.get('art_cover') or ''), str(g.get('art_background') or g.get('art_cover') or '')
         hero = cached(wide, f'art/gog_{game}_hero{os.path.splitext(wide.split("?")[0])[1]}') if wide else ''
-        return {'hero': hero, 'header': cover}
+        # Heroic's cache is another program's file: only a GOG host's URL
+        # reaches the shell, which loads what it is given.
+        return {'hero': shown_image(hero), 'header': shown_image(cover)}
 
     def recent(self):
         """[(unix seconds, game id)] from Heroic's lastPlayed, or the

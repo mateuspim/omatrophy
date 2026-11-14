@@ -5,6 +5,8 @@ runtime with `hyprctl eval` and never writes the owner's Hyprland config.
 A key another bind already uses is refused, with the reason."""
 import json, os, re, subprocess
 
+from stores.base import write_json
+
 DEFAULT = 'SUPER + CTRL + G'
 DESCRIPTION = 'OmaTrophy: the guide over your game'
 COMMAND = """omarchy-shell shell toggle pym.omatrophy '{"view":"guide"}'"""
@@ -175,8 +177,7 @@ def sync(text, run=hyprctl):
             if reply != 'ok' and 'hl.bind(' in lua:
                 # Hyprland's reply quotes the Lua; the owner needs only this.
                 result = dict(result, bound='', error=f'Hyprland did not accept {result["key"]} as a key; pick another.')
-    path = state_path()
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, 'w', encoding='utf-8') as f:
-        json.dump(result, f)
+    # Written beside and renamed over, as every state file: a link at the
+    # path is replaced, not written through.
+    write_json(state_path(), result)
     return result

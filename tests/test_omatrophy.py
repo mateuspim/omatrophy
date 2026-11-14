@@ -225,7 +225,8 @@ class Boundaries(unittest.TestCase):
         with mock.patch.object(base.OPENER, 'open') as opened:
             with self.assertRaises(ValueError):
                 base.fetch_bytes('http://example.com/')
-            self.assertEqual(base.cached('https://example.com/a.png', 'x/a.png'), 'https://example.com/a.png')
+            # Not handed back either: the shell would load it itself.
+            self.assertEqual(stores_base.cached('https://example.com/a.png', 'x/a.png'), '')
         opened.assert_not_called()
 
     def test_store_methods_refuse_bad_app_ids(self):
@@ -1740,9 +1741,38 @@ class LocalImages(unittest.TestCase):
                  'hero': 'file:///already/local.jpg'}, missing)
         self.assertEqual(out['header'], f'file://{tmp}/{omatrophy.image_name(have)}')
         self.assertEqual(out['game'], have)  # not an image field
-        self.assertEqual(out['next'][0], {'icon': lack, 'icon_locked': 'https://evil.example/x.jpg'})
+        # A URL off the stores' hosts never reaches the panel, which would load it.
+        self.assertEqual(out['next'][0], {'icon': lack, 'icon_locked': ''})
         self.assertEqual(out['hero'], 'file:///already/local.jpg')
         self.assertEqual(missing, [lack])
+
+
+class ShownImages(unittest.TestCase):
+    """The shell's Image loads any URL it gets, plain http too; some image
+    URLs come from files other programs write (Comet, Heroic)."""
+
+    def test_only_local_files_and_store_hosts_are_shown(self):
+        for ok in ('file:///x/y.jpg', 'https://images.gog-statics.com/a.png', 'https://cdn.steamstatic.com/a.jpg'):
+            self.assertEqual(omatrophy.shown_image(ok), ok)
+        for bad in ('http://cdn.steamstatic.com/a.jpg', 'https://tracker.example/p.gif', '/etc/passwd',
+                    'https://steamstatic.com.evil.example/a.jpg', 'data:image/png;base64,AA', None, 5):
+            self.assertEqual(omatrophy.shown_image(bad), '', bad)
+
+    def test_cached_never_hands_back_an_untrusted_url(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(stores_base, 'CACHE', tmp), \
+                mock.patch.object(stores_base, 'fetch_bytes', side_effect=AssertionError('fetched')):
+            self.assertEqual(stores_base.cached('http://tracker.example/i.jpg', 'icons/x/i.jpg'), '')
+            self.assertEqual(stores_base.cached('https://tracker.example/i.jpg', 'icons/x/i.jpg'), '')
+
+    def test_a_platinum_event_drops_art_off_the_store_hosts(self):
+        class Store:
+            id, name = 'gog', 'GOG'
+            def game_name(self, game):
+                return 'G'
+            def art(self, game):
+                return {'hero': 'https://tracker.example/h.jpg', 'header': 'file:///cache/h.jpg'}
+        ev = omatrophy.platinum_event(Store(), '1', [{'time': 5}])
+        self.assertEqual((ev['hero'], ev['header']), ('', 'file:///cache/h.jpg'))
 
 
 class LaunchReminder(unittest.TestCase):

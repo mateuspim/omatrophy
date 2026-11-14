@@ -106,6 +106,38 @@ class GuideAnswer(unittest.TestCase):
         self.assertEqual(out['sections']['route'], 'Lantern first, then stars.')
         self.assertEqual(out['generated'], 1792990000)
 
+    def test_no_images_turns_every_image_into_a_link(self):
+        # Qt's MarkdownText fetched each of these as the prose showed; a
+        # pattern for whole images missed the nested and reference forms.
+        for text in ('![a](http://h/1.png)', '![a [b] c](http://h/2.png)', '![x][r]\n\n[r]: http://h/3.png',
+                     '!![d](http://h/4.png)', '!<img src=x>[e](http://h/5.png)', '<img src="http://h/6.png">'):
+            out = guides.no_images(text)
+            self.assertNotIn('![', out, text)
+            self.assertNotIn('<img', out.lower(), text)
+        self.assertEqual(guides.no_images('Wow! [link](https://a) ![x](https://b)'),
+                         'Wow! [link](https://a) [x](https://b)')
+
+    def test_answer_prose_carries_no_images(self):
+        with tempfile.TemporaryDirectory() as d:
+            guides.import_guides(SAMPLES, folder=d)
+            path = guides.find_guide('steam', '1', d)
+            plan = guides.load_plan(path)
+            plan['sections'] = {'overview': 'Hi ![p](http://h/o.png)', 'odd': {'not': 'text'}}
+            plan['walkthrough'] = [{'title': 'Start', 'text': 'Go ![p][r]\n\n[r]: http://h/w.png',
+                                    'achievements': ['First Light']}]
+            with open(guides.plan_path(path), 'w') as f:
+                json.dump(plan, f)
+            with open(path, 'a') as f:
+                f.write('\n')
+            text = open(path).read().replace('## Guide notes\n', '## Guide notes\n![n](http://h/n.png)\n', 1)
+            with open(path, 'w') as f:
+                f.write(text)
+            out = guides.guide_answer('steam', '1', ACHS, d)
+        self.assertEqual(out['sections'], {'overview': 'Hi [p](http://h/o.png)'})
+        self.assertNotIn('![', out['walkthrough'][0]['text'])
+        self.assertIn('[n](http://h/n.png)', out['notes'])
+        self.assertNotIn('![', out['notes'])
+
     def test_ticks_by_hand_join_the_md_ticks_and_can_overrule_them(self):
         # ADR 21: the sample's .md ticks A3 by hand; the file adds Last
         # Lantern and unticks A3, and Up next follows.
@@ -440,6 +472,51 @@ class Import(unittest.TestCase):
     def test_not_a_folder(self):
         with self.assertRaises(SystemExit):
             guides.import_guides('/nonexistent-omatrophy-folder')
+
+    def test_links_in_the_source_are_not_followed(self):
+        # A shared folder can hold a link named like a guide that points at
+        # one of the owner's files; its text would land in the guides folder
+        # and in the agent's next prompt.
+        with tempfile.TemporaryDirectory() as src, tempfile.TemporaryDirectory() as dst, \
+                tempfile.TemporaryDirectory() as private:
+            touch(private, 'secret', 'private key')
+            os.symlink(os.path.join(private, 'secret'), os.path.join(src, 'a-1.md'))
+            touch(src, 'b-2.md', 'b')
+            os.symlink(os.path.join(private, 'secret'), os.path.join(src, 'b-2.sources.json'))
+            self.assertEqual(guides.import_guides(src, folder=dst), (1, 0))
+            self.assertEqual(os.listdir(dst), ['b-2.md'])
+
+    def test_a_link_in_the_guides_folder_is_replaced_not_written_through(self):
+        with tempfile.TemporaryDirectory() as src, tempfile.TemporaryDirectory() as dst, \
+                tempfile.TemporaryDirectory() as other:
+            touch(src, 'a-1.md', 'guide')
+            touch(other, 'keep', 'untouched')
+            os.symlink(os.path.join(other, 'keep'), os.path.join(dst, 'a-1.md'))
+            guides.import_guides(src, replace=True, folder=dst)
+            self.assertFalse(os.path.islink(os.path.join(dst, 'a-1.md')))
+            self.assertEqual(open(os.path.join(other, 'keep')).read(), 'untouched')
+
+    def test_a_file_too_big_for_a_guide_is_skipped(self):
+        with tempfile.TemporaryDirectory() as src, tempfile.TemporaryDirectory() as dst, \
+                mock.patch.object(guides, 'IMPORT_MAX_BYTES', 4):
+            touch(src, 'a-1.md', 'too long')
+            touch(src, 'b-2.md', 'ok')
+            self.assertEqual(guides.import_guides(src, folder=dst), (1, 0))
+
+
+class SavePin(unittest.TestCase):
+    def test_a_link_at_the_tmp_name_is_not_written_through(self):
+        # The pin used to go through a fixed `<file>.tmp`, opened for writing.
+        with tempfile.TemporaryDirectory() as other:
+            touch(other, 'keep', 'untouched')
+            os.makedirs(os.path.dirname(guides.here_path()), exist_ok=True)
+            link = guides.here_path() + '.tmp'
+            os.symlink(os.path.join(other, 'keep'), link)
+            self.addCleanup(os.unlink, link)
+            guides.save_pin('steam', '1', {'step': 0, 'title': 'A', 'finished': []})
+            self.assertEqual(open(os.path.join(other, 'keep')).read(), 'untouched')
+            self.assertEqual(guides.load_pin('steam', '1')['title'], 'A')
+            guides.save_pin('steam', '1', None)
 
 
 

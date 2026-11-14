@@ -356,6 +356,14 @@ class Library(unittest.TestCase):
             self.assertEqual(store.art(PRODUCT), {'hero': 'https://images.gog.com/b.webp',
                                                   'header': 'https://images.gog.com/c.jpg'})
 
+    def test_a_cover_off_gogs_hosts_is_not_handed_to_the_shell(self):
+        with HeroicDir() as h:
+            h.database([row('A')])
+            h.install()
+            h.library([{'app_name': PRODUCT, 'title': 'T', 'art_cover': 'http://tracker.example/c.jpg',
+                        'art_background': 'https://tracker.example/b.jpg'}])
+            self.assertEqual(gog.Gog().art(PRODUCT), {'hero': '', 'header': ''})
+
     def test_no_library_entry_means_no_art_and_the_info_name(self):
         with HeroicDir() as h:
             h.database([row('A')])

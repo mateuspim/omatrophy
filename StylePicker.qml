@@ -1162,6 +1162,8 @@ Column {
   // The small spaced label used across the panel (stats, sections inside a
   // card, setting names).
   component MiniLabel: Text {
+    // Game names, store and guide text: never rendered as HTML.
+    textFormat: Text.PlainText
     color: root.foreground
     opacity: 0.55
     font.family: Commons.Style.font.family
@@ -1170,6 +1172,8 @@ Column {
   }
 
   component Caption: Text {
+    // Game names, store and guide text: never rendered as HTML.
+    textFormat: Text.PlainText
     color: root.foreground
     opacity: 0.6
     font.family: Commons.Style.font.family
