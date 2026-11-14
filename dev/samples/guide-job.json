@@ -13,5 +13,6 @@
  "model": "sonnet",
  "pid": 1,
  "web": true,
- "open": 5
+ "open": 5,
+ "header": "dev/samples/art/starfall-odyssey-header.svg"
 }

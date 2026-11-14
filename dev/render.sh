@@ -35,9 +35,9 @@
 #   dev/render.sh --theme flexoki-light guide-tree out.png  under another installed theme (approximate)
 #
 # Sample data is fake (dev/samples/) so captures are safe for the README;
-# --live output shows your own games and stays out of git. The software
-# renderer drops MultiEffect layers, so the omarchy set's accent inlay is
-# missing here; check it with dev/preview.sh.
+# --live output shows your own games and stays out of git. It draws on the
+# GPU when it can; the software fallback drops MultiEffect layers (card
+# banners, the omarchy set's accent inlay): check those with dev/preview.sh.
 set -euo pipefail
 repo=$(cd "$(dirname "$0")/.." && pwd)
 live=false
@@ -158,7 +158,7 @@ case $target in
     if [[ $target == now ]]; then
       extra="FileView { id: jobSample; path: \"$repo/dev/samples/guide-job.json\"; blockLoading: true }"
       # Two jobs at once: guides are made in parallel.
-      feed="$feed; var j = JSON.parse(jobSample.text()); item.guideJobs = [j, Object.assign({}, j, { app: \"2\", game: \"Ember Tide\", line: \"route: order and notes\", done: 4 })]"
+      feed="$feed; var j = JSON.parse(jobSample.text()); item.guideJobs = [j, Object.assign({}, j, { app: \"2\", game: \"Deep Signal\", header: \"dev/samples/art/deep-signal-header.svg\", line: \"route: order and notes\", done: 4 })]"
     fi
     if [[ $target == settings ]]; then
       extra="FileView { id: agentSample; path: \"$repo/dev/samples/agents.json\"; blockLoading: true }"
@@ -316,6 +316,14 @@ ShellRoot {
   }
 }
 QML
-HOME=$qsHome QT_QPA_PLATFORM=offscreen timeout 30 quickshell -p "$dir" >"$dir/log" 2>&1 || true
+# On the GPU through OpenGL, as share.py draws: the offscreen platform's
+# default software renderer drops every MultiEffect (a card's banner and
+# rail, the omarchy set's accent inlay). Without a GPU, software it is.
+HOME=$qsHome QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=rhi QSG_RHI_BACKEND=opengl \
+  timeout 30 quickshell -p "$dir" >"$dir/log" 2>&1 || true
+if [[ ! -f $out ]]; then
+  echo "no GPU render; drawing in software (no MultiEffect layers)" >&2
+  HOME=$qsHome QT_QPA_PLATFORM=offscreen timeout 30 quickshell -p "$dir" >"$dir/log" 2>&1 || true
+fi
 grep -iE "error|warn" "$dir/log" | grep -v qmlscanner | sort -u | head -20 || true
 [[ -f $out ]] && echo "$out" || { echo "no image; log:" >&2; tail -20 "$dir/log" >&2; exit 1; }
