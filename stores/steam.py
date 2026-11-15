@@ -489,8 +489,7 @@ class Steam(Store):
         if found.startswith('file://'):
             return found
         os.makedirs(os.path.dirname(miss), exist_ok=True)
-        with open(miss, 'w'):
-            pass
+        touch_marker(miss)
         return ''
 
     def art(self, app):
@@ -500,3 +499,17 @@ class Steam(Store):
                 or cached(f'{ART_BASE}/{app}/library_hero.jpg', f'art/{app}_hero.jpg'),
                 'header': self.library_art(app, 'library_header.jpg') or self.store_header(app)
                 or f'{ART_BASE}/{app}/header.jpg'}
+
+
+def touch_marker(path):
+    """Create or refresh an empty marker file without following a link or
+    truncating: a link planted at `path` must not empty the file it points
+    at (the same class as marketplace review finding 9)."""
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
+    except OSError:
+        return
+    try:
+        os.utime(fd)
+    finally:
+        os.close(fd)

@@ -7,7 +7,7 @@ runs that command and never writes a file itself. A tick is never an
 unlock: it counts as done for the guide (`guides.guide_answer`'s `ticks`)
 and nowhere else.
 """
-import fcntl, json, os, shutil, time
+import errno, fcntl, json, os, shutil, stat, tempfile, time
 
 from stores.base import write_json
 
@@ -151,14 +151,16 @@ def tidy(entry):
 def update(store, app, change, path=None, clock=time.time):
     """Read, `change(entry, now)` one game's entry, write it back. An
     fcntl lock beside the file keeps two quick clicks (two processes) from
-    losing one. A broken file is kept as `.bad` before starting anew."""
+    losing one. A broken file is kept as `.bad` before starting anew.
+    OSError (with a message saying what to fix) when the folder or the
+    lock isn't safely ours."""
     path = path or hand_path()
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path + '.lock', 'w') as lock:
+    own_folder(os.path.dirname(path))
+    with open_lock(path + '.lock') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         whole, broken = read_file(path)
         if broken:
-            shutil.copyfile(path, path + '.bad')
+            keep_bad(path)
         key = f'{store}:{app}'
         entry = whole['games'].get(key)
         entry = entry if isinstance(entry, dict) else {}
@@ -172,3 +174,48 @@ def update(store, app, change, path=None, clock=time.time):
             whole['games'].pop(key, None)
         whole['format'] = FORMAT
         write_json(path, whole, indent=1, sort_keys=True)
+
+
+def own_folder(folder):
+    """Make the data folder private (0700) if new; refuse one that isn't a
+    real folder of ours, or that others can write in: there another user
+    could plant a link where we open a file (marketplace review, finding 9).
+    Never chmods an existing folder: the player decides."""
+    os.makedirs(folder, mode=0o700, exist_ok=True)
+    st = os.lstat(folder)
+    if not stat.S_ISDIR(st.st_mode) or st.st_uid != os.getuid():
+        raise OSError(f'{folder} is not a folder owned by you; move it aside and try again')
+    if st.st_mode & 0o022:
+        raise OSError(f'{folder} can be written by other users; run `chmod go-w {folder}` and try again')
+
+
+def open_lock(lock_path):
+    """The lock file, opened without following a link and without
+    truncating: a link planted at `lock_path` must not let us clobber the
+    file it points at (finding 9). Refused unless a plain file of ours."""
+    flags = os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC
+    try:
+        fd = os.open(lock_path, flags, 0o600)
+    except OSError as e:
+        if e.errno == errno.ELOOP:
+            raise OSError(f'{lock_path} is a link; remove it and try again') from None
+        raise
+    st = os.fstat(fd)
+    if not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid() or st.st_nlink != 1:
+        os.close(fd)
+        raise OSError(f'{lock_path} is not a plain file of yours; remove it and try again')
+    return os.fdopen(fd, 'r+')
+
+
+def keep_bad(path):
+    """Copy a broken file to `<file>.bad` through a temporary file and a
+    rename, so a link already at `.bad` is replaced, not written through."""
+    folder = os.path.dirname(path)
+    fd, tmp = tempfile.mkstemp(dir=folder, prefix='.' + os.path.basename(path), suffix='.tmp')
+    try:
+        with os.fdopen(fd, 'wb') as out, open(path, 'rb') as f:
+            shutil.copyfileobj(f, out)
+        os.replace(tmp, path + '.bad')
+    except BaseException:
+        os.unlink(tmp)
+        raise

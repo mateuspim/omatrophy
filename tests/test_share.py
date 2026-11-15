@@ -160,6 +160,18 @@ class Render(unittest.TestCase):
         # A web URL is dropped, not handed to the shell to fetch.
         self.assertEqual(call['event']['hero'], '')
 
+    def test_a_link_at_out_is_replaced_not_written_through(self):
+        victim = os.path.join(self.tmp.name, 'victim')
+        with open(victim, 'w') as f:
+            f.write('precious')
+        out = os.path.join(self.tmp.name, 'out.png')
+        os.symlink(victim, out)
+        share.render({'game': 'x'}, out, run=self.fake_quickshell(), shell_dir=self.shell)
+        with open(victim) as f:
+            self.assertEqual(f.read(), 'precious')
+        self.assertFalse(os.path.islink(out))
+        self.assertEqual(os.stat(out).st_mode & 0o777, 0o644)
+
     def test_another_theme_gets_a_home_of_its_own(self):
         out = os.path.join(self.tmp.name, 'out.png')
         share.render({'game': 'x'}, out, run=self.fake_quickshell(), shell_dir=self.shell, theme='/themes/white')

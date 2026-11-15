@@ -1568,7 +1568,7 @@ def guide_here(store_id, app, where):
 HAND_USAGE = ('usage: omatrophy.py hand <store> <app>\n'
               '       omatrophy.py hand tick|untick <store> <app> <api>\n'
               '       omatrophy.py hand count <store> <app> <api> <n|+n|-n|clear>\n'
-              '       omatrophy.py hand note <store> <app> <api|game> <text>\n'
+              '       omatrophy.py hand note <store> <app> <api|game> <text|--stdin>\n'
               '       omatrophy.py hand clear <store> <app>')
 HAND_ARGS = {'tick': 4, 'untick': 4, 'count': 5, 'note': 5, 'clear': 3}
 
@@ -1583,15 +1583,43 @@ def hand(args):
         return
     if not args or HAND_ARGS.get(args[0]) != len(args):
         raise SystemExit(HAND_USAGE)
+    if args[0] == 'note' and args[4] == '--stdin':
+        args = args[:4] + [stdin_note(sys.stdin)]
     verb, store_id, app, rest = args[0], args[1], args[2], args[3:]
     store, app, achs = hand_game(store_id, app)
     change = hand_change(verb, store, app, achs, rest)
     try:
         by_hand.update(store.id, app, change)
     except OSError as e:
+        if not e.strerror:  # by_hand refused an unsafe folder or lock; its message says what to do
+            raise SystemExit(f'omatrophy: hand: could not save: {e}')
         raise SystemExit(f'omatrophy: hand: could not save {by_hand.hand_path()}: {e.strerror}; check the folder is writable')
     print(json.dumps({'hand': by_hand.game_hand(store.id, app, achs),
                       'guide': guides.guide_answer(store.id, app, achs)}))
+
+
+# One JSON string on one line. Worst case every character is a \uXXXX
+# escape; anything longer is refused before it is read in full.
+STDIN_NOTE_MAX = by_hand.GAME_NOTE_MAX * 6 + 4
+
+
+def stdin_note(stream):
+    """The note `hand note ... --stdin` reads: one line holding a JSON
+    string. The tracker sends notes this way so a private note never sits
+    in the process's command line, which other local users can read
+    (marketplace review, finding 10). A line, not "until EOF", because
+    Quickshell's Process can write to stdin but not close it."""
+    line = stream.readline(STDIN_NOTE_MAX + 1)
+    if len(line) > STDIN_NOTE_MAX:
+        raise SystemExit(f'omatrophy: hand note: the note on stdin is longer than {by_hand.GAME_NOTE_MAX} characters; shorten it')
+    try:
+        text = json.loads(line)
+    except ValueError:
+        text = None
+    if not isinstance(text, str):
+        raise SystemExit('omatrophy: hand note: --stdin wants one line holding a JSON string, '
+                         'like `jq -Rs . <<< "my note" | omatrophy.py hand note ... --stdin`')
+    return text
 
 
 def hand_game(store_id, app):

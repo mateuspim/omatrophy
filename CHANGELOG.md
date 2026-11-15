@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.0.1 - 2026-11-15
+
+Fixes for the Omarchy plugin marketplace review. No shell restart
+needed.
+
+- **Security** ([docs/security-review-1.0.md](docs/security-review-1.0.md),
+  findings 9 and 10):
+  - A tick, count or note by hand can no longer be made to empty
+    another file through a link planted beside `by-hand.json`: the lock
+    and the `.bad` copy never follow links, a new data folder is private
+    (`0700`), and a folder others can write in is refused with a
+    `chmod go-w` hint. The same fix in Steam's art cache marker, the
+    guide bench and the saved platinum image.
+  - The tracker sends notes on stdin, not in the command line, where
+    other local users could read them. `omatrophy.py hand note ...
+    --stdin` reads one JSON-string line; the argument form still works
+    in a terminal.
+
 ## 1.0.0 - 2026-11-14
 
 OmaTrophy 1.0: everything from 0.9 to 0.14 (guide quality, launch

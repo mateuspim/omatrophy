@@ -1032,7 +1032,9 @@ Item {
       else delete notes[api]
       hand = Object.assign({}, hand, { notes: notes })
     }
-    runHand(["note", String(game.store), String(game.app), api, text])
+    // On stdin, not argv: other local users can read a command line, and a
+    // note may be private (marketplace review, finding 10).
+    runHand(["note", String(game.store), String(game.app), api, "--stdin"], JSON.stringify(text) + "\n")
   }
 
   function cancelNote() {
@@ -1052,10 +1054,10 @@ Item {
     return filter === "guide" ? highlightApi : ""
   }
 
-  function runHand(args) {
+  function runHand(args, input) {
     if (!live || !game) return
     handError = ""
-    handQueue = handQueue.concat([{ command: ["python3", helperPath, "hand"].concat(args), generation: handGeneration }])
+    handQueue = handQueue.concat([{ command: ["python3", helperPath, "hand"].concat(args), input: input || "", generation: handGeneration }])
     nextHand()
   }
 
@@ -1295,6 +1297,10 @@ Item {
   // failed write prints nothing: say why and read the truth back.
   Process {
     id: handWriter
+    stdinEnabled: true
+    // The job's stdin (a note) goes in once the process is up; Python reads
+    // one line, so stdin never needs closing (Process can't close it).
+    onStarted: if (root.handJob.input) write(root.handJob.input)
     onRunningChanged: if (!running) Qt.callLater(root.nextHand)
     stdout: StdioCollector {
       onStreamFinished: root.finishHand(text)

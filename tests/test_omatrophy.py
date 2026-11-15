@@ -539,6 +539,20 @@ class StoreHeader(unittest.TestCase):
             self.assertEqual(steam.Steam.store_header(None, APP), '')
         self.assertEqual(http.call_count, 1)
 
+    def test_a_link_at_the_miss_marker_is_not_followed(self):
+        # A planted link must not empty the file it points at (finding 9's class).
+        victim = os.path.join(self.cache, 'victim')
+        with open(victim, 'w') as f:
+            f.write('precious')
+        os.utime(victim, (0, 0))  # old, so the lookup runs and the marker is written
+        os.makedirs(f'{self.cache}/art')
+        os.symlink(victim, f'{self.cache}/art/{APP}_header.miss')
+        with mock.patch.object(steam, 'http_json', side_effect=OSError('offline')) as http:
+            self.assertEqual(steam.Steam.store_header(None, APP), '')
+        self.assertEqual(http.call_count, 1)
+        with open(victim) as f:
+            self.assertEqual(f.read(), 'precious')
+
     def test_art_prefers_the_library_then_the_store_then_the_old_path(self):
         st = steam.Steam.__new__(steam.Steam)
         st.root = self.cache
@@ -964,6 +978,34 @@ class PanelJson(unittest.TestCase):
             self.assertEqual(self.hand('steam', '20')['unticks'], ['ACH_2'])
             self.hand('clear', 'steam', '20')
             self.assertEqual(self.hand('steam', '20')['note'], '')
+
+    def test_hand_note_reads_one_json_line_from_stdin(self):
+        # Marketplace review finding 10: the tracker sends a note on stdin,
+        # never in argv. One line, since the tracker can't close stdin.
+        with tempfile.TemporaryDirectory() as data, FakeLibrary(), \
+                mock.patch.dict(os.environ, {'XDG_DATA_HOME': data}):
+            note = 'Door code 4521\nbehind the "red" door'
+            with mock.patch.object(omatrophy.sys, 'stdin', io.StringIO(json.dumps(note) + '\nignored')):
+                out = self.hand('note', 'steam', '20', 'ACH_3', '--stdin')
+            self.assertEqual(out['hand']['notes'], {'ACH_3': note})
+            with mock.patch.object(omatrophy.sys, 'stdin', io.StringIO(json.dumps('x' * 4000))):
+                self.assertEqual(self.hand('note', 'steam', '20', 'game', '--stdin')['hand']['note'], 'x' * 4000)
+
+    def test_stdin_note_refuses_what_is_not_one_json_string(self):
+        for line, says in (('plain words\n', 'JSON string'), ('', 'JSON string'), ('["a"]\n', 'JSON string'),
+                           ('"' + '\\u0041' * 4001 + '"\n', 'longer than 4000')):
+            with self.subTest(line=line[:12]), self.assertRaises(SystemExit) as e:
+                omatrophy.stdin_note(io.StringIO(line))
+            self.assertIn(says, str(e.exception))
+
+    def test_hand_says_what_to_fix_when_the_folder_is_unsafe(self):
+        with tempfile.TemporaryDirectory() as data, FakeLibrary(), \
+                mock.patch.dict(os.environ, {'XDG_DATA_HOME': data}):
+            os.makedirs(os.path.join(data, 'omatrophy'), mode=0o700)
+            os.chmod(os.path.join(data, 'omatrophy'), 0o777)
+            with self.assertRaises(SystemExit) as e, redirect_stdout(io.StringIO()):
+                omatrophy.hand(['tick', 'steam', '20', 'ACH_2'])
+            self.assertIn('chmod go-w', str(e.exception))
 
     def test_hand_refuses_what_it_cant_do(self):
         with tempfile.TemporaryDirectory() as data, FakeLibrary(), \

@@ -9,7 +9,7 @@ prerequisites and markers. Time and cost are reported and
 break ties. `--pick` makes the winner the default agent and model, and
 `--keep` adopts its guide for the game. Format: docs/specs/guides.md.
 """
-import json, os, re, shutil, time
+import json, os, re, time
 
 import guide_agents, guide_maker, guides
 from stores.base import write_json
@@ -255,4 +255,4 @@ def keep(winner, folder=None):
         target = os.path.join(folder, winner['name'] + ext)
         if os.path.isfile(target) and ext != '.sources.json':
             guide_maker.keep_previous(target)
-        shutil.copyfile(path, target)
+        guides.copy_in(path, target)  # a link at target is replaced, not written through
