@@ -10,7 +10,15 @@ Why: [ADR 21](../adr/0021-tick-and-note-by-hand.md). The code is
 Written only by `omatrophy.py hand ...`, under an `fcntl` lock on
 `by-hand.json.lock`, by a fresh file renamed over the old one. Missing or
 broken reads as empty; a broken one is kept as `by-hand.json.bad` on the
-next write. A game left with nothing by hand is removed from it.
+next write (also through a fresh file and a rename). A game left with
+nothing by hand is removed from it.
+
+A write first checks the folder: a new `omatrophy` folder is made `0700`;
+one that is a link, isn't yours, or can be written by group or others is
+refused with what to fix (`chmod go-w <folder>`), never changed. The lock
+is opened without following a link or truncating, and refused unless it is
+a plain file of yours. Another local user who can write in the folder
+can't make a hand edit clobber a file through a planted link (1.0.1).
 
 ```json
 {"format": 1,
@@ -50,7 +58,7 @@ prints it (`{}` with none), so the tracker reads both at once, as after
 | `hand tick <store> <app> <api>` | Ticks it. Exits non-zero, with what to do, when the game has no such achievement or the store already says it is unlocked. |
 | `hand untick <store> <app> <api>` | Unticks it; also overrules a hand tick in the guide's `.md` (`done: false`). |
 | `hand count <store> <app> <api> <n\|+n\|-n\|clear>` | Sets, raises or lowers the count, clamped to `0..target`; `clear` removes it. A full count is not a tick. Exits non-zero when the guide has no `counter` (target 2 or more) for it, the store tracks its progress, or it is already unlocked. |
-| `hand note <store> <app> <api\|game> <text>` | Saves a note on the achievement, or with `game` on the game (at most 4000 characters); `""` removes it. Longer text exits non-zero, saying the limit. |
+| `hand note <store> <app> <api\|game> <text\|--stdin>` | Saves a note on the achievement (at most 1000 characters), or with `game` on the game (at most 4000); `""` removes it. Longer text exits non-zero, saying the limit. With `--stdin` the note is read from stdin instead: one line holding a JSON string (`jq -Rs . <<< "my note" \| omatrophy.py hand note ... --stdin`), so it never sits in the command line, which other local users can read. The tracker always sends notes this way. |
 | `hand clear <store> <app>` | Removes everything the file holds for the game. |
 
 ## In `game` and `guide`

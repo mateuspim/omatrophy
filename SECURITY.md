@@ -107,7 +107,12 @@ Steam's files, its web pages and the shell's IPC are treated as untrusted:
 - Files are written to a temporary file in the same folder, then renamed
   over the old one, so a crash never leaves half a file and a symlink in
   OmaTrophy's folders is replaced, not followed.
-- Commands run as argument lists, never through a shell.
+- Commands run as argument lists, never through a shell. A note you
+  write in the tracker goes to `omatrophy.py hand note` on stdin, never as
+  an argument: other local users can read a process's command line.
+- `by-hand.json`'s data folder is created private (`0700`); a hand edit
+  refuses a folder that isn't yours or that others can write in, and opens
+  its lock file without following a link or truncating.
 - A guide is the agent's text: its answers are parsed only as JSON between
   stage tags and checked field by field; achievement names it gives must
   be the game's own; prose is shown as Markdown whose links open only when

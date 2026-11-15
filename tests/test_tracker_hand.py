@@ -165,9 +165,20 @@ state.live = false
 state.toggleTick('A')
 assert.equal(state.handQueue.length, 0)
 state.live = true
-const note = '$(touch nope); "literal"'
+state.toggleTick('A')
+assert.deepEqual(plain(state.handWriter.command), ['python3', 'omatrophy.py', 'hand', 'tick', 'steam', '1', 'A'])
+''')
+
+    def test_notes_go_on_stdin_never_in_the_command(self):
+        # Marketplace review finding 10: /proc/<pid>/cmdline is readable by
+        # other local users, so a private note must not be in argv.
+        self.run_js('''
+const note = '$(touch nope); "literal"\\nsecret'
 state.saveNote('A', note)
-assert.equal(state.handWriter.command.at(-1), note)
+assert.deepEqual(plain(state.handWriter.command), ['python3', 'omatrophy.py', 'hand', 'note', 'steam', '1', 'A', '--stdin'])
+assert.ok(!state.handWriter.command.some(word => word.includes('secret')))
+assert.equal(state.handJob.input, JSON.stringify(note) + '\\n')
+assert.equal(state.handJob.input.split('\\n').length, 2)
 ''')
 
 

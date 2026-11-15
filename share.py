@@ -156,7 +156,7 @@ def render(event, out, run=subprocess.run, shell_dir=OMARCHY_SHELL, theme=None):
             raise RuntimeError('Quickshell drew no image; run `omatrophy.py share` from a terminal '
                                'inside the desktop session and check `quickshell` starts')
         os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
-        shutil.move(drawn, out)
+        place(drawn, out)
     return out
 
 
@@ -170,3 +170,18 @@ def notify(summary, body, image=''):
         subprocess.run(args, timeout=4, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
     except (OSError, subprocess.SubprocessError):
         pass
+
+
+def place(drawn, out):
+    """Move the drawn image to `out` through a temporary file beside it and
+    a rename: shutil.move copies across filesystems (/tmp is often tmpfs),
+    and that copy would write through a link already at `out`."""
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(os.path.abspath(out)), prefix='.omatrophy-', suffix='.png')
+    try:
+        with os.fdopen(fd, 'wb') as dst, open(drawn, 'rb') as src:
+            shutil.copyfileobj(src, dst)
+        os.chmod(tmp, 0o644)
+        os.replace(tmp, out)
+    except BaseException:
+        os.unlink(tmp)
+        raise

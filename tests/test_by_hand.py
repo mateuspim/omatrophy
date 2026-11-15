@@ -21,7 +21,7 @@ class Folder(unittest.TestCase):
         self.path = by_hand.hand_path()
 
     def write(self, text):
-        os.makedirs(os.path.dirname(self.path), exist_ok=True)
+        os.makedirs(os.path.dirname(self.path), mode=0o700, exist_ok=True)
         with open(self.path, 'w') as f:
             f.write(text)
 
@@ -110,6 +110,76 @@ class Update(Folder):
         by_hand.update('steam', '1', lambda e, now: by_hand.set_tick(e, 'A', True, now))
         by_hand.update('steam', '1', lambda e, now: e.clear())
         self.assertEqual(by_hand.read_file()[0]['games'], {})
+
+
+class Unsafe(Folder):
+    """Marketplace review finding 9: another local user who can write in
+    the data folder must not get a hand edit to clobber a file through a
+    link. Each case plants something and checks the victim is untouched."""
+
+    def setUp(self):
+        super().setUp()
+        self.folder = os.path.dirname(self.path)
+        os.makedirs(self.folder, mode=0o700)
+        self.victim = os.path.join(os.environ['XDG_DATA_HOME'], 'victim')
+        with open(self.victim, 'w') as f:
+            f.write('precious')
+
+    def tick(self):
+        by_hand.update('steam', '1', lambda e, now: by_hand.set_tick(e, 'A', True, now))
+
+    def assert_victim_whole(self):
+        with open(self.victim) as f:
+            self.assertEqual(f.read(), 'precious')
+
+    def test_new_folder_is_private(self):
+        os.rmdir(self.folder)
+        self.tick()
+        self.assertEqual(os.stat(self.folder).st_mode & 0o777, 0o700)
+
+    def test_lock_link_is_refused_not_followed(self):
+        os.symlink(self.victim, self.path + '.lock')
+        with self.assertRaisesRegex(OSError, 'is a link'):
+            self.tick()
+        self.assert_victim_whole()
+        self.assertFalse(os.path.exists(self.path))
+
+    def test_lock_hard_link_is_refused(self):
+        os.link(self.victim, self.path + '.lock')
+        with self.assertRaisesRegex(OSError, 'not a plain file'):
+            self.tick()
+        self.assert_victim_whole()
+
+    def test_existing_lock_is_not_truncated(self):
+        with open(self.path + '.lock', 'w') as f:
+            f.write('kept')
+        self.tick()
+        with open(self.path + '.lock') as f:
+            self.assertEqual(f.read(), 'kept')
+
+    def test_bad_link_is_replaced_not_written_through(self):
+        self.write('{not json')
+        os.symlink(self.victim, self.path + '.bad')
+        self.tick()
+        self.assert_victim_whole()
+        self.assertFalse(os.path.islink(self.path + '.bad'))
+        with open(self.path + '.bad') as f:
+            self.assertEqual(f.read(), '{not json')
+
+    def test_folder_others_can_write_is_refused(self):
+        os.chmod(self.folder, 0o777)
+        with self.assertRaisesRegex(OSError, 'chmod go-w'):
+            self.tick()
+        self.assertFalse(os.path.exists(self.path + '.lock'))
+
+    def test_folder_link_is_refused(self):
+        os.rmdir(self.folder)
+        elsewhere = os.path.join(os.environ['XDG_DATA_HOME'], 'elsewhere')
+        os.mkdir(elsewhere, 0o700)
+        os.symlink(elsewhere, self.folder)
+        with self.assertRaisesRegex(OSError, 'not a folder owned by you'):
+            self.tick()
+        self.assertEqual(os.listdir(elsewhere), [])
 
 
 if __name__ == '__main__':
