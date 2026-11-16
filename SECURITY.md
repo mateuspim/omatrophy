@@ -116,7 +116,7 @@ Steam's files, its web pages and the shell's IPC are treated as untrusted:
 - Every `omatrophy.py` command first checks OmaTrophy's config, state,
   cache and data folders and every folder in them: one that isn't yours or
   that others can write in, or that sits where another user could swap
-  it (any folder above it, as written or through a link, that isn't
+  it (any folder read on the way to it, through every link, that isn't
   yours or root's, or that others can write in without the sticky bit),
   stops the
   command with the `chmod go-w` fix, so nobody else can plant settings, a
