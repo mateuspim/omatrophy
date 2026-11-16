@@ -9,7 +9,7 @@ import json, os, re, shutil, stat, tempfile
 
 import by_hand
 import difficulty
-from stores.base import write_json
+from stores.base import read_plain, write_json
 
 PHASES = ('missable', 'story', 'quick', 'challenge', 'grind', 'collect', 'online')
 NEXT_COUNT = 3
@@ -461,11 +461,17 @@ def importable(path):
 
 def copy_in(src, target):
     """Copy through a temporary file and a rename, so a link already at
-    `target` is replaced, not written through."""
+    `target` is replaced, not written through. The source is read only if
+    it is a plain file of at most IMPORT_MAX_BYTES when opened: `importable`
+    checked its name earlier, and someone could have swapped in a link
+    since (OSError then)."""
+    body = read_plain(src, IMPORT_MAX_BYTES + 1)
+    if len(body) > IMPORT_MAX_BYTES:
+        raise OSError(f'{src} is over {IMPORT_MAX_BYTES} bytes')
     fd, tmp = tempfile.mkstemp(dir=os.path.dirname(target), prefix='.' + os.path.basename(target), suffix='.tmp')
     try:
-        with os.fdopen(fd, 'wb') as out, open(src, 'rb') as f:
-            shutil.copyfileobj(f, out)
+        with os.fdopen(fd, 'wb') as out:
+            out.write(body)
         os.replace(tmp, target)
     except BaseException:
         os.unlink(tmp)
@@ -492,6 +498,9 @@ def import_guides(source, replace=False, folder=None):
         for extra in (name, base + '.plan.json', base + '.sources.json'):
             src = os.path.join(source, extra)
             if importable(src):
-                copy_in(src, os.path.join(folder, extra))
+                try:
+                    copy_in(src, os.path.join(folder, extra))
+                except OSError:
+                    continue  # swapped for a link or grown since `importable` looked
         imported += 1
     return imported, skipped

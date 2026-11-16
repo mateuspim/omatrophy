@@ -74,7 +74,7 @@ from concurrent.futures import ThreadPoolExecutor
 import difficulty
 import stores
 import by_hand
-from stores.base import CACHE, STATE, cached, read_json, shown_image, trusted_url, write_json
+from stores.base import CACHE, STATE, cached, folder_problems, open_own, read_json, shown_image, trusted_url, write_json
 
 INBOX = f'{STATE}/inbox.jsonl'
 # An unlock older than this when its file changes is a cache sync of past
@@ -525,7 +525,11 @@ def drain_inbox(offset):
         offset = 0
     if size == offset:
         return offset
-    with open(INBOX) as f:
+    try:
+        f = os.fdopen(open_own(INBOX, os.O_RDONLY), encoding='utf-8', errors='replace')
+    except OSError:
+        return offset
+    with f:
         f.seek(offset)
         for line in f:
             event = inbox_event(line)
@@ -961,7 +965,12 @@ def test(kind):
     # Asked for, so the shell shows it even while Do Not Disturb holds the rest.
     ev = dict(sample_event(kind, *sample_game()), test=True)
     os.makedirs(STATE, exist_ok=True)
-    with open(INBOX, 'a') as f:
+    # Not open(..., 'a'): that appends through a planted link.
+    try:
+        fd = open_own(INBOX, os.O_WRONLY | os.O_APPEND | os.O_CREAT)
+    except OSError as e:
+        raise SystemExit(f'omatrophy: test: could not queue the card: {e}')
+    with os.fdopen(fd, 'a') as f:
         f.write(json.dumps(ev) + '\n')
     print(f"queued {kind}: {ev['game']}" + (f" / {ev['name']}" if 'name' in ev else ''))
     note = stale_note(running_state(), kind)
@@ -2216,6 +2225,12 @@ def showcase_items(keys, by_key):
 
 def main(argv):
     cmd = argv[1] if len(argv) > 1 else 'watch'
+    # Every command reads or writes OmaTrophy's folders; one another user
+    # can write in would let them plant settings, cards or links for us
+    # to act on (follow-up security review, finding 13).
+    problems = folder_problems()
+    if problems:
+        raise SystemExit('\n'.join(f'omatrophy: unsafe folder: {p}' for p in problems))
     if cmd == 'watch' and argv[2:3] == ['--shell'] and len(argv) == 4:
         watch(shell_version=argv[3])
     elif cmd == 'watch' and len(argv) <= 2:

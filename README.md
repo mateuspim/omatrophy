@@ -407,7 +407,9 @@ default stays until you pick. With
 runs the agent inside it as well. A local model needs its server let in:
 **Jail options** under Sandbox (or `guide jail-options`) adds ai-jail
 options for the picked agent, such as `--map ~/path/to/key` for a key file
-it reads. The jail keeps the network on (the agent searches the web), so a
+it reads. `--env NAME` passes a variable from your environment;
+`--env NAME=value` is refused, since ai-jail would show the value to every
+local user in its command line (use `--env-from-file`). The jail keeps the network on (the agent searches the web), so a
 server on `127.0.0.1` is reachable without `--forward-port`, which ai-jail
 refuses next to it. **Check in ai-jail** runs the lock check there to see
 that the agent still answers, and `guide jail` says what is installed.

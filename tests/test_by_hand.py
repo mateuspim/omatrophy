@@ -172,14 +172,25 @@ class Unsafe(Folder):
             self.tick()
         self.assertFalse(os.path.exists(self.path + '.lock'))
 
-    def test_folder_link_is_refused(self):
+    def test_a_link_to_a_folder_others_can_write_is_refused(self):
+        os.rmdir(self.folder)
+        elsewhere = os.path.join(os.environ['XDG_DATA_HOME'], 'elsewhere')
+        os.mkdir(elsewhere)
+        os.chmod(elsewhere, 0o777)
+        os.symlink(elsewhere, self.folder)
+        with self.assertRaisesRegex(OSError, 'chmod go-w'):
+            self.tick()
+        self.assertEqual(os.listdir(elsewhere), [])
+
+    def test_our_link_to_a_private_folder_is_used(self):
+        # A dotfiles manager may link the folder; only we could have made
+        # a link we own, and the folder it reaches must still be private.
         os.rmdir(self.folder)
         elsewhere = os.path.join(os.environ['XDG_DATA_HOME'], 'elsewhere')
         os.mkdir(elsewhere, 0o700)
         os.symlink(elsewhere, self.folder)
-        with self.assertRaisesRegex(OSError, 'not a folder owned by you'):
-            self.tick()
-        self.assertEqual(os.listdir(elsewhere), [])
+        self.tick()
+        self.assertIn('by-hand.json', os.listdir(elsewhere))
 
 
 if __name__ == '__main__':

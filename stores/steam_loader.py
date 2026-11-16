@@ -10,7 +10,7 @@ never the watcher.
 """
 import json, os, re, shutil, subprocess, time
 
-from .base import CACHE, read_json, write_json
+from .base import CACHE, read_json, touch_marker, write_json
 from .steam_community import app_id
 
 PAGE = 'steam://nav/games/details/{app}'
@@ -85,9 +85,8 @@ def stop_path():
 
 def request_stop():
     """Ask a running load to stop after its current game."""
-    os.makedirs(cache_dir(), exist_ok=True)
-    with open(stop_path(), 'w'):
-        pass
+    # Not open(..., 'w'): that follows a planted link and truncates its target.
+    touch_marker(stop_path())
 
 
 def stop_requested():

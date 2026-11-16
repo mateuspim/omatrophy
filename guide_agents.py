@@ -489,6 +489,12 @@ def jail_options(words):
             raise SystemExit(f'omatrophy: guide jail-options: {word} needs a value, e.g. {word} '
                              + ('~/path/to/key' if word.endswith('map') else '<value>'))
         value = words[i + 1]
+        if word == '--env' and '=' in value:
+            # ai-jail would put the value in its own command line, which
+            # every local user can read (finding 10's class).
+            raise SystemExit(f'omatrophy: guide jail-options: --env {value.split("=", 1)[0]}=... would show the value '
+                             'to other users in the command line; use --env NAME (the value comes from your '
+                             'environment) or --env-from-file ~/path/to/file')
         out, i = out + [word, value], i + 2
     return out
 

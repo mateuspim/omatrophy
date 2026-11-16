@@ -14,7 +14,7 @@ import html, html.parser, http.client, ipaddress, json, os, re, signal, socket, 
     urllib.error, urllib.parse, urllib.request
 
 import difficulty, guide_agents, guides
-from stores.base import read_json, write_json
+from stores.base import read_json, read_plain, touch_marker, write_json
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PROMPTS = os.path.join(HERE, 'prompts', 'guide')
@@ -151,10 +151,9 @@ def alive(pid):
 def request_stop(folder=None, store='', app=''):
     """Stops one game's job, or with no game every running one."""
     targets = [(store, app)] if store else [(j.get('store'), j.get('app')) for j in running(folder)]
-    os.makedirs(jobs_dir(folder), exist_ok=True)
     for st, ap in targets:
-        with open(stop_path(folder, st, ap), 'w'):
-            pass
+        # Not open(..., 'w'): that follows a planted link and truncates its target.
+        touch_marker(stop_path(folder, st, ap))
     return len(targets)
 
 
@@ -438,11 +437,12 @@ def saved_sources(folder):
     for name in names:
         path = os.path.join(folder, name)
         ext = os.path.splitext(name)[1].lower()
-        if ext not in ('.html', '.htm', '.txt', '.md') or not os.path.isfile(path):
+        if ext not in ('.html', '.htm', '.txt', '.md'):
             continue
         try:
-            with open(path, encoding='utf-8', errors='replace') as f:
-                text = f.read(FETCH_BYTES)
+            # Plain files only: a link in an unpacked folder of saved pages
+            # must not put one of the owner's files in the agent's prompt.
+            text = read_plain(path, FETCH_BYTES).decode('utf-8', 'replace')
         except OSError:
             continue
         out[f'file:{name}'] = {'kind': 'saved', 'fetched': int(os.path.getmtime(path)),
@@ -1473,7 +1473,7 @@ def notify(summary, body):
     """A desktop notification, for a make started from the tracker: the
     owner may have closed it long ago. Quietly nothing without notify-send."""
     try:
-        subprocess.run(['notify-send', '-a', 'OmaTrophy', summary, body], timeout=4,
+        subprocess.run(['notify-send', '-a', 'OmaTrophy', '--', summary, body], timeout=4,
                        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except (OSError, subprocess.SubprocessError):
         pass
