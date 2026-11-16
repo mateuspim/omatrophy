@@ -11,7 +11,8 @@ One that isn't yours, that others can write in, or whose parent lets
 others swap it (writable by others, no sticky bit) makes the command exit
 non-zero with one `omatrophy: unsafe folder: ...` line each, saying the
 fix (`chmod go-w <folder>`, or move it aside). Nothing is changed for
-you. A link you own to a private folder is fine (since 1.0.2).
+you. A link you own to a private folder is fine (since 1.0.2) when the
+real folder's parent doesn't let others swap it either (since 1.0.3).
 
 | Command | Does |
 | --- | --- |

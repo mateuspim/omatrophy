@@ -159,6 +159,16 @@ def open_own(path, flags):
     return fd
 
 
+def own_plain(path):
+    """`path` itself (no link followed) is a plain file of ours with no
+    other name."""
+    try:
+        st = os.lstat(path)
+    except OSError:
+        return False
+    return stat.S_ISREG(st.st_mode) and st.st_uid == os.getuid() and st.st_nlink == 1
+
+
 def touch_marker(path):
     """Create or refresh an empty marker file (a stop request, a "looked,
     none" note); only its existence and time matter. True when done; a
@@ -203,6 +213,21 @@ def private_folder(folder, create=True):
         raise OSError(f'{folder} is not a folder owned by you; move it aside and try again')
     if loose(st):
         raise OSError(f'{folder} can be written by other users; run `chmod go-w {folder}` and try again')
+    if stat.S_ISLNK(link.st_mode):
+        swappable_target(folder)
+
+
+def swappable_target(link):
+    """Refuse a linked folder whose real folder sits in a parent others
+    can write in with no sticky bit: they could rename the real folder away
+    and put their own, full of links, in its place, while the link (ours)
+    still passes. Marketplace review finding 20."""
+    real = os.path.realpath(link)
+    parent = os.path.dirname(real)
+    pst = os.stat(parent)
+    if loose(pst) and not pst.st_mode & stat.S_ISVTX:
+        raise OSError(f'{link} leads to {real}, and {parent} can be written by other users, '
+                      f'who could swap it; run `chmod go-w {parent}` and try again')
 
 
 def folder_problems():
@@ -306,14 +331,17 @@ def cached(url, name):
     if not trusted_url(url):
         return ''
     path = f'{CACHE}/{name}'
-    if not os.path.exists(path):
-        try:
-            body = fetch_bytes(url)[0]
-            os.makedirs(os.path.dirname(path), exist_ok=True)
-            fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), suffix='.tmp')
-            with os.fdopen(fd, 'wb') as f:
-                f.write(body)
-            os.replace(tmp, path)
-        except Exception:
-            return url
+    if os.path.lexists(path):
+        # Only a plain file of ours with no other name: a link here could
+        # point the card (and a saved image) at any file we can read.
+        return 'file://' + path if own_plain(path) else url
+    try:
+        body = fetch_bytes(url)[0]
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), suffix='.tmp')
+        with os.fdopen(fd, 'wb') as f:
+            f.write(body)
+        os.replace(tmp, path)
+    except Exception:
+        return url
     return 'file://' + path

@@ -1,13 +1,14 @@
 """Another local user who can write in a folder OmaTrophy uses, or read
-process command lines: findings 12-19 of docs/security-review-1.0.md
-(the follow-up review after the marketplace's). Every file lives in a
+process command lines: findings 12-20 of docs/security-review-1.0.md
+(12-19 from the follow-up review after the marketplace's, 20 from the
+marketplace's re-check of 1.0.2). Every file lives in a
 temporary folder; nothing touches the owner's folders."""
 import io, os, stat, sys, tempfile, threading, unittest
 from contextlib import redirect_stdout
 from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-import guide_agents, guide_maker, guides, omatrophy  # noqa: E402
+import guide_agents, guide_maker, guides, omatrophy, share  # noqa: E402
 from stores import base, steam_loader  # noqa: E402
 
 
@@ -95,6 +96,92 @@ class Folders(Temp):
         with self.assertRaises(SystemExit) as e, redirect_stdout(io.StringIO()):
             omatrophy.main(['omatrophy.py', 'running'])
         self.assertIn(f'chmod go-w {self.config}', str(e.exception))
+
+
+class LinkedFolders(Folders):
+    # Finding 20: a linked folder passed when the link was ours, though
+    # the real folder sat where others could swap it for their own.
+    def link_cache(self, mode):
+        shared = os.path.join(self.tmp, 'shared')
+        os.mkdir(shared)
+        os.chmod(shared, mode)
+        real = os.path.join(shared, 'omatrophy')
+        os.mkdir(real, 0o700)
+        os.makedirs(os.path.join(self.home, '.cache'))
+        os.symlink(real, base.CACHE)
+        return shared
+
+    def test_a_link_into_a_swappable_folder_is_refused(self):
+        shared = self.link_cache(0o777)
+        problems = base.folder_problems()
+        self.assertEqual(len(problems), 1)
+        self.assertIn(f'chmod go-w {shared}', problems[0])
+
+    def test_a_link_into_a_sticky_or_private_folder_is_fine(self):
+        shared = self.link_cache(0o777 | stat.S_ISVTX)
+        self.assertEqual(base.folder_problems(), [])
+        os.chmod(shared, 0o755)
+        self.assertEqual(base.folder_problems(), [])
+
+
+class CachedArt(Temp):
+    # Finding 20: a link in the cache was handed to the shell as art.
+    def setUp(self):
+        super().setUp()
+        patch = mock.patch.object(base, 'CACHE', self.tmp)
+        patch.start()
+        self.addCleanup(patch.stop)
+        os.mkdir(os.path.join(self.tmp, 'art'))
+        self.url = 'https://cdn.akamai.steamstatic.com/steam/apps/1/header.jpg'
+
+    def test_a_link_gives_the_url_not_the_file_it_points_at(self):
+        os.symlink(self.victim, os.path.join(self.tmp, 'art', '1.jpg'))
+        self.assertEqual(base.cached(self.url, 'art/1.jpg'), self.url)
+
+    def test_a_second_name_for_a_file_is_not_used(self):
+        os.link(self.victim, os.path.join(self.tmp, 'art', '1.jpg'))
+        self.assertEqual(base.cached(self.url, 'art/1.jpg'), self.url)
+
+    def test_a_plain_copy_of_ours_is_used(self):
+        path = os.path.join(self.tmp, 'art', '1.jpg')
+        with open(path, 'wb') as f:
+            f.write(b'jpg')
+        self.assertEqual(base.cached(self.url, 'art/1.jpg'), 'file://' + path)
+
+
+class ShareArt(Temp):
+    # Finding 20: the saved image drew art from its path, which could be
+    # swapped between our check and the throwaway shell's load.
+    def setUp(self):
+        super().setUp()
+        self.out = os.path.join(self.tmp, 'render')
+        os.mkdir(self.out, 0o700)
+        self.art = os.path.join(self.tmp, 'hero.jpg')
+        with open(self.art, 'wb') as f:
+            f.write(b'art')
+
+    def test_art_is_copied_and_the_copy_drawn(self):
+        url = share.art_copy('file://' + self.art, self.out, 'hero')
+        self.assertEqual(url, 'file://' + os.path.join(self.out, 'hero'))
+        # Swapping the original afterwards changes nothing drawn.
+        os.unlink(self.art)
+        os.symlink(self.victim, self.art)
+        with open(url[len('file://'):], 'rb') as f:
+            self.assertEqual(f.read(), b'art')
+
+    def test_a_link_is_left_out(self):
+        link = os.path.join(self.tmp, 'link.jpg')
+        os.symlink(self.victim, link)
+        self.assertEqual(share.art_copy(link, self.out, 'hero'), '')
+        self.assertEqual(os.listdir(self.out), [])
+
+    def test_a_second_name_is_left_out(self):
+        other = os.path.join(self.tmp, 'other.jpg')
+        os.link(self.victim, other)
+        self.assertEqual(share.art_copy(other, self.out, 'hero'), '')
+
+    def test_web_art_is_left_out(self):
+        self.assertEqual(share.art_copy('https://cdn.example/h.jpg', self.out, 'hero'), '')
 
 
 class Import(Temp):
