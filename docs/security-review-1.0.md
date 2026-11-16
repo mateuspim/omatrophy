@@ -96,6 +96,16 @@ Left as is: with the folder check, the agent endpoint in `config.json` can
 only come from the owner, so it isn't restricted further; a PATH another
 user controls is out of scope (they'd own the session).
 
+### Marketplace re-check of 1.0.2
+
+The marketplace's re-check of 1.0.2 (7502903) confirmed finding 11 fixed
+and reported one more; 1.0.3 fixes it. Tests: `LinkedFolders`,
+`CachedArt` and `ShareArt` in `tests/test_local_attacker.py`.
+
+| # | Severity | Finding | Fix |
+| --- | --- | --- | --- |
+| 20 | Low (privacy) | **A linked cache folder could be swapped behind its link.** Finding 13's check accepted a folder that is a link of ours, checking the link's parent but not the parent of the real folder it leads to. Another local user who can rename in that real parent (writable, no sticky bit) could swap the checked cache folder for their own, with Steam's header art (`stores/steam.py` `store_header` through `stores.base.cached`) a link to one of the player's private images. A platinum saved with `--out` to a folder others can read would then carry that image under the card's crop and blur. | `stores.base.private_folder` refuses a linked folder whose real folder's parent others can write in without a sticky bit, with the `chmod go-w` fix (`folder_problems` runs it on every root and subfolder). `cached` uses a cached image only when it is itself a plain file of ours with one link (`lstat`), else the store's URL. `share.render` no longer hands the throwaway shell the art's path: `art_copy` opens it once (O_NOFOLLOW\|O_NONBLOCK), checks the open file is a plain file of ours with one link, and copies it into the render's private temporary folder, so a later swap changes nothing drawn. |
+
 Docs that described the old behaviour were corrected: SECURITY.md (the
 inbox forwards every card type in `cards.json`, not only unlock and
 platinum; images; fetch limits; import), the README's network line (GOG's
@@ -123,7 +133,8 @@ icons and art come from GOG's image hosts), and `docs/specs/guides.md`.
   never run; ai-jail options are an allowlist that cannot remove a fence.
   A model name is one argv element.
 - **Platinum image**: a private temporary folder, paths into the generated
-  QML go in as JSON string literals, art is local files only.
+  QML go in as JSON string literals, art is local plain files of ours,
+  copied into that folder through the open file (finding 20).
 - **`dev/` scripts**: `mktemp -d` folders removed by a trap; the sandbox
   refuses to remove any other path.
 - **Hygiene**: `tests/test_hygiene.py` passes with the private strings

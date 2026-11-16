@@ -9,7 +9,7 @@ fetches nothing: omatrophy.py caches the store's art first (once, as the
 platinum toast does), and art without a local copy is left out. Nothing
 is uploaded.
 """
-import json, os, re, shutil, subprocess, tempfile
+import json, os, re, shutil, stat, subprocess, tempfile
 
 REPO = os.path.dirname(os.path.abspath(__file__))
 # Omarchy's shell modules, linked into the throwaway config folder so
@@ -21,6 +21,8 @@ SIZE = (2400, 1260)
 # burst it sets off is still in the air 700 ms later.
 SETTLE_MS = 1000
 TIMEOUT = 30
+# The largest art we copy for a render; store heroes are well under 4 MB.
+MAX_ART = 32 * 1024 * 1024
 
 
 def slug(name):
@@ -69,6 +71,33 @@ def local_art(value):
     value = str(value or '')
     path = value[len('file://'):] if value.startswith('file://') else value
     return 'file://' + path if path.startswith('/') and os.path.isfile(path) else ''
+
+
+def art_copy(value, folder, name):
+    """A file:// URL for a private copy of the local image `value` in
+    `folder` (the render's own temporary folder), else ''. The image is
+    opened once, without following a link at its last name, checked on the
+    open file to be a plain file of ours, and copied from that same file:
+    the throwaway shell then loads the copy, so swapping the original
+    afterwards changes nothing it draws. Marketplace review finding 20."""
+    url = local_art(value)
+    if not url:
+        return ''
+    try:
+        fd = os.open(url[len('file://'):], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC)
+    except OSError:
+        return ''
+    with os.fdopen(fd, 'rb') as src:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid() or st.st_nlink != 1:
+            return ''
+        body = src.read(MAX_ART + 1)
+    if len(body) > MAX_ART:
+        return ''
+    copy = os.path.join(folder, name)
+    with open(copy, 'xb') as f:
+        f.write(body)
+    return 'file://' + copy
 
 
 def scene_qml(scene, event_file, out_file, theme, size=SIZE, settle_ms=SETTLE_MS):
@@ -127,8 +156,9 @@ def render(event, out, run=subprocess.run, shell_dir=OMARCHY_SHELL, theme=None):
         raise RuntimeError('quickshell is not installed; it draws the image (Omarchy ships it)')
     if not os.path.isdir(f'{shell_dir}/Commons'):
         raise RuntimeError(f"Omarchy's shell isn't at {shell_dir}; the image uses its theme and fonts")
-    event = dict(event, hero=local_art(event.get('hero')), header=local_art(event.get('header')))
     with tempfile.TemporaryDirectory(prefix='omatrophy-share-') as tmp:
+        event = dict(event, hero=art_copy(event.get('hero'), tmp, 'hero'),
+                     header=art_copy(event.get('header'), tmp, 'header'))
         os.symlink(f'{shell_dir}/Commons', f'{tmp}/Commons')
         os.symlink(f'{shell_dir}/Ui', f'{tmp}/Ui')
         with open(f'{tmp}/event.json', 'w') as f:

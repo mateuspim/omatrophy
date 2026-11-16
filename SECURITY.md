@@ -115,7 +115,8 @@ Steam's files, its web pages and the shell's IPC are treated as untrusted:
   its lock file without following a link or truncating.
 - Every `omatrophy.py` command first checks OmaTrophy's config, state,
   cache and data folders and every folder in them: one that isn't yours or
-  that others can write in (or whose parent lets others swap it) stops the
+  that others can write in (or whose parent, or for a linked folder the
+  real folder's parent, lets others swap it) stops the
   command with the `chmod go-w` fix, so nobody else can plant settings, a
   card for the inbox, art or a link for it to act on. The shell's own
   QML reads of those files rely on this check too: with an unsafe folder
@@ -125,7 +126,10 @@ Steam's files, its web pages and the shell's IPC are treated as untrusted:
   when they are plain files of yours. Files read for content open
   non-blocking and must be plain files, so a FIFO can't hang the watcher;
   sources and imported guides are read only when the name itself is a
-  plain file, checked on the open file, not before.
+  plain file, checked on the open file, not before. Cached art is used
+  only when it is a plain file of yours, never a link, and Save image
+  copies the art into its private temporary folder through the open file
+  and draws that copy.
 - `--env NAME=value` is refused in the jail options: ai-jail would show
   the value in its command line. `--env NAME` or `--env-from-file` keep it
   out.
