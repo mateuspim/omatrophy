@@ -175,12 +175,15 @@ def notify(summary, body, image=''):
 def place(drawn, out):
     """Move the drawn image to `out` through a temporary file beside it and
     a rename: shutil.move copies across filesystems (/tmp is often tmpfs),
-    and that copy would write through a link already at `out`."""
+    and that copy would write through a link already at `out`. The mode is
+    set on the open file, never by path: in a folder another user can write
+    in, they could swap the temporary name for a link to one of the
+    player's files before a path chmod (marketplace review, finding 11)."""
     fd, tmp = tempfile.mkstemp(dir=os.path.dirname(os.path.abspath(out)), prefix='.omatrophy-', suffix='.png')
     try:
         with os.fdopen(fd, 'wb') as dst, open(drawn, 'rb') as src:
             shutil.copyfileobj(src, dst)
-        os.chmod(tmp, 0o644)
+            os.fchmod(dst.fileno(), 0o644)
         os.replace(tmp, out)
     except BaseException:
         os.unlink(tmp)

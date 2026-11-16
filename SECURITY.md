@@ -113,6 +113,22 @@ Steam's files, its web pages and the shell's IPC are treated as untrusted:
 - `by-hand.json`'s data folder is created private (`0700`); a hand edit
   refuses a folder that isn't yours or that others can write in, and opens
   its lock file without following a link or truncating.
+- Every `omatrophy.py` command first checks OmaTrophy's config, state,
+  cache and data folders and every folder in them: one that isn't yours or
+  that others can write in (or whose parent lets others swap it) stops the
+  command with the `chmod go-w` fix, so nobody else can plant settings, a
+  card for the inbox, art or a link for it to act on. The shell's own
+  QML reads of those files rely on this check too: with an unsafe folder
+  the watcher stops and logs why. OmaTrophy never chmods your folders.
+- Files written in place (locks, the test inbox, stop and "looked, none"
+  markers) are opened without following a link or truncating, and only
+  when they are plain files of yours. Files read for content open
+  non-blocking and must be plain files, so a FIFO can't hang the watcher;
+  sources and imported guides are read only when the name itself is a
+  plain file, checked on the open file, not before.
+- `--env NAME=value` is refused in the jail options: ai-jail would show
+  the value in its command line. `--env NAME` or `--env-from-file` keep it
+  out.
 - A guide is the agent's text: its answers are parsed only as JSON between
   stage tags and checked field by field; achievement names it gives must
   be the game's own; prose is shown as Markdown whose links open only when

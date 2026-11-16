@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.0.2 - 2026-11-15
+
+Security fixes from the marketplace's re-check of 1.0.1 and a follow-up
+review of the whole tree (findings 11 to 19 in
+[docs/security-review-1.0.md](docs/security-review-1.0.md)). Needs
+`omarchy restart shell` (one notification line in `Service.qml`).
+
+- Saving a platinum image into a folder other users can write in can no
+  longer make one of your files readable to everyone; the image's mode is
+  set on the open file, not by its name.
+- Every `omatrophy.py` command checks OmaTrophy's config, state, cache
+  and data folders first. One that others can write in stops it with the
+  `chmod go-w` fix, so nobody else can plant settings (an agent endpoint),
+  fake cards, art or links for it. Your folders are never chmodded.
+- Stop (guide make, Load from Steam), the Try button's test inbox and
+  the art cache's markers never write through a link; reads can't be hung
+  by a FIFO.
+- `guide import` and saved sources read only plain files, checked on the
+  open file, so a link swapped in can't copy one of your files into a
+  guide or the agent's prompt.
+- Jail options refuse `--env NAME=value` (ai-jail would show the value in
+  its command line); use `--env NAME` or `--env-from-file`.
+- Notifications put `--` before their text.
+
 ## 1.0.1 - 2026-11-15
 
 Fixes for the Omarchy plugin marketplace review. No shell restart

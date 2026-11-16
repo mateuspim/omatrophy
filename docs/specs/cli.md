@@ -4,6 +4,15 @@
 Exits non-zero with a message when no store with achievement data is
 installed.
 
+Every command first checks OmaTrophy's folders (`~/.config/omatrophy`,
+`~/.local/state/omatrophy`, `~/.cache/omatrophy`, the `omatrophy` folders
+in `$XDG_STATE_HOME` and `$XDG_DATA_HOME`, and every folder inside them).
+One that isn't yours, that others can write in, or whose parent lets
+others swap it (writable by others, no sticky bit) makes the command exit
+non-zero with one `omatrophy: unsafe folder: ...` line each, saying the
+fix (`chmod go-w <folder>`, or move it aside). Nothing is changed for
+you. A link you own to a private folder is fine (since 1.0.2).
+
 | Command | Does |
 | --- | --- |
 | `watch [--shell <version>]` | The default. Prints [event lines](events.md) until killed. `Service.qml` runs this, passing its own version (`--shell`, since 1.0.0). Before `ready` it writes `~/.local/state/omatrophy/watcher.json` ([running](#running)). After `ready` it looks up uncached game names in the background (eight at a time, 4 s timeout each); events never wait on it. |

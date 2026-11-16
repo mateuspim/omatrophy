@@ -9,7 +9,7 @@ what was played last from userdata/<account>/config/localconfig.vdf.
 import os, re, struct, threading, time
 
 from . import steam_community, steam_loader
-from .base import CACHE, STATE, Store, boot_time, cached, config, http_json, read_json, started_at, write_json
+from .base import CACHE, STATE, Store, boot_time, cached, config, http_json, read_json, started_at, touch_marker, write_json
 from .steam_community import app_id
 
 ICON_BASE = 'https://cdn.fastly.steamstatic.com/steamcommunity/public/images/apps'
@@ -488,8 +488,7 @@ class Steam(Store):
         found = cached(url, name) if isinstance(url, str) and url.startswith('https://') else ''
         if found.startswith('file://'):
             return found
-        os.makedirs(os.path.dirname(miss), exist_ok=True)
-        touch_marker(miss)
+        touch_marker(miss)  # never through a planted link (finding 9's class)
         return ''
 
     def art(self, app):
@@ -500,16 +499,3 @@ class Steam(Store):
                 'header': self.library_art(app, 'library_header.jpg') or self.store_header(app)
                 or f'{ART_BASE}/{app}/header.jpg'}
 
-
-def touch_marker(path):
-    """Create or refresh an empty marker file without following a link or
-    truncating: a link planted at `path` must not empty the file it points
-    at (the same class as marketplace review finding 9)."""
-    try:
-        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
-    except OSError:
-        return
-    try:
-        os.utime(fd)
-    finally:
-        os.close(fd)

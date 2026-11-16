@@ -371,7 +371,7 @@ Scope {
   onGuideKeyErrorChanged: {
     if (guideKeyError === "" || guideKeyError === notifiedKeyError) return
     notifiedKeyError = guideKeyError
-    Quickshell.execDetached(["notify-send", "--app-name=OmaTrophy", "OmaTrophy", guideKeyError])
+    Quickshell.execDetached(["notify-send", "--app-name=OmaTrophy", "--", "OmaTrophy", guideKeyError])
   }
 
   // Coalesces typing in the setting, and lets a previous service's unbind
