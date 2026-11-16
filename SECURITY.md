@@ -115,8 +115,10 @@ Steam's files, its web pages and the shell's IPC are treated as untrusted:
   its lock file without following a link or truncating.
 - Every `omatrophy.py` command first checks OmaTrophy's config, state,
   cache and data folders and every folder in them: one that isn't yours or
-  that others can write in (or whose parent, or for a linked folder the
-  real folder's parent, lets others swap it) stops the
+  that others can write in, or that sits where another user could swap
+  it (any folder above it, as written or through a link, that isn't
+  yours or root's, or that others can write in without the sticky bit),
+  stops the
   command with the `chmod go-w` fix, so nobody else can plant settings, a
   card for the inbox, art or a link for it to act on. The shell's own
   QML reads of those files rely on this check too: with an unsafe folder

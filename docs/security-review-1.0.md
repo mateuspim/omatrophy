@@ -106,6 +106,16 @@ and reported one more; 1.0.3 fixes it. Tests: `LinkedFolders`,
 | --- | --- | --- | --- |
 | 20 | Low (privacy) | **A linked cache folder could be swapped behind its link.** Finding 13's check accepted a folder that is a link of ours, checking the link's parent but not the parent of the real folder it leads to. Another local user who can rename in that real parent (writable, no sticky bit) could swap the checked cache folder for their own, with Steam's header art (`stores/steam.py` `store_header` through `stores.base.cached`) a link to one of the player's private images. A platinum saved with `--out` to a folder others can read would then carry that image under the card's crop and blur. | `stores.base.private_folder` refuses a linked folder whose real folder's parent others can write in without a sticky bit, with the `chmod go-w` fix (`folder_problems` runs it on every root and subfolder). `cached` uses a cached image only when it is itself a plain file of ours with one link (`lstat`), else the store's URL. `share.render` no longer hands the throwaway shell the art's path: `art_copy` opens it once (O_NOFOLLOW\|O_NONBLOCK), checks the open file is a plain file of ours with one link, and copies it into the render's private temporary folder, so a later swap changes nothing drawn. |
 
+### Marketplace re-check of 1.0.3
+
+The re-check of 1.0.3 (d633cf3) confirmed the literal attack in finding
+20 closed and found the check too narrow; 1.0.4 fixes it. Tests:
+`LinkedFolders` in `tests/test_local_attacker.py`.
+
+| # | Severity | Finding | Fix |
+| --- | --- | --- | --- |
+| 21 | Low (privacy) | **Only the nearest parent's write bits were checked.** Finding 20's check refused a real folder whose parent others could write in, but whoever *owns* a folder can rename in it whatever its mode. Another user owning the (`0755`) parent of a linked cache's real folder could still swap it after the check, and move one of the player's own images (a plain file of theirs with one link, so `cached` and `art_copy` accept it) into the replacement, into a saved platinum. A loose folder further up the path was missed the same way. | `stores.base.swap_risk` walks every folder above each root, as written and as resolved through links, up to `/`: each must belong to the player or root, and one others can write in needs the sticky bit. `folder_problems` runs it on every root and `private_folder` on every linked folder, replacing both parent-only checks; the message names the folder and the fix. |
+
 Docs that described the old behaviour were corrected: SECURITY.md (the
 inbox forwards every card type in `cards.json`, not only unlock and
 platinum; images; fetch limits; import), the README's network line (GOG's

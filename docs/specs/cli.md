@@ -7,12 +7,14 @@ installed.
 Every command first checks OmaTrophy's folders (`~/.config/omatrophy`,
 `~/.local/state/omatrophy`, `~/.cache/omatrophy`, the `omatrophy` folders
 in `$XDG_STATE_HOME` and `$XDG_DATA_HOME`, and every folder inside them).
-One that isn't yours, that others can write in, or whose parent lets
-others swap it (writable by others, no sticky bit) makes the command exit
-non-zero with one `omatrophy: unsafe folder: ...` line each, saying the
-fix (`chmod go-w <folder>`, or move it aside). Nothing is changed for
-you. A link you own to a private folder is fine (since 1.0.2) when the
-real folder's parent doesn't let others swap it either (since 1.0.3).
+One that isn't yours, that others can write in, or that another user
+could swap (any folder above it, as written or through a link, that
+isn't yours or root's, or that others can write in without the sticky
+bit; since 1.0.4) makes the command exit non-zero with one
+`omatrophy: unsafe folder: ...` line each, saying the fix
+(`chmod go-w <folder>`, or move it aside). Nothing is changed for you. A
+link you own to a private folder is fine (since 1.0.2) when the same
+holds above the real folder.
 
 | Command | Does |
 | --- | --- |

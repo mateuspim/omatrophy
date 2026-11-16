@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.4 - 2026-11-16
+
+Security fix from the marketplace's re-check of 1.0.3 (finding 21 in
+[docs/security-review-1.0.md](docs/security-review-1.0.md)). No shell
+restart needed.
+
+- OmaTrophy's folders are refused when any folder above them, as written
+  or through a link, belongs to another user (who could rename them away
+  whatever its mode) or lets others write without the sticky bit. 1.0.3
+  checked only the nearest parent, and only for others' write bits.
+
 ## 1.0.3 - 2026-11-16
 
 Security fix from the marketplace's re-check of 1.0.2 (finding 20 in
