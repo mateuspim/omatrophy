@@ -116,6 +116,16 @@ The re-check of 1.0.3 (d633cf3) confirmed the literal attack in finding
 | --- | --- | --- | --- |
 | 21 | Low (privacy) | **Only the nearest parent's write bits were checked.** Finding 20's check refused a real folder whose parent others could write in, but whoever *owns* a folder can rename in it whatever its mode. Another user owning the (`0755`) parent of a linked cache's real folder could still swap it after the check, and move one of the player's own images (a plain file of theirs with one link, so `cached` and `art_copy` accept it) into the replacement, into a saved platinum. A loose folder further up the path was missed the same way. | `stores.base.swap_risk` walks every folder above each root, as written and as resolved through links, up to `/`: each must belong to the player or root, and one others can write in needs the sticky bit. `folder_problems` runs it on every root and `private_folder` on every linked folder, replacing both parent-only checks; the message names the folder and the fix. |
 
+### Marketplace re-check of 1.0.4
+
+The re-check of 1.0.4 (c8cbf59) confirmed the foreign-owned parent case
+fixed and found one more way round it; 1.0.5 fixes the whole class.
+Tests: `LinkedFolders` in `tests/test_local_attacker.py`.
+
+| # | Severity | Finding | Fix |
+| --- | --- | --- | --- |
+| 22 | Low (privacy) | **`realpath` hid a link's folder.** `swap_risk` checked the folders above the path as written and above its `realpath`. A cache link leading to another link of the player's, whose folder belongs to another user, had that middle folder collapsed away by `realpath`; that user could replace the middle link after the check, with finding 21's image move after it. | `stores.base.consulted_folders` resolves the path itself, name by name and link by link (relative and absolute targets, `..`, at most 40 links), and lists every folder whose entries it reads. That is exactly where an entry could be renamed to redirect the path, so `swap_risk` checking each of them (ours or root's; sticky if others can write) leaves no hop out. A link loop is refused. |
+
 Docs that described the old behaviour were corrected: SECURITY.md (the
 inbox forwards every card type in `cards.json`, not only unlock and
 platinum; images; fetch limits; import), the README's network line (GOG's

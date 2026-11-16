@@ -219,30 +219,61 @@ def private_folder(folder, create=True):
             raise OSError(risk)
 
 
-def ancestors(path):
-    """Every folder above `path`, nearest first, up to /."""
-    found = []
-    here = os.path.dirname(path)
-    while True:
-        found.append(here)
-        up = os.path.dirname(here)
-        if up == here:
-            return found
-        here = up
+# Linux's own limit on links followed while resolving one path.
+MAX_HOPS = 40
+
+
+def consulted_folders(path):
+    """Every folder whose entries are read while resolving `path`, link by
+    link, as the kernel does: the folders above it and, for each link on
+    the way (a link to a link too), the folders above where it leads.
+    Whoever can rename in any of them can redirect `path`; realpath would
+    collapse an intermediate link and hide its folder (finding 22). Stops
+    at the first missing name: the rest doesn't exist yet and is made by
+    us under a folder already listed."""
+    found = ['/']
+    pending = [p for p in os.path.abspath(path).split('/') if p]
+    here = '/'
+    hops = 0
+    while pending:
+        name = pending.pop(0)
+        if name == '.':
+            continue
+        if name == '..':
+            here = os.path.dirname(here)
+            continue
+        if here not in found:
+            found.append(here)
+        step = os.path.join(here, name)
+        try:
+            st = os.lstat(step)
+        except OSError:
+            break
+        if not stat.S_ISLNK(st.st_mode):
+            here = step
+            continue
+        hops += 1
+        if hops > MAX_HOPS:
+            raise OSError(f'{path} goes through too many links')
+        target = os.readlink(step)
+        if target.startswith('/'):
+            here = '/'
+        pending[:0] = [p for p in target.split('/') if p]
+    return found
 
 
 def swap_risk(path):
-    """Why another user could swap `path` (or the real folder it leads
-    to) for a folder of theirs, as a message; '' when nobody can. Every
-    folder above it, as written and as resolved, must belong to us or root
+    """Why another user could swap `path` (or what it leads to) for a
+    folder of theirs, as a message; '' when nobody can. Every folder read
+    while resolving it (consulted_folders) must belong to us or root
     (whoever owns a folder can rename anything in it, whatever its mode),
     and one others can write in needs the sticky bit. Marketplace review
-    findings 20 and 21: checking only the nearest parent, and only for
-    others' write bits, left a real folder under someone else's folder."""
-    real = os.path.realpath(path)
-    chain = ancestors(os.path.join(os.path.realpath(os.path.dirname(path)), os.path.basename(path)))
-    if real != os.path.abspath(path):
-        chain += [a for a in ancestors(real) if a not in chain]
+    findings 20 to 22: checking only the nearest parent, only others'
+    write bits, or only the realpath left a folder out."""
+    try:
+        chain = consulted_folders(path)
+    except OSError as e:
+        return f'{e}; point it at a folder of yours directly and try again'
     for folder in chain:
         try:
             st = os.stat(folder)

@@ -1,7 +1,7 @@
 """Another local user who can write in a folder OmaTrophy uses, or read
-process command lines: findings 12-21 of docs/security-review-1.0.md
-(12-19 from the follow-up review after the marketplace's, 20 and 21 from
-the marketplace's re-checks of 1.0.2 and 1.0.3). Every file lives in a
+process command lines: findings 12-22 of docs/security-review-1.0.md
+(12-19 from the follow-up review after the marketplace's, 20 to 22 from
+the marketplace's re-checks of 1.0.2 to 1.0.4). Every file lives in a
 temporary folder; nothing touches the owner's folders."""
 import io, os, stat, sys, tempfile, threading, unittest
 from contextlib import redirect_stdout
@@ -153,6 +153,36 @@ class LinkedFolders(Folders):
         problems = base.folder_problems()
         self.assertTrue(problems)
         self.assertIn(f'chmod go-w {self.tmp}', problems[0])
+
+    # Finding 22: realpath collapsed a link to a link, so the folder of
+    # the middle link (another user's) was never checked.
+    def test_a_link_through_a_link_in_another_users_folder_is_refused(self):
+        hop = os.path.join(self.tmp, 'hop')
+        os.mkdir(hop, 0o755)
+        real = os.path.join(self.tmp, 'real')
+        os.mkdir(real, 0o700)
+        os.symlink(real, os.path.join(hop, 'middle'))
+        os.makedirs(os.path.join(self.home, '.cache'))
+        os.symlink(os.path.join(hop, 'middle'), base.CACHE)
+        self.assertEqual(base.folder_problems(), [])
+        self.owned_by_another(hop)
+        problems = base.folder_problems()
+        self.assertEqual(len(problems), 1)
+        self.assertIn(f'{hop} belongs to another user', problems[0])
+
+    def test_every_hop_is_listed_for_relative_links(self):
+        os.makedirs(os.path.join(self.tmp, 'a', 'b'))
+        os.makedirs(os.path.join(self.tmp, 'c'))
+        os.symlink('../../c', os.path.join(self.tmp, 'a', 'b', 'up'))
+        os.symlink('b/up', os.path.join(self.tmp, 'a', 'link'))
+        found = base.consulted_folders(os.path.join(self.tmp, 'a', 'link', 'x'))
+        for folder in ('a', 'a/b', 'c'):
+            self.assertIn(os.path.join(self.tmp, folder), found)
+
+    def test_a_link_loop_is_refused(self):
+        loop = os.path.join(self.tmp, 'loop')
+        os.symlink(loop, loop)
+        self.assertIn('too many links', base.swap_risk(loop))
 
     def test_folders_of_root_are_fine(self):
         # The temporary folder sits in /tmp (root's, sticky) and / (root's).
