@@ -172,6 +172,29 @@ class Render(unittest.TestCase):
         self.assertFalse(os.path.islink(out))
         self.assertEqual(os.stat(out).st_mode & 0o777, 0o644)
 
+    def test_a_swapped_temporary_file_never_gets_the_players_file_chmodded(self):
+        # Marketplace review finding 11: another user who can write in the
+        # output folder swaps the temporary name for a link to a private
+        # file mid-copy; a chmod by path would make that file 0644.
+        private = os.path.join(self.tmp.name, 'private')
+        with open(private, 'w') as f:
+            f.write('secret')
+        os.chmod(private, 0o600)
+        out = os.path.join(self.tmp.name, 'shared', 'out.png')
+        os.makedirs(os.path.dirname(out))
+        copy = share.shutil.copyfileobj
+
+        def copy_then_swap(src, dst):
+            copy(src, dst)
+            folder = os.path.dirname(out)
+            tmp = next(os.path.join(folder, n) for n in os.listdir(folder) if n.startswith('.omatrophy-'))
+            os.unlink(tmp)
+            os.symlink(private, tmp)
+
+        with mock.patch.object(share.shutil, 'copyfileobj', copy_then_swap):
+            share.render({'game': 'x'}, out, run=self.fake_quickshell(), shell_dir=self.shell)
+        self.assertEqual(os.stat(private).st_mode & 0o777, 0o600)
+
     def test_another_theme_gets_a_home_of_its_own(self):
         out = os.path.join(self.tmp.name, 'out.png')
         share.render({'game': 'x'}, out, run=self.fake_quickshell(), shell_dir=self.shell, theme='/themes/white')

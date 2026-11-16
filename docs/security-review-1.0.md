@@ -63,12 +63,14 @@ Each fix has a regression test; `python3 -m unittest discover -s tests`.
 
 The Omarchy plugin marketplace's maintainer review of 1.0.0 (commit
 5a44ef9) reported two more; 1.0.1 fixes both, and the same pattern
-wherever else it appeared.
+wherever else it appeared. Its re-check of 1.0.1 confirmed both fixed and
+found one more in that fix (11), fixed in 1.0.2.
 
 | # | Severity | Finding | Fix |
 | --- | --- | --- | --- |
 | 9 | Medium | **A hand edit could truncate a file through a planted link.** `by_hand.update` opened `by-hand.json.lock` with `open(..., 'w')`, which follows a symlink and truncates. Another local user able to write in the data folder (a shared or loosely permissioned `XDG_DATA_HOME`) could point the lock at a file only the player can write and have the next tick empty it. The `.bad` copy of a broken file had the same flaw. | The lock is opened `O_RDWR\|O_CREAT\|O_NOFOLLOW\|O_CLOEXEC`, `0600`, no truncation, and refused unless `fstat` says a plain file of ours with one link. The data folder is created `0700`; a folder that is a link, not ours, or group/other-writable is refused with a `chmod go-w` hint (never changed on load). `.bad` goes through a temporary file and a rename. The same follow-a-link write was fixed in Steam's header miss marker (cache), `guide_bench.keep` and the saved platinum image. Tests: `tests/test_by_hand.py` `Unsafe`, `test_hand_says_what_to_fix_when_the_folder_is_unsafe`, `test_a_link_at_the_miss_marker_is_not_followed`, `test_a_link_at_out_is_replaced_not_written_through`. |
 | 10 | Low (privacy) | **Notes passed in the command line.** The tracker ran `omatrophy.py hand note <store> <app> <api> <text>`, so a note sat in `/proc/<pid>/cmdline` while the command ran, readable by other local users. | The tracker runs `hand note ... --stdin` and writes the note to the process's stdin as one JSON-string line (Quickshell's `Process` can't close stdin, so one line, not EOF). The argument form stays for terminal use. Tests: `test_notes_go_on_stdin_never_in_the_command`, `test_hand_note_reads_one_json_line_from_stdin`, `test_stdin_note_refuses_what_is_not_one_json_string`. |
+| 11 | Medium | **The saved image's mode was set by path.** Found by the same review at 1.0.1 (b3211b6), in 1.0.1's own fix: `share.place` closed its temporary image, then ran `os.chmod(tmp, 0o644)`. Saving into a folder another local user can write in (no sticky bit), they could swap the temporary name for a link to one of the player's files between the close and the chmod, making it world-readable. | The mode is set with `fchmod` on the open file before it closes; nothing is chmodded by path anywhere. Test: `test_a_swapped_temporary_file_never_gets_the_players_file_chmodded`. |
 
 Docs that described the old behaviour were corrected: SECURITY.md (the
 inbox forwards every card type in `cards.json`, not only unlock and

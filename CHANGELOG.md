@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- **Security** (finding 11 in
+  [docs/security-review-1.0.md](docs/security-review-1.0.md)): saving a
+  platinum image into a folder other users can write in can no longer be
+  turned into making one of your files readable to everyone; the image's
+  mode is set on the open file, not by its name.
+
 ## 1.0.1 - 2026-11-15
 
 Fixes for the Omarchy plugin marketplace review. No shell restart
