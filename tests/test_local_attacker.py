@@ -1,7 +1,7 @@
 """Another local user who can write in a folder OmaTrophy uses, or read
-process command lines: findings 12-20 of docs/security-review-1.0.md
-(12-19 from the follow-up review after the marketplace's, 20 from the
-marketplace's re-check of 1.0.2). Every file lives in a
+process command lines: findings 12-21 of docs/security-review-1.0.md
+(12-19 from the follow-up review after the marketplace's, 20 and 21 from
+the marketplace's re-checks of 1.0.2 and 1.0.3). Every file lives in a
 temporary folder; nothing touches the owner's folders."""
 import io, os, stat, sys, tempfile, threading, unittest
 from contextlib import redirect_stdout
@@ -121,6 +121,42 @@ class LinkedFolders(Folders):
         shared = self.link_cache(0o777 | stat.S_ISVTX)
         self.assertEqual(base.folder_problems(), [])
         os.chmod(shared, 0o755)
+        self.assertEqual(base.folder_problems(), [])
+
+
+    # Finding 21: a real folder under another user's 0755 folder passed;
+    # whoever owns a folder can rename in it whatever its mode.
+    def owned_by_another(self, folder):
+        real_stat = os.stat
+
+        def fake(path, *a, **kw):
+            st = real_stat(path, *a, **kw)
+            if os.path.abspath(path) == folder:
+                return os.stat_result((st.st_mode, st.st_ino, st.st_dev, st.st_nlink,
+                                       os.getuid() + 1, st.st_gid, st.st_size,
+                                       st.st_atime, st.st_mtime, st.st_ctime))
+            return st
+        patch = mock.patch.object(base.os, 'stat', fake)
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def test_a_link_into_another_users_folder_is_refused_whatever_its_mode(self):
+        shared = self.link_cache(0o755)
+        self.owned_by_another(shared)
+        problems = base.folder_problems()
+        self.assertEqual(len(problems), 1)
+        self.assertIn(f'{shared} belongs to another user', problems[0])
+
+    def test_a_loose_folder_further_up_is_refused(self):
+        os.chmod(self.tmp, 0o777)
+        self.addCleanup(os.chmod, self.tmp, 0o700)
+        problems = base.folder_problems()
+        self.assertTrue(problems)
+        self.assertIn(f'chmod go-w {self.tmp}', problems[0])
+
+    def test_folders_of_root_are_fine(self):
+        # The temporary folder sits in /tmp (root's, sticky) and / (root's).
+        self.link_cache(0o755)
         self.assertEqual(base.folder_problems(), [])
 
 

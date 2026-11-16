@@ -214,38 +214,60 @@ def private_folder(folder, create=True):
     if loose(st):
         raise OSError(f'{folder} can be written by other users; run `chmod go-w {folder}` and try again')
     if stat.S_ISLNK(link.st_mode):
-        swappable_target(folder)
+        risk = swap_risk(folder)
+        if risk:
+            raise OSError(risk)
 
 
-def swappable_target(link):
-    """Refuse a linked folder whose real folder sits in a parent others
-    can write in with no sticky bit: they could rename the real folder away
-    and put their own, full of links, in its place, while the link (ours)
-    still passes. Marketplace review finding 20."""
-    real = os.path.realpath(link)
-    parent = os.path.dirname(real)
-    pst = os.stat(parent)
-    if loose(pst) and not pst.st_mode & stat.S_ISVTX:
-        raise OSError(f'{link} leads to {real}, and {parent} can be written by other users, '
-                      f'who could swap it; run `chmod go-w {parent}` and try again')
+def ancestors(path):
+    """Every folder above `path`, nearest first, up to /."""
+    found = []
+    here = os.path.dirname(path)
+    while True:
+        found.append(here)
+        up = os.path.dirname(here)
+        if up == here:
+            return found
+        here = up
+
+
+def swap_risk(path):
+    """Why another user could swap `path` (or the real folder it leads
+    to) for a folder of theirs, as a message; '' when nobody can. Every
+    folder above it, as written and as resolved, must belong to us or root
+    (whoever owns a folder can rename anything in it, whatever its mode),
+    and one others can write in needs the sticky bit. Marketplace review
+    findings 20 and 21: checking only the nearest parent, and only for
+    others' write bits, left a real folder under someone else's folder."""
+    real = os.path.realpath(path)
+    chain = ancestors(os.path.join(os.path.realpath(os.path.dirname(path)), os.path.basename(path)))
+    if real != os.path.abspath(path):
+        chain += [a for a in ancestors(real) if a not in chain]
+    for folder in chain:
+        try:
+            st = os.stat(folder)
+        except OSError:
+            continue  # not made yet: makedirs creates it as ours
+        if st.st_uid not in (os.getuid(), 0):
+            return (f'{folder} belongs to another user, who could swap {path}; '
+                    f'keep OmaTrophy\'s folders under folders of yours and try again')
+        if loose(st) and not st.st_mode & stat.S_ISVTX:
+            return (f'{folder} can be written by other users, who could swap {path}; '
+                    f'run `chmod go-w {folder}` and try again')
+    return ''
 
 
 def folder_problems():
     """What is unsafe about OmaTrophy's folders, as messages; [] when all
-    is well. Each existing root and every folder in it must pass
-    private_folder; a root's parent must not let others create or swap it
-    (writable by others with no sticky bit). Read only: changes nothing."""
+    is well. No root may sit where another user could swap it (swap_risk),
+    and each existing root and every folder in it must pass
+    private_folder. Read only: changes nothing."""
     problems = []
     for root in roots():
-        parent = os.path.dirname(root)
-        try:
-            pst = os.stat(parent)
-            if loose(pst) and not pst.st_mode & stat.S_ISVTX:
-                problems.append(f'{parent} can be written by other users, who could swap {root}; '
-                                f'run `chmod go-w {parent}` and try again')
-                continue
-        except OSError:
-            pass
+        risk = swap_risk(root)
+        if risk:
+            problems.append(risk)
+            continue
         if not os.path.lexists(root):
             continue
         try:
