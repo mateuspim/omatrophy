@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.0.2 - 2026-11-15
 
 Security fixes from the marketplace's re-check of 1.0.1 and a follow-up
 review of the whole tree (findings 11 to 19 in
