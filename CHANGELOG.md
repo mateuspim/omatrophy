@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.5 - 2026-11-16
+
+Security fix from the marketplace's re-check of 1.0.4 (finding 22 in
+[docs/security-review-1.0.md](docs/security-review-1.0.md)). No shell
+restart needed.
+
+- The folder check follows links one hop at a time and checks every
+  folder it reads on the way, so a link to a link can't hide a folder
+  another user controls. 1.0.4 used the resolved path, which skipped the
+  middle link's folder.
+
 ## 1.0.4 - 2026-11-16
 
 Security fix from the marketplace's re-check of 1.0.3 (finding 21 in
