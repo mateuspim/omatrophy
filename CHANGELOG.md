@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.0.3 - 2026-11-16
+
+Security fix from the marketplace's re-check of 1.0.2 (finding 20 in
+[docs/security-review-1.0.md](docs/security-review-1.0.md)). No shell
+restart needed.
+
+- A cache, state, config or data folder that is a link is refused when the
+  real folder it leads to sits where other users could swap it (the
+  `chmod go-w` fix is named). Before, only the link's own side was
+  checked.
+- Cached store art is used only when it is a plain file of yours, never a
+  link, so another user can't point a card or a saved platinum image at
+  one of your pictures.
+- Saving a platinum image copies its art into the render's private folder
+  first, through the open file, and draws the copy.
+
 ## 1.0.2 - 2026-11-15
 
 Security fixes from the marketplace's re-check of 1.0.1 and a follow-up
