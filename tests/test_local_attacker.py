@@ -157,7 +157,10 @@ class Inbox(Temp):
 
     def test_test_refuses_a_link(self):
         os.symlink(self.victim, self.inbox)
-        with self.assertRaises(SystemExit) as e, redirect_stdout(io.StringIO()):
+        # No launcher here (nor in CI): a made-up game, so the inbox is reached.
+        with mock.patch.object(omatrophy, 'sample_game', return_value=()), \
+                mock.patch.object(omatrophy, 'sample_event', return_value={'type': 'unlock', 'game': 'G'}), \
+                self.assertRaises(SystemExit) as e, redirect_stdout(io.StringIO()):
             omatrophy.test('gold')
         self.assertIn('is a link', str(e.exception))
         self.assert_victim_whole()
