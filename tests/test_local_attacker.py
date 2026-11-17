@@ -1,7 +1,7 @@
 """Another local user who can write in a folder OmaTrophy uses, or read
-process command lines: findings 12-22 of docs/security-review-1.0.md
-(12-19 from the follow-up review after the marketplace's, 20 to 22 from
-the marketplace's re-checks of 1.0.2 to 1.0.4). Every file lives in a
+process command lines: findings 12-23 of docs/security-review-1.0.md
+(12-19 from the follow-up review after the marketplace's, 20 to 23 from
+the marketplace's re-checks of 1.0.2 to 1.0.5). Every file lives in a
 temporary folder; nothing touches the owner's folders."""
 import io, os, stat, sys, tempfile, threading, unittest
 from contextlib import redirect_stdout
@@ -178,6 +178,45 @@ class LinkedFolders(Folders):
         found = base.consulted_folders(os.path.join(self.tmp, 'a', 'link', 'x'))
         for folder in ('a', 'a/b', 'c'):
             self.assertIn(os.path.join(self.tmp, folder), found)
+
+    # Finding 23: abspath dropped `link/..` as text; the kernel follows
+    # the link first, so `..` leaves the folder the link leads into.
+    def test_dot_dot_after_a_link_leaves_where_the_link_leads(self):
+        os.makedirs(os.path.join(self.tmp, 'a'))
+        os.makedirs(os.path.join(self.tmp, 'x', 'y'))
+        os.symlink(os.path.join(self.tmp, 'x', 'y'), os.path.join(self.tmp, 'a', 'link'))
+        found = base.consulted_folders(os.path.join(self.tmp, 'a', 'link', '..', 'z'))
+        self.assertIn(os.path.join(self.tmp, 'x'), found)
+
+    def test_dot_dot_after_a_link_into_another_users_folder_is_refused(self):
+        os.makedirs(os.path.join(self.tmp, 'a'))
+        other = os.path.join(self.tmp, 'other')
+        os.makedirs(os.path.join(other, 'y'))
+        os.symlink(os.path.join(other, 'y'), os.path.join(self.tmp, 'a', 'link'))
+        self.owned_by_another(other)
+        self.assertIn(f'{other} belongs to another user',
+                      base.swap_risk(os.path.join(self.tmp, 'a', 'link', '..', 'omatrophy')))
+
+    def test_an_xdg_folder_with_dot_dot_or_not_absolute_is_refused(self):
+        for value in (os.path.join(self.tmp, 'a', '..', 'data'), os.path.join(self.tmp, '.', 'data'), 'data'):
+            with mock.patch.dict(os.environ, {'XDG_DATA_HOME': value}):
+                problems = base.folder_problems()
+                self.assertEqual(len(problems), 1, value)
+                with self.assertRaises(OSError):
+                    base.private_folder(os.path.join(value, 'omatrophy'))
+
+    def test_a_temporary_file_lands_where_the_rename_goes(self):
+        os.makedirs(os.path.join(self.tmp, 'a'))
+        os.makedirs(os.path.join(self.tmp, 'x', 'y'))
+        os.symlink(os.path.join(self.tmp, 'x', 'y'), os.path.join(self.tmp, 'a', 'link'))
+        path = os.path.join(self.tmp, 'a', 'link', '..', 'f.json')
+        fd, tmp = base.temp_beside(path)
+        os.close(fd)
+        self.assertEqual(os.stat(tmp).st_mode & 0o777, 0o600)
+        os.replace(tmp, path)
+        self.assertTrue(os.path.isfile(os.path.join(self.tmp, 'x', 'f.json')))
+        self.assertEqual(os.listdir(os.path.join(self.tmp, 'a')), ['link'])
+        self.assertEqual(sorted(os.listdir(os.path.join(self.tmp, 'x'))), ['f.json', 'y'])
 
     def test_a_link_loop_is_refused(self):
         loop = os.path.join(self.tmp, 'loop')

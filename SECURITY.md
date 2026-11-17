@@ -106,7 +106,9 @@ Steam's files, its web pages and the shell's IPC are treated as untrusted:
   Steam's hosts.
 - Files are written to a temporary file in the same folder, then renamed
   over the old one, so a crash never leaves half a file and a symlink in
-  OmaTrophy's folders is replaced, not followed.
+  OmaTrophy's folders is replaced, not followed. The temporary file is
+  named in the folder exactly as the final path names it (never
+  normalised as text), so both land in the same folder.
 - Commands run as argument lists, never through a shell. A note you
   write in the tracker goes to `omatrophy.py hand note` on stdin, never as
   an argument: other local users can read a process's command line.
@@ -117,7 +119,8 @@ Steam's files, its web pages and the shell's IPC are treated as untrusted:
   cache and data folders and every folder in them: one that isn't yours or
   that others can write in, or that sits where another user could swap
   it (any folder read on the way to it, through every link, that isn't
-  yours or root's, or that others can write in without the sticky bit),
+  yours or root's, or that others can write in without the sticky bit;
+  or a folder path that isn't absolute or has `.` or `..` in it),
   stops the
   command with the `chmod go-w` fix, so nobody else can plant settings, a
   card for the inbox, art or a link for it to act on. The shell's own

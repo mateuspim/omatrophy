@@ -126,6 +126,17 @@ Tests: `LinkedFolders` in `tests/test_local_attacker.py`.
 | --- | --- | --- | --- |
 | 22 | Low (privacy) | **`realpath` hid a link's folder.** `swap_risk` checked the folders above the path as written and above its `realpath`. A cache link leading to another link of the player's, whose folder belongs to another user, had that middle folder collapsed away by `realpath`; that user could replace the middle link after the check, with finding 21's image move after it. | `stores.base.consulted_folders` resolves the path itself, name by name and link by link (relative and absolute targets, `..`, at most 40 links), and lists every folder whose entries it reads. That is exactly where an entry could be renamed to redirect the path, so `swap_risk` checking each of them (ours or root's; sticky if others can write) leaves no hop out. A link loop is refused. |
 
+### Marketplace re-check of 1.0.5
+
+The re-check of 1.0.5 (d4fe042) confirmed the intermediate-link case
+fixed and found a different gap between what was checked and what the
+kernel opens; 1.0.6 closes it wherever a path is handled. Tests:
+`LinkedFolders` in `tests/test_local_attacker.py`.
+
+| # | Severity | Finding | Fix |
+| --- | --- | --- | --- |
+| 23 | Medium | **`abspath` read `link/..` as text.** `consulted_folders` started from `os.path.abspath`, which drops `link/..` without looking; the kernel follows `link` first, and `..` then leaves the folder the link leads into. With an `XDG_DATA_HOME` holding that sequence, the folder check looked at one place and the hand edit wrote to another, whose parent another user could control. `tempfile.mkstemp` also abspaths its folder, so a temporary file could be made in one folder and renamed into a different one. | Three layers. `consulted_folders` never normalises: a relative path is joined to `getcwd()` (already link-free) and `..` is applied to the folder resolution has reached, as the kernel does. `stores.base.odd_root` refuses an OmaTrophy folder that isn't absolute or has a `.` or `..` in it, in `folder_problems` (before every command) and in `private_folder`. Every write-then-rename (`write_json`, the cache, by-hand's `.bad`, guide import, guide text and `.prev`, Save image) makes its temporary file with `stores.base.temp_beside`, which names the folder exactly as the final path does (`O_CREAT\|O_EXCL\|O_NOFOLLOW`, `0600`), so both always resolve to the same folder. `share --out` is made absolute without `abspath`. No `abspath` or `mkstemp` is left on a path OmaTrophy writes. |
+
 Docs that described the old behaviour were corrected: SECURITY.md (the
 inbox forwards every card type in `cards.json`, not only unlock and
 platinum; images; fetch limits; import), the README's network line (GOG's

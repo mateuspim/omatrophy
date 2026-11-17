@@ -10,11 +10,11 @@ Only the owner starts a job (`guide make` or the tracker's button), never
 the watcher. Nothing is written until the last stage passes, so a stopped
 or failed job leaves the old guide as it was.
 """
-import html, html.parser, http.client, ipaddress, json, os, re, signal, socket, subprocess, sys, tempfile, time, \
+import html, html.parser, http.client, ipaddress, json, os, re, signal, socket, subprocess, sys, time, \
     urllib.error, urllib.parse, urllib.request
 
 import difficulty, guide_agents, guides
-from stores.base import read_json, read_plain, touch_marker, write_json
+from stores.base import read_json, read_plain, temp_beside, touch_marker, write_json
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PROMPTS = os.path.join(HERE, 'prompts', 'guide')
@@ -1092,8 +1092,7 @@ def markdown(store, app, game, achievements, sections, hand_ticks):
 
 
 def write_text(path, text):
-    folder = os.path.dirname(path)
-    fd, tmp = tempfile.mkstemp(dir=folder, prefix='.' + os.path.basename(path), suffix='.tmp')
+    fd, tmp = temp_beside(path)
     try:
         with os.fdopen(fd, 'w', encoding='utf-8') as f:
             f.write(text)
@@ -1109,7 +1108,7 @@ def keep_previous(path):
     if os.path.isfile(path):
         with open(path, 'rb') as f:
             body = f.read()
-        fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), suffix='.tmp')
+        fd, tmp = temp_beside(path + '.prev')
         with os.fdopen(fd, 'wb') as f:
             f.write(body)
         os.replace(tmp, path + '.prev')

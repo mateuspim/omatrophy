@@ -7,9 +7,9 @@ runs that command and never writes a file itself. A tick is never an
 unlock: it counts as done for the guide (`guides.guide_answer`'s `ticks`)
 and nowhere else.
 """
-import fcntl, json, os, shutil, tempfile, time
+import fcntl, json, os, shutil, time
 
-from stores.base import open_own, open_regular, private_folder, write_json
+from stores.base import open_own, open_regular, private_folder, temp_beside, write_json
 
 FORMAT = 1
 NOTE_MAX = 1000
@@ -186,8 +186,7 @@ def open_lock(lock_path):
 def keep_bad(path):
     """Copy a broken file to `<file>.bad` through a temporary file and a
     rename, so a link already at `.bad` is replaced, not written through."""
-    folder = os.path.dirname(path)
-    fd, tmp = tempfile.mkstemp(dir=folder, prefix='.' + os.path.basename(path), suffix='.tmp')
+    fd, tmp = temp_beside(path + '.bad')
     try:
         with os.fdopen(fd, 'wb') as out, open(path, 'rb') as f:
             shutil.copyfileobj(f, out)

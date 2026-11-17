@@ -5,11 +5,11 @@ Guides are the owner's data in ~/.local/share/omatrophy/guides/. This module
 reads them and copies them in from another folder (`guide import`); it never
 writes into the source folder, and never changes a guide it already holds.
 """
-import json, os, re, shutil, stat, tempfile
+import json, os, re, shutil, stat
 
 import by_hand
 import difficulty
-from stores.base import read_plain, write_json
+from stores.base import read_plain, temp_beside, write_json
 
 PHASES = ('missable', 'story', 'quick', 'challenge', 'grind', 'collect', 'online')
 NEXT_COUNT = 3
@@ -468,7 +468,7 @@ def copy_in(src, target):
     body = read_plain(src, IMPORT_MAX_BYTES + 1)
     if len(body) > IMPORT_MAX_BYTES:
         raise OSError(f'{src} is over {IMPORT_MAX_BYTES} bytes')
-    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(target), prefix='.' + os.path.basename(target), suffix='.tmp')
+    fd, tmp = temp_beside(target)
     try:
         with os.fdopen(fd, 'wb') as out:
             out.write(body)

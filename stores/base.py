@@ -4,7 +4,7 @@ A store reads achievements from the launcher's local files (or an API) and
 answers in plain dicts; omatrophy.py does the diffing, events and toasts.
 To add one, subclass Store in stores/<id>.py and list it in stores/__init__.py.
 """
-import errno, json, os, stat, tempfile, urllib.error, urllib.parse, urllib.request
+import errno, json, os, secrets, stat, urllib.error, urllib.parse, urllib.request
 
 STATE = os.path.expanduser('~/.local/state/omatrophy')
 CACHE = os.path.expanduser('~/.cache/omatrophy')
@@ -205,6 +205,9 @@ def private_folder(folder, create=True):
     could plant a link, a file or a FIFO for us to use. A link to a folder
     is fine when the link is ours too (only we can have made it). Never
     chmods: the player decides (AGENTS.md: never change their files on load)."""
+    odd = odd_root(folder)
+    if odd:
+        raise OSError(odd)
     if create:
         os.makedirs(folder, mode=0o700, exist_ok=True)
     link = os.lstat(folder)
@@ -232,7 +235,11 @@ def consulted_folders(path):
     at the first missing name: the rest doesn't exist yet and is made by
     us under a folder already listed."""
     found = ['/']
-    pending = [p for p in os.path.abspath(path).split('/') if p]
+    # Never abspath: it drops `link/..` as text, while the kernel follows
+    # the link first and `..` leaves where it leads (finding 23). getcwd
+    # is already link-free.
+    start = path if path.startswith('/') else os.path.join(os.getcwd(), path)
+    pending = [p for p in start.split('/') if p]
     here = '/'
     hops = 0
     while pending:
@@ -260,6 +267,36 @@ def consulted_folders(path):
             here = '/'
         pending[:0] = [p for p in target.split('/') if p]
     return found
+
+
+def odd_root(path):
+    """Why `path` can't be one of OmaTrophy's folders, as a message; ''
+    when fine. It must be absolute with no `.` or `..` in it: Python's
+    path helpers (abspath, and mkstemp through it) read those as text,
+    the kernel after following links, so the two could name different
+    folders (finding 23). The XDG spec ignores relative paths too."""
+    if not path.startswith('/'):
+        return f'{path} is not an absolute path; set it to one (or unset it) and try again'
+    if any(p in ('.', '..') for p in path.split('/')):
+        return f'{path} has `.` or `..` in it; set it to a plain absolute path and try again'
+    return ''
+
+
+def temp_beside(path):
+    """(fd, name) of a new 0600 file in `path`'s folder to write and then
+    rename over `path`. Like mkstemp, but the folder is named exactly as
+    `path` names it: mkstemp abspaths it, so with a `link/..` in the path
+    the temporary file and the rename could land in different folders
+    (finding 23). O_EXCL|O_NOFOLLOW: never an existing file or a link."""
+    folder, base = os.path.split(path)
+    for _ in range(100):
+        tmp = os.path.join(folder, f'.{base}.{secrets.token_hex(6)}.tmp')
+        try:
+            fd = os.open(tmp, os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
+        except FileExistsError:
+            continue
+        return fd, tmp
+    raise FileExistsError(f'no free temporary name beside {path}')
 
 
 def swap_risk(path):
@@ -295,7 +332,7 @@ def folder_problems():
     private_folder. Read only: changes nothing."""
     problems = []
     for root in roots():
-        risk = swap_risk(root)
+        risk = odd_root(root) or swap_risk(root)
         if risk:
             problems.append(risk)
             continue
@@ -321,7 +358,7 @@ def write_json(path, value, **kw):
     not followed."""
     folder = os.path.dirname(path)
     os.makedirs(folder, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=folder, prefix='.' + os.path.basename(path), suffix='.tmp')
+    fd, tmp = temp_beside(path)
     try:
         with os.fdopen(fd, 'w') as f:
             json.dump(value, f, **kw)
@@ -391,7 +428,7 @@ def cached(url, name):
     try:
         body = fetch_bytes(url)[0]
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), suffix='.tmp')
+        fd, tmp = temp_beside(path)
         with os.fdopen(fd, 'wb') as f:
             f.write(body)
         os.replace(tmp, path)
