@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.0.6 - 2026-11-17
+
+Security fix from the marketplace's re-check of 1.0.5 (finding 23 in
+[docs/security-review-1.0.md](docs/security-review-1.0.md)). No shell
+restart needed.
+
+- The folder check resolves `..` after following links, as the kernel
+  does; 1.0.5 dropped `link/..` as text first, so it could check a
+  different folder from the one written to.
+- OmaTrophy's folders must be absolute paths with no `.` or `..` in them
+  (an `XDG_DATA_HOME` or `XDG_STATE_HOME` like that is refused, with the
+  fix).
+- Every file written through a temporary file makes it in the same
+  folder the rename goes to; Python's `mkstemp` normalised the folder
+  as text, which could put the two in different folders.
+
 ## 1.0.5 - 2026-11-16
 
 Security fix from the marketplace's re-check of 1.0.4 (finding 22 in

@@ -187,7 +187,7 @@ class Render(unittest.TestCase):
         def copy_then_swap(src, dst):
             copy(src, dst)
             folder = os.path.dirname(out)
-            tmp = next(os.path.join(folder, n) for n in os.listdir(folder) if n.startswith('.omatrophy-'))
+            tmp = next(os.path.join(folder, n) for n in os.listdir(folder) if n.endswith('.tmp'))
             os.unlink(tmp)
             os.symlink(private, tmp)
 

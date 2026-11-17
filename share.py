@@ -11,6 +11,8 @@ is uploaded.
 """
 import json, os, re, shutil, stat, subprocess, tempfile
 
+from stores.base import temp_beside
+
 REPO = os.path.dirname(os.path.abspath(__file__))
 # Omarchy's shell modules, linked into the throwaway config folder so
 # `import qs.Commons` resolves as it does in the live shell.
@@ -59,7 +61,9 @@ def out_path(out, game_name, home=None, config_home=None):
     default file name inside it), else the default path."""
     if not out:
         return default_path(game_name, home, config_home)
-    out = os.path.abspath(os.path.expanduser(out))
+    # Absolute without abspath, which drops `link/..` as text while the
+    # kernel follows the link first (finding 23).
+    out = os.path.join(os.getcwd(), os.path.expanduser(out))
     if os.path.isdir(out):
         out = f'{out}/{slug(game_name)}-platinum.png'
     return out
@@ -185,7 +189,7 @@ def render(event, out, run=subprocess.run, shell_dir=OMARCHY_SHELL, theme=None):
         if not os.path.isfile(drawn):
             raise RuntimeError('Quickshell drew no image; run `omatrophy.py share` from a terminal '
                                'inside the desktop session and check `quickshell` starts')
-        os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
+        os.makedirs(os.path.dirname(out), exist_ok=True)
         place(drawn, out)
     return out
 
@@ -209,7 +213,7 @@ def place(drawn, out):
     set on the open file, never by path: in a folder another user can write
     in, they could swap the temporary name for a link to one of the
     player's files before a path chmod (marketplace review, finding 11)."""
-    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(os.path.abspath(out)), prefix='.omatrophy-', suffix='.png')
+    fd, tmp = temp_beside(out)
     try:
         with os.fdopen(fd, 'wb') as dst, open(drawn, 'rb') as src:
             shutil.copyfileobj(src, dst)
